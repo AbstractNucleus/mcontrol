@@ -7,3 +7,7 @@ services:
       - "8000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Discovery (decision 008) walks SERVER_BASE_PATH from inside the panel
+      # container; bind-mount it at the same path so the env var works in both
+      # contexts. Read-only this slice — slice 5's file UI will widen to rw.
+      - ${SERVER_BASE_PATH}:${SERVER_BASE_PATH}:ro
