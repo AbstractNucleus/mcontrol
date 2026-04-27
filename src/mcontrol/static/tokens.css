@@ -1,0 +1,353 @@
+/* =========================================================================
+   Editorial design system — tokens
+   Drop into any project. Light theme is the default; add data-theme="dark"
+   on <html> or any subtree to switch.
+   ========================================================================= */
+
+/* ---- Fonts -------------------------------------------------------------- */
+/* Self-host Roboto Mono TTFs (weights 100–700, regular + italic) and update
+   the src URLs to your asset path. The system uses 400 / 500 / 600 / 700;
+   the lighter weights are deliberately unused but included for completeness. */
+
+/* Example self-hosted face — duplicate per weight & style as needed:
+
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/RobotoMono-Regular.ttf') format('truetype');
+}
+*/
+
+/* Fallback to Google Fonts if you haven't self-hosted yet (replace ASAP): */
+/* @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap'); */
+
+/* ---- Light theme (default) --------------------------------------------- */
+:root {
+  /* Surfaces */
+  --bg-color: #f1ece2;       /* bone paper */
+  --sub-alt-color: #e6dfd0;  /* case-tray tint, +lift */
+  --sub-color: #8a7f6f;      /* quiet ink */
+  --text-color: #2a231d;     /* walnut ink */
+
+  /* Accent + semantics */
+  --main-color: #b5533a;     /* rust / cochineal */
+  --caret-color: #b5533a;
+  --error-color: #a0371f;
+  --success-color: #5a7a3a;
+
+  /* Optional tier palette (skip if your project doesn't need ranked colors) */
+  --tier-1-color: #8a7f6f;   /* quiet */
+  --tier-2-color: #6b8a48;   /* leaf */
+  --tier-3-color: #3e5c86;   /* ink blue */
+  --tier-4-color: #a0371f;   /* cochineal */
+
+  /* Glow tokens (sparse use only) */
+  --main-glow:  color-mix(in srgb, var(--main-color)  20%, transparent);
+  --error-glow: color-mix(in srgb, var(--error-color) 20%, transparent);
+
+  /* Radii */
+  --radius-0: 0;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-full: 100%;
+
+  /* Spacing — 4px base */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+
+  /* Typography — face */
+  --font-mono: 'Roboto Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Typography — sizes */
+  --fs-xs: 12px;
+  --fs-sm: 14px;
+  --fs-base: 15px;
+  --fs-md: 17px;
+  --fs-lg: 20px;
+  --fs-xl: 28px;
+  --fs-2xl: 36px;
+  --fs-3xl: 56px;
+  --fs-4xl: 80px;
+
+  /* Leading */
+  --lh-tight: 1;
+  --lh-snug: 1.25;
+  --lh-reading: 1.55;
+
+  /* Motion */
+  --dur-fast: 125ms;
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* Focus ring — two-ring, no browser blue */
+  --focus-ring: 0 0 0 2px var(--bg-color), 0 0 0 4px var(--text-color);
+}
+
+/* ---- Dark theme -------------------------------------------------------- */
+[data-theme='dark'] {
+  --bg-color: #1b1b1c;
+  --sub-alt-color: #26262a;
+  --sub-color: #7a7468;
+  --text-color: #e9e3d6;
+
+  --main-color: #d07456;
+  --caret-color: #d07456;
+  --error-color: #c8623d;
+  --success-color: #8aa968;
+
+  --tier-1-color: #7a7468;
+  --tier-2-color: #9bb07b;
+  --tier-3-color: #7ea3d0;
+  --tier-4-color: #d07456;
+}
+
+/* ---- Base -------------------------------------------------------------- */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-mono);
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+  font-feature-settings: 'ss01', 'cv02';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background-color: var(--main-color);
+  color: var(--bg-color);
+}
+
+::placeholder {
+  color: var(--sub-color);
+  opacity: 1;
+}
+
+* { box-sizing: border-box; }
+
+/* ---- Typography utilities --------------------------------------------- */
+.t-display {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: var(--fs-4xl);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.045em;
+}
+.t-h1 {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: var(--fs-3xl);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.04em;
+  margin: 0;
+}
+.t-h2 {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-snug);
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+.t-h3 {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--fs-lg);
+  line-height: var(--lh-snug);
+  margin: 0;
+}
+.t-label,
+.t-eyebrow {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--sub-color);
+}
+.t-body {
+  font-family: var(--font-mono);
+  font-size: var(--fs-base);
+  line-height: var(--lh-reading);
+  color: var(--text-color);
+}
+.t-passage {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  line-height: var(--lh-reading);
+  color: var(--text-color);
+  letter-spacing: 0;
+}
+.t-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  line-height: var(--lh-tight);
+}
+.t-caption {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--sub-color);
+  line-height: var(--lh-snug);
+}
+
+/* ---- Buttons ---------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 10px var(--space-4);
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--sub-alt-color);
+  color: var(--text-color);
+  font-family: var(--font-mono);
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+.btn:hover {
+  background: var(--text-color);
+  color: var(--bg-color);
+}
+.btn:active {
+  background: var(--sub-color);
+  color: var(--bg-color);
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.btn[disabled] {
+  opacity: 0.33;
+  pointer-events: none;
+}
+
+.btn--primary {
+  background: var(--main-color);
+  color: var(--bg-color);
+}
+.btn--primary:hover {
+  background: var(--text-color);
+  color: var(--bg-color);
+}
+
+.btn--danger {
+  background: var(--error-color);
+  color: var(--bg-color);
+}
+
+.btn--text {
+  background: none;
+  color: var(--sub-color);
+  padding: var(--space-2) var(--space-3);
+}
+.btn--text:hover {
+  background: none;
+  color: var(--text-color);
+}
+.btn--text:active {
+  background: none;
+  color: var(--sub-color);
+}
+
+/* ---- Inputs ----------------------------------------------------------- */
+.input {
+  display: block;
+  width: 100%;
+  padding: 10px var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-base);
+  background: var(--sub-alt-color);
+  color: var(--text-color);
+  border: none;
+  border-radius: var(--radius-md);
+  transition: box-shadow var(--dur-fast) var(--ease-out);
+}
+.input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- Card ------------------------------------------------------------- */
+.card {
+  background: var(--sub-alt-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+}
+
+/* ---- Tier pills ------------------------------------------------------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--sub-color);
+  padding: 2px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-color) 60%, var(--sub-alt-color));
+}
+.pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 100%;
+  background: currentColor;
+}
+.pill--t1 { color: var(--tier-1-color); }
+.pill--t2 { color: var(--tier-2-color); }
+.pill--t3 { color: var(--tier-3-color); }
+.pill--t4 { color: var(--tier-4-color); }
+
+/* ---- Divider ---------------------------------------------------------- */
+.divider {
+  border: none;
+  border-top: 1px solid var(--sub-alt-color);
+  margin: var(--space-6) 0;
+}
+
+/* ---- Caret ------------------------------------------------------------ */
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background: var(--caret-color);
+  vertical-align: -2px;
+  animation: caret-blink 1s steps(1) infinite;
+}
+@keyframes caret-blink {
+  50% { opacity: 0; }
+}
+
+/* ---- Reduced motion --------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+</content>
+</invoke>
