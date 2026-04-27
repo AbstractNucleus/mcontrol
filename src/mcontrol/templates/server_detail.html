@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}{{ server.name }} — mcontrol{% endblock %}
+
+{% block main %}
+<section>
+  <p class="t-eyebrow"><a href="/">← all servers</a></p>
+  <h2 class="t-h3">{{ server.name }}</h2>
+
+  <dl class="server-detail">
+    <dt class="t-caption">state</dt>
+    <dd class="server-detail__state server-detail__state--{{ server.state }}">{{ server.state }}</dd>
+
+    <dt class="t-caption">directory</dt>
+    <dd><code>{{ server.dir }}</code></dd>
+
+    <dt class="t-caption">base image</dt>
+    <dd>{% if server.image_base %}<code>{{ server.image_base }}</code>{% else %}<span class="t-muted">—</span>{% endif %}</dd>
+
+    <dt class="t-caption">variables</dt>
+    <dd>
+      {% if server.variables %}
+        <ul class="kv-list">
+          {% for key, value in server.variables.items() %}
+            <li><code>{{ key }}</code> = <code>{{ value }}</code></li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <span class="t-muted">no variables set</span>
+      {% endif %}
+    </dd>
+
+    <dt class="t-caption">last seen</dt>
+    <dd>{{ server.updated_at }}</dd>
+  </dl>
+</section>
+{% endblock %}
