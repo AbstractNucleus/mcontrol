@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-APP_CSS = Path("src/mcontrol/static/app.css")
+APP_CSS = Path(__file__).resolve().parent.parent / "src/mcontrol/static/app.css"
 HEX_COLOR = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 
 

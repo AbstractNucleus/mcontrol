@@ -1,3 +1,6 @@
+from mcontrol import __version__
+
+
 async def test_home_renders_wordmark(client):
     response = await client.get("/")
 
@@ -8,6 +11,8 @@ async def test_home_renders_wordmark(client):
     assert '/static/tokens.css' in body
     # app.css applies layout — verify it's linked
     assert '/static/app.css' in body
+    # version is interpolated into the header caption
+    assert f"v{__version__}" in body
 
 
 async def test_home_shows_empty_state(client):
