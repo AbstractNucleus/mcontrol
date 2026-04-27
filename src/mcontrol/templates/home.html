@@ -5,8 +5,19 @@
 {% block main %}
 <section>
   <p class="t-eyebrow">Servers</p>
-  <div class="card">
-    <p class="t-body">No servers yet — discovery lands in slice 3.</p>
-  </div>
+  {% if servers %}
+    <ul class="server-list">
+      {% for server in servers %}
+        <li class="server-card">
+          <a class="server-card__name" href="/servers/{{ server.name }}">{{ server.name }}</a>
+          <span class="server-card__state server-card__state--{{ server.state }}">{{ server.state }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="card">
+      <p class="t-body">No servers yet — drop a directory into <code>{{ "{SERVER_BASE_PATH}" }}</code> and restart the panel.</p>
+    </div>
+  {% endif %}
 </section>
 {% endblock %}
