@@ -37,6 +37,8 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 016 | Backend stack: Python + FastAPI + Jinja + HTMX       | Accepted | 2026-04-26 |
 | 017 | Backups out of scope; delegate to plugins/mods       | Accepted | 2026-04-26 |
 | 018 | Whitelist + ops management                           | Accepted | 2026-04-26 |
+| 019 | TLS termination at aserver-nginx, not in-repo Caddy  | Accepted | 2026-04-27 |
+| 020 | Pin Docker image references; no floating tags        | Accepted | 2026-04-27 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -270,3 +272,37 @@ The server's `whitelist.json` and `ops.json` (in the bind-mounted `server/` dire
 No mirror table in `app_mcontrol.players` for v1. Rejected: DB-mirrored player lists with cross-server propagation ("add Alice to all my servers' whitelists" as a single click — defer until that's a felt pain). Rejected: pure-RCON without file-edit fallback (locks all whitelist/ops changes behind a running server, which is the wrong UX when the server is being prepared offline).
 
 Trade-off: split-mechanic (RCON when running, file edits when offline, file-edits + reload for op levels) is more code than picking one path, but it's the right behaviour for all three states. The complexity lives in one well-bounded module (`whitelist_ops` / `permissions`) rather than leaking across the panel.
+
+## 019. TLS termination at aserver-nginx, not in-repo Caddy
+
+**Status:** Accepted · 2026-04-27
+
+Production `mcontrol` is fronted by aserver's nginx (`/etc/nginx/sites-available/mcontrol.conf`), which terminates TLS using a Let's Encrypt cert renewed via certbot's Cloudflare DNS-01 plugin and reverse-proxies over the tailnet to bserver's LAN-bound app port. The tracked `docker-compose.yml` runs only the `app` service; the per-host LAN bind (`<bserver-lan-ip>:<port>:8000`) lives in bserver's gitignored `docker-compose.override.yml`. The in-repo Caddy service and `Caddyfile` are removed; the bundled-Caddy pattern was a slice-1 expedient that didn't match how the panel actually deploys.
+
+This decision pins down the "or aserver nginx, depending on deployment" hedge in decision 003. The tailnet posture from 003 is preserved verbatim — gray-cloud Cloudflare DNS to bserver's tailnet IP, no public ingress, DNS-01 cert. Only the terminator changes: nginx instead of Caddy.
+
+Rejected:
+- **Replace Caddy with an nginx service inside the repo's compose.** Self-contained, but duplicates the work aserver-nginx already does, and certbot DNS-01 inside a per-app container is more setup than terminating once at the edge for the whole fleet.
+- **Keep Caddy alongside aserver-nginx.** Two TLS terminators in series is a footgun; the inner one's cert dance becomes either redundant or actively harmful (which IP does the cert advertise — the bserver tailnet IP, or aserver's?). Pick one terminator per hostname.
+- **Funnel-style public access in lieu of nginx-on-aserver.** Public ingress conflicts with decision 003's tailnet-only posture.
+
+Trade-off: a fresh clone of this repo cannot bring up a TLS-fronted instance with `docker compose up -d` alone — the operator either runs it behind their own existing terminator (nginx, Caddy, traefik, whatever they already have) or accepts plain HTTP on a LAN port for local use. The conceptual pattern in `docs/patterns/tailnet-https-via-cloudflare.md` still applies; only the terminator and DNS-01 client differ from the doc's Caddy-flavoured examples.
+
+Operationally: when slice 1's Caddyfile was authored, aserver-nginx was already terminating `mcontrol.noelkleen.com` via certbot — the in-repo Caddy was never the runtime path. This entry just records reality.
+
+## 020. Pin Docker image references; no floating tags
+
+**Status:** Accepted · 2026-04-27
+
+Every Docker image reference in this repo (Dockerfile `FROM`/`COPY --from=`, compose `image:`, future Bake or Compose-build args) is pinned to a specific patch-level tag (e.g. `python:3.12-slim`, `ghcr.io/astral-sh/uv:0.11.7`). Floating tags — `latest`, `:0.5`, `:3.12` without `-slim`/distro suffix, `:edge` — are not used. Bumps are deliberate, single-line PRs that name what changed.
+
+Rationale: a floating tag drifts under a stable branch — a rebuild months later picks up upstream's latest, which can introduce regressions invisible in the diff. Pinning makes the image a function of the SHA, and a build always reproduces. This decision is the policy; the implementation is to apply pins immediately and not leave a "we'll pin it later" backlog.
+
+Slice-1 originally pulled `ghcr.io/astral-sh/uv:0.5` (channel pointer) and `slothcroissant/caddy-cloudflaredns:latest`. Both floated. The Caddy reference is removed entirely by decision 019; the `uv` reference is bumped to `ghcr.io/astral-sh/uv:0.11.7` which matches the dev environment and the latest stable as of this entry.
+
+Rejected:
+- **Pin to channel tags only (`:0.11`).** Less precise than a patch pin and still floats within the channel — a 0.11.x release can break things between rebuilds.
+- **Pin to image digests (`@sha256:...`).** Maximally reproducible but visually opaque and painful to bump manually. The patch-level tag is the pragmatic middle: deterministic in normal use, with an audit trail (the version string is human-readable and matches upstream release notes).
+- **Allow `:latest` for rapid-iteration projects.** mcontrol is single-host long-running, not a fast-cycle service — the cost of a silent regression outweighs the convenience of always-newest.
+
+Trade-off: bumping image versions is now a manual chore. Mitigated by the fact that there are very few image references in this repo (one base image, one builder image), and Renovate / Dependabot can be turned on for automated PRs against pinned tags later if that chore becomes annoying.
