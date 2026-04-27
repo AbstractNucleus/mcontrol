@@ -1,8 +1,0 @@
-# Tailnet-only TLS via Cloudflare DNS-01.
-# See docs/patterns/tailnet-https-via-cloudflare.md.
-mcontrol.noelkleen.com {
-  tls {
-    dns cloudflare {env.CF_API_TOKEN}
-  }
-  reverse_proxy app:8000
-}
