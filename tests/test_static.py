@@ -9,11 +9,13 @@ async def test_tokens_css_is_served(client):
 async def test_htmx_is_served(client):
     response = await client.get("/static/htmx.min.js")
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith(("application/javascript", "text/javascript"))
+    content_type = response.headers["content-type"]
+    assert content_type.startswith(("application/javascript", "text/javascript"))
     assert len(response.content) > 30_000
 
 
 async def test_htmx_sse_extension_is_served(client):
     response = await client.get("/static/htmx-ext-sse.js")
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith(("application/javascript", "text/javascript"))
+    content_type = response.headers["content-type"]
+    assert content_type.startswith(("application/javascript", "text/javascript"))
