@@ -34,8 +34,8 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 013 | Bespoke variable schema in `servers.variables` JSONB | Accepted | 2026-04-26 |
 | 014 | Migrate `atm10` + `monifactory` to temurin           | Accepted | 2026-04-26 |
 | 015 | DB migrations live in `supabase-server`, not here    | Accepted | 2026-04-26 |
-| 016 | Frontend / backend tech stack                        | Open     | 2026-04-26 |
-| 017 | Backup strategy for world data                       | Open     | 2026-04-26 |
+| 016 | Backend stack: Python + FastAPI + Jinja + HTMX       | Accepted | 2026-04-26 |
+| 017 | Backups out of scope; delegate to plugins/mods       | Accepted | 2026-04-26 |
 | 018 | Whitelist + ops management                           | Accepted | 2026-04-26 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
@@ -217,25 +217,40 @@ Rejected: in-app migrations (each app managing its own schema), Alembic/Prisma/e
 
 Trade-off: schema changes require an SSH to bserver to add a migration file and run `make migrate`, separate from a code deploy. Friction is real but small and intentional — it forces schema decisions to be deliberate and reviewed against existing tables.
 
-## 016. Frontend / backend tech stack
+## 016. Backend stack: Python + FastAPI + Jinja + HTMX
 
-**Status:** Open · 2026-04-26
+**Status:** Accepted · 2026-04-26
 
-Which language, web framework, and rendering model `mcontrol` is built in. No decision yet.
+`mcontrol`'s backend is FastAPI (Python), serving Jinja-rendered HTML enhanced with HTMX for partial swaps and form interactions. Live streams (log tail, RCON console output) are Server-Sent Events consumed via HTMX's `hx-sse` extension. The frontend consumes `tokens.css` from `AbstractNucleus/design` via a `<link>` tag — no JS framework, no bundler step. In-browser code editing for `server.properties` / config files uses Monaco or CodeMirror loaded via CDN as a single component.
 
-Constraints already imposed by other decisions: must consume `AbstractNucleus/design` (decision 002 — needs to be a stack the palette ships in or can be ported to), must talk to Supabase via `https://api.noelkleen.com` with `SERVICE_ROLE_KEY` server-side (decision 011 — implies a server-rendered or BFF model, not a pure-client SPA), must talk to local Docker socket (decision 006 — implies a server process on the host, not Edge Functions or a static site).
+Anticipated dependencies (subject to refinement during writing-plans):
+- `fastapi`, `uvicorn[standard]` — web framework + ASGI server.
+- `jinja2` — server-rendered templates.
+- `aiodocker` — async Docker socket client.
+- `supabase` — Supabase Python SDK, configured with `SERVICE_ROLE_KEY` per decision 011.
+- An async RCON client (`mcrcon`, or a small bespoke `asyncio` implementation against [the protocol](https://wiki.vg/RCON)).
+- HTMX (CDN or vendored) + the SSE extension.
 
-Likely shape: a single Docker container running a server-rendered web app (Next.js / SvelteKit / Remix / Phoenix LiveView / Rails / similar) on bserver. Decision pending — revisit when the palette repo's stack is more concrete and when the file-management + RCON-streaming requirements of decision 012 are sketched in code.
+Rejected: **TypeScript + SvelteKit** (genuinely better technical fit for highly-reactive UIs, but mcontrol's surface is mostly forms + append-only streams that HTMX handles cleanly; the context-switch cost from `admin_management`'s Python stack outweighs the wins for this app's shape). Rejected: **Next.js** (same reasoning as SvelteKit, plus WebSocket awkwardness on top). Rejected: **Phoenix LiveView** (best technical fit for "everything is live," but the Elixir ramp is unjustified at this scale). Rejected: **Go + HTMX + templ** (single-binary deploy is appealing, but Python's ecosystem alignment with `admin_management` wins).
 
-## 017. Backup strategy for world data
+Trade-off: shared mental model with `admin_management` is the main win; the cost is no end-to-end type safety the way SvelteKit + TypeScript would give. Pydantic + careful API contract design covers most of the gap within Python; the rest is discipline.
 
-**Status:** Open · 2026-04-26
+Implementation discipline: when moving from this decisions register to writing-plans / code, follow `/karpathy-guidelines` — surgical changes, surface assumptions, define verifiable success criteria, avoid overcomplication.
 
-How `mcontrol` (or the host) backs up world data, configs, and mod directories — and what restore looks like. No decision yet.
+## 017. Backups out of scope; delegate to plugins/mods
 
-Open questions: backup tool (`borg` / `restic` / `rsync` snapshots / Supabase Storage / something else), schedule (cron on host vs. in-mcontrol scheduler vs. external orchestration), retention policy, restore UX (mcontrol-driven button vs. SSH-and-run), whether the Supabase DB row for each server tracks backup metadata.
+**Status:** Accepted · 2026-04-26
 
-Worth noting: the bind-mount layout (decision 008) makes any host-side backup tool work without `mcontrol` involvement, which means this is a deferrable decision — not having a polished story doesn't block v1 if you're willing to lean on host-level cron + `borg` until the panel needs to drive it.
+`mcontrol` does not provide first-party backup or restore functionality. Backups are the operator's responsibility, handled by per-server backup mods and plugins — FTB Backups for Forge/NeoForge modpacks, AromaBackup, ServerUtilities, Spigot/Paper backup plugins, etc. These tools understand their host server's internals (chunk-save coordination, mod-state files, packed/unpacked save formats) far better than a generic panel-driven `borg` ever could, and they've been battle-tested per-loader for years.
+
+In practice:
+- New server: operator drops the appropriate backup mod/plugin into `mods/` or `plugins/` and configures it through its own config file — both editable via mcontrol's file UI per decision 012.
+- Backups land in the mod's configured directory (typically `server/backups/`), inside the bind-mounted `server/` dir and visible in mcontrol's file browser.
+- Restore: operator stops the server in mcontrol, swaps files via the file browser (or shell), starts the server.
+
+Rejected: mcontrol-driven `borg` with "Backup now" / "Restore" buttons (the UX would be nicer, but the value-add over a per-server backup mod is small, and the RCON-flush dance — `save-all flush; save-off; ...; save-on` — is something each backup mod handles correctly for its loader). Rejected: host-side cron + `borg` as the canonical answer (works fine if the operator wants it, but it isn't `mcontrol`'s concern).
+
+Trade-off: no panel-level "Backup now / Restore" affordance. If that ever becomes a felt need, a future decision can supersede this — most likely framed as a thin orchestrator over the chosen mod's commands rather than a parallel backup system. The bind-mount layout (decision 008) leaves host-side `borg`/`restic` available for operators who want belt-and-suspenders disaster recovery on top of in-server backups.
 
 ## 018. Whitelist + ops management
 
