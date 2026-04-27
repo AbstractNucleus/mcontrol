@@ -9,6 +9,8 @@ dependencies = [
     "jinja2>=3.1",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
+    "supabase>=2.9",
+    "aiodocker>=0.24",
 ]
 
 [dependency-groups]
