@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from mcontrol.settings import Settings
 
@@ -20,5 +21,5 @@ def test_settings_missing_required_field_raises(monkeypatch):
     monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
     monkeypatch.delenv("SERVER_BASE_PATH", raising=False)
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Settings(_env_file=None)
