@@ -58,8 +58,9 @@ async def test_server_detail_handles_null_image_base(client, fake_get_server):
     response = await client.get("/servers/fresh")
 
     assert response.status_code == 200
-    # Empty image_base renders as a placeholder, not the literal "None".
-    assert "None" not in response.text or "image_base" not in response.text
+    # Null image_base renders as the em-dash placeholder, not the literal "None".
+    assert "—" in response.text
+    assert ">None<" not in response.text
     assert "fresh" in response.text
 
 
