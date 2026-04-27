@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from mcontrol.routes import home
 from mcontrol.settings import Settings
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -14,6 +15,7 @@ def create_app() -> FastAPI:
     app.state.settings = settings
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    app.include_router(home.router)
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
