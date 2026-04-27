@@ -7,3 +7,4 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_service_role_key: str
     server_base_path: str
+    docker_host: str = "unix:///var/run/docker.sock"
