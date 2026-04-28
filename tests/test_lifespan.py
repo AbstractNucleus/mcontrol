@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import AsyncMock
 
 from httpx import ASGITransport, AsyncClient
@@ -30,8 +31,6 @@ async def test_lifespan_runs_discovery_with_settings_path(env, monkeypatch, tmp_
 async def test_lifespan_does_not_block_startup_on_discovery_failure(
     env, monkeypatch, tmp_path, caplog
 ):
-    import logging
-
     monkeypatch.setenv("SERVER_BASE_PATH", str(tmp_path))
 
     async def boom(_):
