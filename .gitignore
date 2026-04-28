@@ -13,3 +13,6 @@ __pycache__/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Claude Code per-project workspace (session worktrees, scratch state).
+.claude/worktrees/
