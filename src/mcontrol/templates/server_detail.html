@@ -3,14 +3,29 @@
 {% block title %}{{ server.name }} — mcontrol{% endblock %}
 
 {% block main %}
-<section>
+<section class="server-detail-layout">
   <p class="t-eyebrow"><a href="/">← all servers</a></p>
   <h2 class="t-h3">{{ server.name }}</h2>
 
-  <dl class="server-detail">
-    <dt class="t-caption">state</dt>
-    <dd class="server-detail__state server-detail__state--{{ server.state }}">{{ server.state }}</dd>
+  <div class="lifecycle-row">
+    {% include "_state_pill.html" %}
+    <div class="lifecycle-row__buttons">
+      <button class="lifecycle-button"
+              hx-post="/servers/{{ server.name }}/lifecycle/start"
+              hx-target="#state-pill"
+              hx-swap="outerHTML">Start</button>
+      <button class="lifecycle-button"
+              hx-post="/servers/{{ server.name }}/lifecycle/stop"
+              hx-target="#state-pill"
+              hx-swap="outerHTML">Stop</button>
+      <button class="lifecycle-button"
+              hx-post="/servers/{{ server.name }}/lifecycle/restart"
+              hx-target="#state-pill"
+              hx-swap="outerHTML">Restart</button>
+    </div>
+  </div>
 
+  <dl class="server-detail">
     <dt class="t-caption">directory</dt>
     <dd><code>{{ server.dir }}</code></dd>
 
@@ -33,5 +48,11 @@
     <dt class="t-caption">last seen</dt>
     <dd>{{ server.updated_at }}</dd>
   </dl>
+
+  {% include "_bindings_card.html" %}
+
+  {% include "_log_pane.html" %}
+
+  {% include "_console_pane.html" %}
 </section>
 {% endblock %}

@@ -15,5 +15,9 @@ async def server_detail(request: Request, name: str) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="server_detail.html",
-        context={"version": __version__, "server": server},
+        context={
+            "version": __version__,
+            "server": server,
+            "state": server.get("state", "unknown"),
+        },
     )
