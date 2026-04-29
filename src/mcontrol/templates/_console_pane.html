@@ -1,0 +1,15 @@
+<section class="console-pane">
+  <p class="t-eyebrow">RCON Console</p>
+  <pre id="console-stream"
+       class="console-pane__stream"
+       hx-ext="sse"
+       sse-connect="/servers/{{ server.name }}/rcon"
+       sse-swap="message"
+       hx-swap="beforeend"></pre>
+  <form class="console-pane__input"
+        hx-post="/servers/{{ server.name }}/rcon"
+        hx-swap="none">
+    <input type="text" name="command" placeholder="say hello" autocomplete="off" required>
+    <button type="submit">Send</button>
+  </form>
+</section>

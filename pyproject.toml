@@ -11,6 +11,9 @@ dependencies = [
     "pydantic-settings>=2.6",
     "supabase>=2.9",
     "aiodocker>=0.24",
+    # python-multipart is required for FastAPI's Form(...) parsing — used by
+    # routes/console.py (RCON command submit) and routes/bindings.py.
+    "python-multipart>=0.0.20",
 ]
 
 [dependency-groups]
