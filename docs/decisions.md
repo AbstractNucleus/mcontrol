@@ -39,6 +39,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 018 | Whitelist + ops management                           | Accepted | 2026-04-26 |
 | 019 | TLS termination at aserver-nginx, not in-repo Caddy  | Accepted | 2026-04-27 |
 | 020 | Pin Docker image references; no floating tags        | Accepted | 2026-04-27 |
+| 021 | Per-server `container_name` override + discovery preserves operator edits | Accepted | 2026-04-29 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -306,3 +307,15 @@ Rejected:
 - **Allow `:latest` for rapid-iteration projects.** mcontrol is single-host long-running, not a fast-cycle service — the cost of a silent regression outweighs the convenience of always-newest.
 
 Trade-off: bumping image versions is now a manual chore. Mitigated by the fact that there are very few image references in this repo (one base image, one builder image), and Renovate / Dependabot can be turned on for automated PRs against pinned tags later if that chore becomes annoying.
+
+## 021. Per-server `container_name` override + discovery preserves operator edits
+
+**Status:** Accepted · 2026-04-29
+
+`app_mcontrol.servers` gains a nullable `container_name text` column. When non-null, lifecycle / logs / RCON code resolves the docker container name via `db.container_name_for(row)` — that helper returns the override when set, otherwise falls back to `servers.name`. Discovery's behaviour is split: new directories get `db.insert_server(name, dir, state)`, and existing rows get `db.update_server_state(name, state)` only — `dir` and `container_name` are **never** overwritten by a discovery scan. State lookup uses the override (so a re-pointed row still shows the correct container's state).
+
+Rejected: storing `container_name` inside `servers.variables` JSONB (a row-level binding is not a runtime variable per decision 013, and JSONB columns are awkward to query). Rejected: writing through `dir` and `container_name` from discovery on every scan (silently undoes operator overrides — exactly the failure mode this decision is preventing). Rejected: deferring the override to a later slice (the underlying contract — discovery does not clobber — has to be true the moment any operator edits a row, and that capability lands this slice with the bindings UI).
+
+Trade-off: discovery becomes two writes (a `get_server` followed by either `insert_server` or `update_server_state`) instead of a single `upsert_server`. At fleet sizes well under 100 servers this overhead is irrelevant, and the alternative — losing operator edits — is the kind of bug that erodes trust in the panel. The `dir` column starts populated on first INSERT only; subsequent scans never touch it, so an operator who repoints `dir` to a different host path will see that override survive every restart of the panel.
+
+This decision pins the contract that future slices (file browser, scaffolding) inherit: any new operator-editable column on `servers` follows the same insert-on-new / state-only-on-existing rule. Discovery's job is to track presence + state, not to be the source of truth for any field an operator can edit.
