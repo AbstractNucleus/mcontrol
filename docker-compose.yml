@@ -6,8 +6,8 @@ services:
     expose:
       - "8000"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Discovery (decision 008) walks SERVER_BASE_PATH from inside the panel
-      # container; bind-mount it at the same path so the env var works in both
-      # contexts. Read-only this slice — slice 5's file UI will widen to rw.
-      - ${SERVER_BASE_PATH}:${SERVER_BASE_PATH}:ro
+      # Slice 4: rw so we can `docker start/stop/exec`, attach networks,
+      # and `docker compose up -d --force-recreate` from inside the panel.
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      # Slice 4: rw so we can write <dir>/.env (RCON_PASSWORD) per decision 010.
+      - ${SERVER_BASE_PATH}:${SERVER_BASE_PATH}:rw
