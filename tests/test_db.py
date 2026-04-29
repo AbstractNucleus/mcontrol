@@ -106,3 +106,58 @@ def test_upsert_server_uses_name_as_conflict_key(env, monkeypatch):
     assert payload == {"name": "atm10", "dir": "/srv/atm10", "state": "running"}
     assert kwargs == {"on_conflict": "name"}
     table.upsert.return_value.execute.assert_called_once_with()
+
+
+def test_insert_server_writes_full_row(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+
+    db.insert_server(name="atm10", dir="/srv/atm10", state="unknown")
+
+    table.insert.assert_called_once_with(
+        {"name": "atm10", "dir": "/srv/atm10", "state": "unknown"}
+    )
+    table.insert.return_value.execute.assert_called_once_with()
+
+
+def test_update_server_state_writes_only_state(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+
+    db.update_server_state(name="atm10", state="running")
+
+    args, kwargs = table.update.call_args
+    assert args == ({"state": "running"},)
+    table.update.return_value.eq.assert_called_once_with("name", "atm10")
+
+
+def test_update_bindings_writes_container_name_and_dir(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+
+    db.update_bindings(name="atm10", container_name="atm10-prod", dir="/srv/atm10")
+
+    args, kwargs = table.update.call_args
+    assert args == ({"container_name": "atm10-prod", "dir": "/srv/atm10"},)
+    table.update.return_value.eq.assert_called_once_with("name", "atm10")
+
+
+def test_set_rcon_password_updates_password_only(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+
+    db.set_rcon_password(name="atm10", password="hunter2")
+
+    args, kwargs = table.update.call_args
+    assert args == ({"rcon_password": "hunter2"},)
+    table.update.return_value.eq.assert_called_once_with("name", "atm10")
+
+
+def test_container_name_for_falls_back_to_name_when_override_null():
+    row = {"name": "atm10", "container_name": None}
+    assert db.container_name_for(row) == "atm10"
+
+
+def test_container_name_for_uses_override_when_present():
+    row = {"name": "atm10", "container_name": "atm10-prod"}
+    assert db.container_name_for(row) == "atm10-prod"
