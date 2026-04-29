@@ -1,0 +1,22 @@
+<section class="bindings-card" id="bindings">
+  <header class="bindings-card__head">
+    <p class="t-eyebrow">Bindings</p>
+    <a class="bindings-card__edit"
+       hx-get="/servers/{{ server.name }}/bindings?edit=1"
+       hx-target="#bindings"
+       hx-swap="outerHTML"
+       href="#">Edit</a>
+  </header>
+  <dl class="bindings-card__body">
+    <dt class="t-caption">container name</dt>
+    <dd>
+      {% if server.container_name %}
+        <code>{{ server.container_name }}</code>
+      {% else %}
+        <span class="t-muted">(falls back to <code>{{ server.name }}</code>)</span>
+      {% endif %}
+    </dd>
+    <dt class="t-caption">directory</dt>
+    <dd><code>{{ server.dir }}</code></dd>
+  </dl>
+</section>
