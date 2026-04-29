@@ -45,7 +45,9 @@ def stub_docker_and_compose(monkeypatch, tmp_path):
     async def fake_restart(name): restarted.append(name)
     async def fake_up_force_recreate(server_dir): composes.append(str(server_dir))
 
-    def fake_generate(): pwds.append("PWD"); return "PWD"
+    def fake_generate():
+        pwds.append("PWD")
+        return "PWD"
 
     def fake_write_rcon_password(path, pwd):
         env_writes.append((str(path), pwd))
@@ -148,7 +150,9 @@ async def test_restart_calls_docker_restart_when_env_already_matches(
     assert stub_docker_and_compose["composes"] == []
 
 
-async def test_lifecycle_returns_404_for_unknown_server(client, fake_server_row, stub_docker_and_compose):
+async def test_lifecycle_returns_404_for_unknown_server(
+    client, fake_server_row, stub_docker_and_compose
+):
     response = await client.post("/servers/unknown/lifecycle/start")
     assert response.status_code == 404
 

@@ -117,9 +117,10 @@ class _FakeContainer:
         self._started = False
         self._stopped = False
         self._restarted = False
+        nets = networks if networks is not None else {"atm10_default": {}}
         self._show_data = {
             "Name": f"/{name}",
-            "NetworkSettings": {"Networks": networks if networks is not None else {"atm10_default": {}}},
+            "NetworkSettings": {"Networks": nets},
         }
 
     async def start(self) -> None:

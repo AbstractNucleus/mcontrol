@@ -10,7 +10,12 @@ def fake_get_server(monkeypatch):
     return rows
 
 
-def _row(name: str, *, image_base: str | None = "eclipse-temurin:21-jre", state: str = "running") -> dict:
+def _row(
+    name: str,
+    *,
+    image_base: str | None = "eclipse-temurin:21-jre",
+    state: str = "running",
+) -> dict:
     return {
         "name": name,
         "container_name": None,

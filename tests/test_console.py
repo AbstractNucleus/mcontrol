@@ -65,7 +65,9 @@ def fake_rcon(monkeypatch):
     return captured
 
 
-async def test_rcon_get_returns_404_for_unknown_server(client, fake_get_server, fake_docker_network):
+async def test_rcon_get_returns_404_for_unknown_server(
+    client, fake_get_server, fake_docker_network
+):
     response = await client.get("/servers/unknown/rcon")
     assert response.status_code == 404
 

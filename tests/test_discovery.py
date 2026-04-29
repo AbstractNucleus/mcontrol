@@ -96,7 +96,9 @@ async def test_run_discovery_updates_state_only_for_existing_rows(tmp_path, db_c
     assert updates == [("update_state", {"name": "atm10", "state": "running"})]
 
 
-async def test_run_discovery_falls_back_to_unknown_when_docker_silent(tmp_path, db_calls, monkeypatch):
+async def test_run_discovery_falls_back_to_unknown_when_docker_silent(
+    tmp_path, db_calls, monkeypatch
+):
     _make_dirs(tmp_path, ["atm10"])
     monkeypatch.setattr(
         discovery.docker_client,
@@ -139,7 +141,9 @@ async def test_run_discovery_processes_dirs_in_sorted_order(tmp_path, db_calls, 
     assert seen == ["alpha", "mu", "zeta"]
 
 
-async def test_run_discovery_state_lookup_uses_container_name_override(tmp_path, db_calls, monkeypatch):
+async def test_run_discovery_state_lookup_uses_container_name_override(
+    tmp_path, db_calls, monkeypatch
+):
     """When a row has container_name override, state is looked up under that name."""
     _make_dirs(tmp_path, ["atm10"])
     db_calls["existing"]["atm10"] = {

@@ -55,10 +55,10 @@ async def _stream(
                     break
                 try:
                     line = await asyncio.wait_for(queue.get(), timeout=2.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield b": keepalive\n\n"
                     continue
-                yield f"data: {line}\n\n".encode("utf-8")
+                yield f"data: {line}\n\n".encode()
         finally:
             _active_connections.pop(name, None)
             _output_queues.pop(name, None)

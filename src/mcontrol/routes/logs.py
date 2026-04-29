@@ -17,7 +17,7 @@ async def _sse(container_name: str) -> AsyncIterator[bytes]:
         # Each line becomes one SSE message. \n inside a line would split
         # the SSE payload, so flatten any internal newlines.
         flat = line.replace("\r", "").replace("\n", " ")
-        yield f"data: {flat}\n\n".encode("utf-8")
+        yield f"data: {flat}\n\n".encode()
 
 
 @router.get("/servers/{name}/logs")
