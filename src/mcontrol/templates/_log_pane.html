@@ -1,0 +1,9 @@
+<section class="log-pane">
+  <p class="t-eyebrow">Logs</p>
+  <pre id="log-stream"
+       class="log-pane__stream"
+       hx-ext="sse"
+       sse-connect="/servers/{{ server.name }}/logs"
+       sse-swap="message"
+       hx-swap="beforeend"></pre>
+</section>
