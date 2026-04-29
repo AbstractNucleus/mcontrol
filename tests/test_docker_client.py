@@ -5,26 +5,26 @@ import pytest
 from mcontrol import docker_client
 
 
-class _FakeContainer:
-    def __init__(self, name: str, status: str):
-        self._name = name
-        self._status = status
+class _FakeSummary:
+    """Mimics aiodocker.DockerContainer with a populated `_container` dict
+    (the /containers/json summary), which is what container_states_by_name
+    now reads."""
 
-    async def show(self) -> dict:
-        return {"Name": f"/{self._name}", "State": {"Status": self._status}}
+    def __init__(self, name: str, status: str):
+        self._container = {"Names": [f"/{name}"], "State": status}
 
 
 class _FakeContainers:
-    def __init__(self, containers: list[_FakeContainer]):
+    def __init__(self, containers: list[_FakeSummary]):
         self._containers = containers
 
-    async def list(self, all: bool = False) -> list[_FakeContainer]:  # noqa: A002
+    async def list(self, all: bool = False) -> list[_FakeSummary]:  # noqa: A002
         assert all is True, "discovery must list ALL containers, including stopped"
         return self._containers
 
 
 class _FakeDocker:
-    def __init__(self, containers: list[_FakeContainer]):
+    def __init__(self, containers: list[_FakeSummary]):
         self.containers = _FakeContainers(containers)
         self.closed = False
 
@@ -34,7 +34,7 @@ class _FakeDocker:
 
 @pytest.fixture
 def fake_docker(monkeypatch):
-    containers: list[_FakeContainer] = []
+    containers: list[_FakeSummary] = []
 
     def factory(*, url: str | None = None) -> _FakeDocker:
         return _FakeDocker(containers)
@@ -44,8 +44,8 @@ def fake_docker(monkeypatch):
 
 
 async def test_container_states_by_name_returns_mapping(env, fake_docker):
-    fake_docker.append(_FakeContainer("atm10", "running"))
-    fake_docker.append(_FakeContainer("monifactory", "exited"))
+    fake_docker.append(_FakeSummary("atm10", "running"))
+    fake_docker.append(_FakeSummary("monifactory", "exited"))
 
     states = await docker_client.container_states_by_name()
 
@@ -53,19 +53,37 @@ async def test_container_states_by_name_returns_mapping(env, fake_docker):
 
 
 async def test_container_states_strips_leading_slash(env, fake_docker):
-    fake_docker.append(_FakeContainer("kobra_kollektivet", "created"))
+    fake_docker.append(_FakeSummary("kobra_kollektivet", "created"))
 
     states = await docker_client.container_states_by_name()
 
     assert states == {"kobra_kollektivet": "created"}
 
 
-async def test_container_states_returns_empty_when_docker_unreachable(env, monkeypatch):
+async def test_container_states_returns_empty_when_docker_constructor_fails(env, monkeypatch):
     class _Boom:
         def __init__(self, *_, **__):
             raise RuntimeError("docker daemon is sulking")
 
     monkeypatch.setattr(docker_client.aiodocker, "Docker", _Boom)
+
+    states = await docker_client.container_states_by_name()
+
+    assert states == {}
+
+
+async def test_container_states_returns_empty_when_list_raises(env, monkeypatch):
+    """Inner-branch failure: constructor succeeds but containers.list raises."""
+
+    class _PartiallyBrokenDocker:
+        def __init__(self, *_, **__):
+            self.containers = MagicMock()
+            self.containers.list = AsyncMock(side_effect=RuntimeError("kernel said no"))
+
+        async def close(self):
+            pass
+
+    monkeypatch.setattr(docker_client.aiodocker, "Docker", _PartiallyBrokenDocker)
 
     states = await docker_client.container_states_by_name()
 

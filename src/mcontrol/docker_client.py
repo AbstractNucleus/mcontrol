@@ -1,6 +1,6 @@
 """Thin async wrapper around aiodocker for container-state lookups.
 
-Slice 3 only needs to enumerate container names + statuses. Slice 4 will
+Slice 3 only needed to enumerate container names + statuses. Slice 4 will
 extend this module with start/stop/logs operations.
 """
 
@@ -27,9 +27,15 @@ async def container_states_by_name() -> dict[str, str]:
         containers = await docker.containers.list(all=True)
         states: dict[str, str] = {}
         for c in containers:
-            info = await c.show()
-            name = info["Name"].lstrip("/")
-            states[name] = info["State"]["Status"]
+            # Each container summary has _container (the raw dict from /containers/json).
+            # 'Names' is a list of names with leading slash; pick the first.
+            raw = c._container if hasattr(c, "_container") else {}
+            names = raw.get("Names") or []
+            if not names:
+                continue
+            name = names[0].lstrip("/")
+            status = raw.get("State") or raw.get("Status", "unknown")
+            states[name] = status
         return states
     except Exception:
         return {}
