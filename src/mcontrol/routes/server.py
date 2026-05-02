@@ -1,13 +1,8 @@
-from pathlib import Path
-
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 
 from mcontrol import __version__, db
-
-TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
-templates = Jinja2Templates(directory=TEMPLATES_DIR)
+from mcontrol.templates import templates
 
 router = APIRouter()
 
@@ -20,5 +15,9 @@ async def server_detail(request: Request, name: str) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="server_detail.html",
-        context={"version": __version__, "server": server},
+        context={
+            "version": __version__,
+            "server": server,
+            "state": server.get("state", "unknown"),
+        },
     )

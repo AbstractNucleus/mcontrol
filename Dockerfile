@@ -11,6 +11,25 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.7 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
+# Docker CLI + compose v2 plugin, used by mcontrol to recreate per-server
+# containers when the .env (RCON_PASSWORD) changes. Pinned per decision 020.
+ARG DOCKER_CE_CLI_VERSION=5:27.4.0-1~debian.12~bookworm
+ARG DOCKER_COMPOSE_PLUGIN_VERSION=2.31.0-1~debian.12~bookworm
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg \
+        | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+    && chmod a+r /etc/apt/keyrings/docker.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" \
+        > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        "docker-ce-cli=${DOCKER_CE_CLI_VERSION}" \
+        "docker-compose-plugin=${DOCKER_COMPOSE_PLUGIN_VERSION}" \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install deps first for cache friendliness.
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
