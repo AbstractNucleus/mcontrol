@@ -40,6 +40,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 019 | TLS termination at aserver-nginx, not in-repo Caddy  | Accepted | 2026-04-27 |
 | 020 | Pin Docker image references; no floating tags        | Accepted | 2026-04-27 |
 | 021 | Per-server `container_name` override + discovery preserves operator edits | Accepted | 2026-04-29 |
+| 022 | Panel host-bind in base compose, parameterised       | Accepted | 2026-05-02 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -319,3 +320,20 @@ Rejected: storing `container_name` inside `servers.variables` JSONB (a row-level
 Trade-off: discovery becomes two writes (a `get_server` followed by either `insert_server` or `update_server_state`) instead of a single `upsert_server`. At fleet sizes well under 100 servers this overhead is irrelevant, and the alternative — losing operator edits — is the kind of bug that erodes trust in the panel. The `dir` column starts populated on first INSERT only; subsequent scans never touch it, so an operator who repoints `dir` to a different host path will see that override survive every restart of the panel.
 
 This decision pins the contract that future slices (file browser, scaffolding) inherit: any new operator-editable column on `servers` follows the same insert-on-new / state-only-on-existing rule. Discovery's job is to track presence + state, not to be the source of truth for any field an operator can edit.
+
+## 022. Panel host-bind in base compose, parameterised
+
+**Status:** Accepted · 2026-05-02
+
+The panel's host-bind for HTTP (`<host-ip>:8003 -> container:8000`) lives in the tracked `docker-compose.yml`, parameterised by `${BSERVER_HOST_BIND_IP:-127.0.0.1}`. A fresh clone with no `.env` brings up an instance bound to `127.0.0.1:8003`, safe for local dev. bserver sets `BSERVER_HOST_BIND_IP` in its `.env` to the tailnet IP (currently `100.124.22.82`, per decision 003), making the bind survive LAN-side DHCP changes — which is what broke `mcontrol.noelkleen.com` on 2026-04-30 when bserver's LAN IP shifted (see `docs/fix-aserver-vhost-stale-upstream.md`).
+
+This refines decision 019 — the per-host LAN bind no longer lives in a gitignored override file. The override pattern is fine in principle but it hides production state: the local repo had `expose: ["8000"]` while bserver had a hand-edited `docker-compose.override.yml` hard-coding `192.168.26.233:8003:8000`, and the divergence is exactly what made the DHCP-shift incident hard to diagnose.
+
+The variable name `BSERVER_HOST_BIND_IP` is the corrected form of `BSERVER_LAN_IP`, the inherited misnomer from supabase-server's 2026-04-30 recovery — post-decision-003 that variable holds a tailnet IP, not a LAN IP.
+
+Rejected:
+- **Keep the override file, but commit it to the repo.** Removes the gitignore divergence but leaves two compose files to reason about for one bind line. Single source of truth wins.
+- **Move the bind to a `docker-compose.bserver.yml`, invoked with `-f`.** Same one-line concern in a different file, plus changes the deploy command shape (`docker compose -f ... -f ... up -d` vs just `docker compose up -d`).
+- **Bind on `0.0.0.0` and rely on host firewall.** Conflicts with decision 003's tailnet-only posture; one misconfigured firewall and the panel is on the public LAN.
+
+Trade-off: a `docker compose up -d` on bserver without `BSERVER_HOST_BIND_IP` set in `.env` will bind to `127.0.0.1:8003`, invisible to aserver-nginx — the failure mode is "panel runs but vhost gives 502," same as the bug this decision fixes. The named env var and `.env.example` comment are the mitigations; an explicit `${BSERVER_HOST_BIND_IP:?must be set in production}` was rejected because it'd block local-dev `docker compose up -d` for anyone who hasn't copied `.env.example`.

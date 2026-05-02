@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import AsyncMock
 
 from httpx import ASGITransport, AsyncClient
@@ -27,7 +28,9 @@ async def test_lifespan_runs_discovery_with_settings_path(env, monkeypatch, tmp_
     assert captured["base_path"] == tmp_path
 
 
-async def test_lifespan_does_not_block_startup_on_discovery_failure(env, monkeypatch, tmp_path):
+async def test_lifespan_does_not_block_startup_on_discovery_failure(
+    env, monkeypatch, tmp_path, caplog
+):
     monkeypatch.setenv("SERVER_BASE_PATH", str(tmp_path))
 
     async def boom(_):
@@ -39,5 +42,12 @@ async def test_lifespan_does_not_block_startup_on_discovery_failure(env, monkeyp
 
     app = main.create_app()
     # Entering and exiting the lifespan should NOT raise.
-    async with app.router.lifespan_context(app):
-        pass
+    with caplog.at_level(logging.ERROR, logger="mcontrol"):
+        async with app.router.lifespan_context(app):
+            pass
+
+    assert any(
+        "discovery failed" in record.message
+        for record in caplog.records
+        if record.name == "mcontrol"
+    )
