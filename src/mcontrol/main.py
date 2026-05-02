@@ -11,6 +11,7 @@ from mcontrol.settings import Settings
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("mcontrol")
 
 
