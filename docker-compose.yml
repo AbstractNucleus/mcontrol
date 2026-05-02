@@ -3,8 +3,11 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
-    expose:
-      - "8000"
+    # Host-bind for the panel HTTP port. Default 127.0.0.1 keeps a fresh clone
+    # safe for local dev; bserver overrides BSERVER_HOST_BIND_IP to its tailnet
+    # IP per decision 003, so aserver-nginx (decision 019) can proxy_pass to it.
+    ports:
+      - "${BSERVER_HOST_BIND_IP:-127.0.0.1}:8003:8000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Discovery (decision 008) walks SERVER_BASE_PATH from inside the panel
