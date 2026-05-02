@@ -70,7 +70,7 @@ async def test_stop_calls_docker_stop_and_returns_state_pill(
 ):
     fake_server_row["atm10"] = {
         "name": "atm10", "container_name": None, "dir": "/srv/atm10",
-        "state": "running", "rcon_password": "existing-pwd",
+        "state": "running", "rcon_password": "OLD_PWD",
     }
 
     response = await client.post("/servers/atm10/lifecycle/stop")
@@ -86,9 +86,9 @@ async def test_start_with_existing_password_uses_docker_start(
 ):
     fake_server_row["atm10"] = {
         "name": "atm10", "container_name": None, "dir": str(tmp_path),
-        "state": "exited", "rcon_password": "existing-pwd",
+        "state": "exited", "rcon_password": "OLD_PWD",
     }
-    (tmp_path / ".env").write_text("RCON_PASSWORD=existing-pwd\n")
+    (tmp_path / ".env").write_text("RCON_PASSWORD=OLD_PWD\n")
 
     response = await client.post("/servers/atm10/lifecycle/start")
 
