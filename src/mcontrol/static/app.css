@@ -309,10 +309,67 @@ body {
   align-content: start;
 }
 
-.file-view__content {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
+.file-view__saved {
+  color: var(--success-color);
+}
+
+/* ---- File editor (CodeMirror) -------------------------------------- */
+.file-editor {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.file-editor__textarea {
+  display: none;
+}
+
+.file-editor__cm {
+  border: 1px solid var(--sub-color);
+  border-radius: var(--radius-sm);
+  height: 18rem;
+  font-size: var(--fs-sm);
+  overflow: hidden;
+}
+
+.file-editor__actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.file-editor__actions button {
+  background: transparent;
+  border: 1px solid var(--main-color);
+  border-radius: var(--radius-sm);
+  color: var(--main-color);
+  padding: var(--space-2) var(--space-5);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+}
+
+/* ---- Stale-write conflict banner ----------------------------------- */
+.file-conflict {
+  background: var(--sub-alt-color);
+  border: 1px solid var(--main-color);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.file-conflict__actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.file-conflict__btn {
+  background: transparent;
+  border: 1px solid var(--main-color);
+  border-radius: var(--radius-sm);
+  color: var(--main-color);
+  padding: var(--space-1) var(--space-4);
+  cursor: pointer;
+  font-size: var(--fs-sm);
 }
 
 @media (max-width: 768px) {

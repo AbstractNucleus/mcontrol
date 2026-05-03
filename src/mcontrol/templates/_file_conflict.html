@@ -1,0 +1,29 @@
+{# Banner shown above the editor when /files/save detects a stale mtime.
+   Reload  → fetch fresh content from disk (discards pending edits).
+   Overwrite → re-POST /save with force=1 + the textarea's current value
+               (synced from CodeMirror by file_editor.js). Definitive.
+   Cancel  → JS-removes the banner; editor keeps the operator's edits and
+             the form's mtime_ns is now the disk's current value, so a
+             subsequent plain Save will succeed if nothing else changes.
+#}
+<div class="file-conflict" id="file-conflict">
+  <p class="t-caption">file on disk changed since you opened it</p>
+  <div class="file-conflict__actions">
+    <button type="button"
+            class="file-conflict__btn"
+            hx-get="/servers/{{ server_name }}/files/view?path={{ filename|urlencode }}"
+            hx-target="#file-view"
+            hx-swap="innerHTML"
+            hx-confirm="Reload from disk and discard your edits?">Reload</button>
+    <button type="button"
+            class="file-conflict__btn"
+            hx-post="/servers/{{ server_name }}/files/save"
+            hx-target="#file-view"
+            hx-swap="innerHTML"
+            hx-vals='{"force": "true"}'
+            hx-include="[data-file-editor-form]">Overwrite</button>
+    <button type="button"
+            class="file-conflict__btn"
+            onclick="this.closest('#file-conflict').remove()">Cancel</button>
+  </div>
+</div>
