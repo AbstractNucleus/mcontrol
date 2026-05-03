@@ -51,6 +51,20 @@
 
   {% include "_bindings_card.html" %}
 
+  <section class="files-pane">
+    <p class="t-eyebrow">Files</p>
+    <div class="files-pane__split">
+      <ul class="file-tree"
+          id="file-tree"
+          hx-get="/servers/{{ server.name }}/files/tree?path="
+          hx-trigger="load"
+          hx-swap="innerHTML"></ul>
+      <div class="file-view" id="file-view">
+        <p class="t-muted">Select a file to view its contents.</p>
+      </div>
+    </div>
+  </section>
+
   {% include "_log_pane.html" %}
 
   {% include "_console_pane.html" %}

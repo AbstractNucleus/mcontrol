@@ -1,0 +1,27 @@
+{% for entry in entries %}
+  {% if entry.kind == 'dir' %}
+    <li class="file-tree__entry file-tree__entry--dir">
+      <button class="file-tree__toggle"
+              type="button"
+              hx-get="/servers/{{ server_name }}/files/tree?path={{ entry.path|urlencode }}"
+              hx-target="next .file-tree__children"
+              hx-swap="innerHTML"
+              hx-trigger="click once">{{ entry.name }}/</button>
+      <ul class="file-tree__children"></ul>
+    </li>
+  {% elif entry.kind == 'symlink' %}
+    <li class="file-tree__entry file-tree__entry--symlink">
+      <a href="#"
+         hx-get="/servers/{{ server_name }}/files/view?path={{ entry.path|urlencode }}"
+         hx-target="#file-view"
+         hx-swap="innerHTML">{{ entry.name }} →</a>
+    </li>
+  {% else %}
+    <li class="file-tree__entry file-tree__entry--file">
+      <a href="#"
+         hx-get="/servers/{{ server_name }}/files/view?path={{ entry.path|urlencode }}"
+         hx-target="#file-view"
+         hx-swap="innerHTML">{{ entry.name }}</a>
+    </li>
+  {% endif %}
+{% endfor %}
