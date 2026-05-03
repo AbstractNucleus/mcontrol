@@ -1,0 +1,10 @@
+{% if mode == 'text' %}
+  <p class="t-caption">{{ filename }}</p>
+  <pre class="file-view__content">{{ content }}</pre>
+{% elif mode == 'binary' %}
+  <p class="t-caption">{{ filename }}</p>
+  <p class="t-muted">binary file — operations land in later PRs</p>
+{% elif mode == 'too_large' %}
+  <p class="t-caption">{{ filename }}</p>
+  <p class="t-muted">file too large to view inline</p>
+{% endif %}
