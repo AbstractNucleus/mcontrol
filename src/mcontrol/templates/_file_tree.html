@@ -1,12 +1,19 @@
 {% for entry in entries %}
   {% if entry.kind == 'dir' %}
-    <li class="file-tree__entry file-tree__entry--dir">
+    <li class="file-tree__entry file-tree__entry--dir"
+        data-upload-target
+        data-upload-path="{{ entry.path }}">
       <button class="file-tree__toggle"
               type="button"
               hx-get="/servers/{{ server_name }}/files/tree?path={{ entry.path|urlencode }}"
               hx-target="next .file-tree__children"
               hx-swap="innerHTML"
               hx-trigger="click once">{{ entry.name }}/</button>
+      <button class="file-tree__upload-btn"
+              type="button"
+              data-upload-trigger
+              data-upload-path="{{ entry.path }}"
+              title="Upload to {{ entry.name }}/">+</button>
       <ul class="file-tree__children"></ul>
     </li>
   {% elif entry.kind == 'symlink' %}

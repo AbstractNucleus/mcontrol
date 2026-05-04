@@ -1,0 +1,15 @@
+{# Banner shown by file_uploader.js when /files/upload returns 409.
+   Buttons are not htmx — the original FormData (with the File handles)
+   is held in JS memory so we can resubmit with force=true on Overwrite.
+   Cancel discards the FormData and clears the banner.
+#}
+<div class="file-upload-conflict" id="file-upload-conflict" data-upload-path="{{ path }}">
+  <p class="t-caption">{{ conflicts|length }} file{{ '' if conflicts|length == 1 else 's' }} already exist in this directory:</p>
+  <ul class="file-upload-conflict__list">
+    {% for name in conflicts %}<li><code>{{ name }}</code></li>{% endfor %}
+  </ul>
+  <div class="file-upload-conflict__actions">
+    <button type="button" class="file-upload-conflict__btn" data-upload-action="overwrite">Overwrite all</button>
+    <button type="button" class="file-upload-conflict__btn" data-upload-action="cancel">Cancel</button>
+  </div>
+</div>

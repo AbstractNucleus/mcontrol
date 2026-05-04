@@ -1,9 +1,10 @@
-"""Read-only file tree + view + save for a server's bind-mount directory.
+"""Read-only file tree + view + save + upload for a server's bind-mount directory.
 
-Slice 5 PR 1 shipped tree + view. Slice 5 PR 2 adds POST /files/save:
-CodeMirror-rendered text edit, atomic write, mtime stale-write check.
+Slice 5 PR 1 shipped tree + view. PR 2 added POST /files/save (CodeMirror
+edit, atomic write, mtime check). PR 3 adds POST /files/upload (multipart,
+atomic per file, refuse-on-conflict with operator-confirmed force overwrite).
 
-Path-safety contract (mirrors slice 5 plan; applies to both read and write):
+Path-safety contract (mirrors slice 5 plan; applies to read, write, upload):
 
 1. Resolve `(<dir>) / operator_path` and refuse `..` traversal.
 2. Walk every component with `Path.is_symlink()` — refuse to follow
@@ -13,16 +14,18 @@ Path-safety contract (mirrors slice 5 plan; applies to both read and write):
    row `dir`. HTTP 400 otherwise.
 4. Special files (`S_ISBLK` / `S_ISCHR` / `S_ISFIFO` / `S_ISSOCK`) are
    skipped from listings and rejected at endpoints.
+5. Upload filenames are operator-controlled; refuse `/`, `\\`, `..`, `.`,
+   empty, and null-byte names before anything touches disk.
 """
 
 import stat
 from pathlib import Path
 
-from fastapi import APIRouter, Form, HTTPException, Query, Request
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
 from mcontrol import db
-from mcontrol.file_writer import atomic_write_text
+from mcontrol.file_writer import atomic_write_stream, atomic_write_text
 from mcontrol.templates import templates
 
 router = APIRouter()
@@ -232,4 +235,108 @@ async def save(
             "mtime_ns": new_st.st_mtime_ns,
             "saved": True,
         },
+    )
+
+
+def _validate_upload_filename(name: str) -> None:
+    """Refuse any filename component the operator could weaponize.
+
+    Multipart filenames are attacker-controlled and naive concatenation
+    would let `foo/../../etc/passwd` escape the target dir. We forbid
+    path separators, dot segments, empties and NULs before going near
+    disk.
+    """
+    if not name:
+        raise HTTPException(status_code=400, detail="empty filename")
+    if "/" in name or "\\" in name:
+        raise HTTPException(status_code=400, detail=f"invalid filename: {name!r}")
+    if name in (".", ".."):
+        raise HTTPException(status_code=400, detail=f"invalid filename: {name!r}")
+    if "\x00" in name:
+        raise HTTPException(status_code=400, detail="invalid filename")
+
+
+@router.post("/servers/{name}/files/upload", response_class=HTMLResponse)
+async def upload(
+    request: Request,
+    name: str,
+    path: str = Form(""),
+    force: bool = Form(False),
+    files: list[UploadFile] = File(...),  # noqa: B008 — FastAPI dep-injection idiom
+) -> HTMLResponse:
+    """Upload one-or-more files to a directory under the server's bind-mount.
+
+    Conflict UX (per slice 5 plan): if any uploaded filename collides
+    with an existing entry and `force` is not set, refuse the entire
+    batch (no writes happen) and return HTTP 409 with a confirm-overwrite
+    partial. The client re-POSTs with `force=true` to commit.
+
+    Per-file writes are atomic (sibling tempfile + os.replace). The
+    batch is *not* transactional — if file 7 of 10 fails after a clean
+    conflict scan, files 1–6 are on disk. That's acceptable; the
+    operator can re-upload the failed remainder.
+    """
+    server = _server_or_404(name)
+    target_dir = _resolve_within(server["dir"], path)
+    if not target_dir.exists():
+        raise HTTPException(status_code=404, detail="path not found")
+    if not target_dir.is_dir():
+        raise HTTPException(status_code=400, detail="not a directory")
+
+    if not files:
+        raise HTTPException(status_code=400, detail="no files uploaded")
+
+    # Filename validation first — never let an invalid name reach disk.
+    for f in files:
+        _validate_upload_filename(f.filename or "")
+
+    # Conflict scan: classify every existing target before any writes.
+    # Hard refusals (dir, special) abort with 400 even when force=true —
+    # the operator can't clobber these via this endpoint, and surfacing
+    # them through the conflict modal would be misleading.
+    conflicts: list[str] = []
+    for f in files:
+        target = target_dir / f.filename
+        try:
+            st = target.lstat()
+        except FileNotFoundError:
+            continue
+        if _is_special(st.st_mode):
+            raise HTTPException(
+                status_code=400,
+                detail=f"refusing to clobber special file: {f.filename}",
+            )
+        if stat.S_ISDIR(st.st_mode):
+            raise HTTPException(
+                status_code=400,
+                detail=f"refusing to clobber directory: {f.filename}",
+            )
+        # Regular files and symlinks are surfaced as conflicts. Overwriting
+        # a symlink via os.replace swaps the symlink itself (does not write
+        # through), which is consistent with the "never follow symlinks"
+        # contract.
+        conflicts.append(f.filename)
+
+    if conflicts and not force:
+        return templates.TemplateResponse(
+            request=request,
+            name="_file_upload_conflict.html",
+            context={
+                "server_name": name,
+                "path": path,
+                "conflicts": conflicts,
+            },
+            status_code=409,
+        )
+
+    for f in files:
+        target = target_dir / f.filename
+        atomic_write_stream(target, f.file)
+
+    base = Path(server["dir"]).resolve()
+    entries = _list_dir(target_dir, base)
+    return templates.TemplateResponse(
+        request=request,
+        name="_file_tree.html",
+        context={"server_name": name, "entries": entries},
     )
