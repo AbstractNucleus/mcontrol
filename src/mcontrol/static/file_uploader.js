@@ -13,7 +13,7 @@
 const STATE = { highlighted: null };
 
 function tree() { return document.getElementById("file-tree"); }
-function status() { return document.getElementById("file-upload-status"); }
+function status() { return document.getElementById("file-action-status"); }
 function fileInput() { return document.getElementById("file-upload-input"); }
 function pane(el) { return el ? el.closest(".files-pane") : null; }
 function serverName() {
@@ -166,5 +166,177 @@ function showConflict(html, onOverwrite) {
 function showError(msg) {
   const s = status();
   if (!s) return;
-  s.innerHTML = `<div class="file-upload-error t-caption">${msg}</div>`;
+  s.innerHTML = `<div class="file-upload-error t-caption">${escapeHtml(msg)}</div>`;
+}
+
+// ---- delete + mkdir (slice 5 PR 4) -----------------------------------
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[c]));
+}
+
+function parentOf(p) {
+  if (!p) return "";
+  const i = p.lastIndexOf("/");
+  return i < 0 ? "" : p.slice(0, i);
+}
+
+document.addEventListener("click", (evt) => {
+  const del = evt.target.closest && evt.target.closest("[data-action-delete]");
+  if (del) {
+    evt.preventDefault();
+    showDeleteConfirm(del.dataset);
+    return;
+  }
+  const mk = evt.target.closest && evt.target.closest("[data-action-mkdir]");
+  if (mk) {
+    evt.preventDefault();
+    showMkdirForm(mk.dataset.actionPath || "");
+  }
+});
+
+function showDeleteConfirm(ds) {
+  const s = status();
+  if (!s) return;
+  const path = ds.actionPath || "";
+  const dispName = ds.actionName || path;
+  const kind = ds.actionKind || "file";
+  const isDir = kind === "dir";
+  const safeName = escapeHtml(dispName);
+  s.innerHTML = isDir
+    ? `<div class="file-delete-confirm file-delete-confirm--danger" id="file-delete-confirm">
+         <p class="t-caption">Delete folder <code>${safeName}/</code> and everything inside?</p>
+         <p class="t-caption">Type <code>${safeName}</code> to confirm:</p>
+         <div class="file-delete-confirm__actions">
+           <input type="text" autocomplete="off" data-confirm-input>
+           <button type="button" class="file-delete-confirm__btn file-delete-confirm__btn--danger" data-confirm-submit disabled>Delete</button>
+           <button type="button" class="file-delete-confirm__btn" data-confirm-cancel>Cancel</button>
+         </div>
+       </div>`
+    : `<div class="file-delete-confirm" id="file-delete-confirm">
+         <p class="t-caption">Delete <code>${safeName}</code>?</p>
+         <div class="file-delete-confirm__actions">
+           <button type="button" class="file-delete-confirm__btn file-delete-confirm__btn--danger" data-confirm-submit>Delete</button>
+           <button type="button" class="file-delete-confirm__btn" data-confirm-cancel>Cancel</button>
+         </div>
+       </div>`;
+
+  const submit = s.querySelector("[data-confirm-submit]");
+  const cancel = s.querySelector("[data-confirm-cancel]");
+  const input = s.querySelector("[data-confirm-input]");
+
+  if (isDir && input && submit) {
+    input.addEventListener("input", () => {
+      submit.disabled = input.value !== dispName;
+    });
+    input.focus();
+  }
+
+  submit.addEventListener("click", async () => {
+    if (submit.disabled) return;
+    await performDelete(path, isDir ? dispName : "");
+  });
+  cancel.addEventListener("click", () => { s.innerHTML = ""; });
+}
+
+function showMkdirForm(parentPath) {
+  const s = status();
+  if (!s) return;
+  const label = parentPath === "" ? "root" : parentPath + "/";
+  s.innerHTML = `<div class="file-action-form" id="file-mkdir-form">
+       <p class="t-caption">New folder in <code>${escapeHtml(label)}</code>:</p>
+       <div class="file-action-form__actions">
+         <input type="text" autocomplete="off" placeholder="folder name" data-mkdir-input>
+         <button type="button" class="file-action-form__btn" data-mkdir-submit>Create</button>
+         <button type="button" class="file-action-form__btn" data-mkdir-cancel>Cancel</button>
+       </div>
+     </div>`;
+
+  const input = s.querySelector("[data-mkdir-input]");
+  const submit = s.querySelector("[data-mkdir-submit]");
+  const cancel = s.querySelector("[data-mkdir-cancel]");
+
+  if (input) input.focus();
+  input.addEventListener("keydown", (evt) => {
+    if (evt.key === "Enter") { evt.preventDefault(); submit.click(); }
+    if (evt.key === "Escape") { evt.preventDefault(); cancel.click(); }
+  });
+  submit.addEventListener("click", async () => {
+    const name = (input.value || "").trim();
+    if (!name) return;
+    await performMkdir(parentPath, name);
+  });
+  cancel.addEventListener("click", () => { s.innerHTML = ""; });
+}
+
+async function performDelete(path, confirmName) {
+  const name = serverName();
+  if (!name) return;
+  const fd = new FormData();
+  fd.append("path", path);
+  if (confirmName) fd.append("confirm_name", confirmName);
+
+  let resp;
+  try {
+    resp = await fetch(`/servers/${encodeURIComponent(name)}/files/delete`, {
+      method: "POST",
+      body: fd,
+    });
+  } catch (err) {
+    showError(`delete failed: ${err.message}`);
+    return;
+  }
+
+  if (!resp.ok) {
+    showError(`delete failed: HTTP ${resp.status}`);
+    return;
+  }
+
+  const html = await resp.text();
+  swapTreeAt(parentOf(path), html);
+  const s = status();
+  if (s) s.innerHTML = "";
+  const t = tree();
+  if (t && window.htmx && window.htmx.process) window.htmx.process(t);
+}
+
+async function performMkdir(parentPath, dirname) {
+  const name = serverName();
+  if (!name) return;
+  const fd = new FormData();
+  fd.append("path", parentPath);
+  fd.append("dirname", dirname);
+
+  let resp;
+  try {
+    resp = await fetch(`/servers/${encodeURIComponent(name)}/files/mkdir`, {
+      method: "POST",
+      body: fd,
+    });
+  } catch (err) {
+    showError(`mkdir failed: ${err.message}`);
+    return;
+  }
+
+  if (resp.status === 409) {
+    showError(`already exists: ${dirname}`);
+    return;
+  }
+  if (!resp.ok) {
+    showError(`mkdir failed: HTTP ${resp.status}`);
+    return;
+  }
+
+  const html = await resp.text();
+  swapTreeAt(parentPath, html);
+  const s = status();
+  if (s) s.innerHTML = "";
+  const t = tree();
+  if (t && window.htmx && window.htmx.process) window.htmx.process(t);
 }
