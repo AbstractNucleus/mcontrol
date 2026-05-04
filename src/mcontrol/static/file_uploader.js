@@ -198,6 +198,18 @@ document.addEventListener("click", (evt) => {
   if (mk) {
     evt.preventDefault();
     showMkdirForm(mk.dataset.actionPath || "");
+    return;
+  }
+  const ren = evt.target.closest && evt.target.closest("[data-action-rename]");
+  if (ren) {
+    evt.preventDefault();
+    showRenameForm(ren.dataset.actionPath || "", ren.dataset.actionName || "");
+    return;
+  }
+  const mv = evt.target.closest && evt.target.closest("[data-action-move]");
+  if (mv) {
+    evt.preventDefault();
+    showMoveModal(mv.dataset.actionPath || "", mv.dataset.actionName || "");
   }
 });
 
@@ -335,6 +347,176 @@ async function performMkdir(parentPath, dirname) {
 
   const html = await resp.text();
   swapTreeAt(parentPath, html);
+  const s = status();
+  if (s) s.innerHTML = "";
+  const t = tree();
+  if (t && window.htmx && window.htmx.process) window.htmx.process(t);
+}
+
+// ---- rename + move (slice 5 PR 5) ------------------------------------
+
+function showRenameForm(path, currentName) {
+  const s = status();
+  if (!s) return;
+  s.innerHTML = `<div class="file-action-form" id="file-rename-form">
+       <p class="t-caption">Rename <code>${escapeHtml(currentName)}</code> to:</p>
+       <div class="file-action-form__actions">
+         <input type="text" autocomplete="off" data-rename-input>
+         <button type="button" class="file-action-form__btn" data-rename-submit>Rename</button>
+         <button type="button" class="file-action-form__btn" data-rename-cancel>Cancel</button>
+       </div>
+     </div>`;
+
+  const input = s.querySelector("[data-rename-input]");
+  const submit = s.querySelector("[data-rename-submit]");
+  const cancel = s.querySelector("[data-rename-cancel]");
+
+  input.value = currentName;
+  input.focus();
+  // Select the basename without the extension to make the common-case
+  // edit (filename-without-extension) one keystroke instead of two.
+  const dot = currentName.lastIndexOf(".");
+  if (dot > 0) input.setSelectionRange(0, dot);
+  else input.select();
+
+  input.addEventListener("keydown", (evt) => {
+    if (evt.key === "Enter") { evt.preventDefault(); submit.click(); }
+    if (evt.key === "Escape") { evt.preventDefault(); cancel.click(); }
+  });
+  submit.addEventListener("click", async () => {
+    const newName = (input.value || "").trim();
+    if (!newName || newName === currentName) { s.innerHTML = ""; return; }
+    await performRename(path, newName);
+  });
+  cancel.addEventListener("click", () => { s.innerHTML = ""; });
+}
+
+async function performRename(path, newName) {
+  const name = serverName();
+  if (!name) return;
+  const fd = new FormData();
+  fd.append("path", path);
+  fd.append("new_name", newName);
+
+  let resp;
+  try {
+    resp = await fetch(`/servers/${encodeURIComponent(name)}/files/rename`, {
+      method: "POST",
+      body: fd,
+    });
+  } catch (err) {
+    showError(`rename failed: ${err.message}`);
+    return;
+  }
+
+  if (resp.status === 409) {
+    showError(`already exists: ${newName}`);
+    return;
+  }
+  if (!resp.ok) {
+    showError(`rename failed: HTTP ${resp.status}`);
+    return;
+  }
+
+  const html = await resp.text();
+  swapTreeAt(parentOf(path), html);
+  const s = status();
+  if (s) s.innerHTML = "";
+  const t = tree();
+  if (t && window.htmx && window.htmx.process) window.htmx.process(t);
+}
+
+function showMoveModal(sourcePath, sourceName) {
+  const s = status();
+  if (!s) return;
+  const sname = serverName();
+  if (!sname) return;
+
+  s.innerHTML = `<div class="file-move-modal" id="file-move-modal">
+       <p class="t-caption">Move <code>${escapeHtml(sourceName)}</code> to:</p>
+       <div class="file-picker">
+         <button type="button" class="file-picker__select file-picker__root"
+                 data-picker-select data-picker-path="">(server root)</button>
+         <ul class="file-picker__children"
+             hx-get="/servers/${encodeURIComponent(sname)}/files/tree?picker=1"
+             hx-trigger="load"
+             hx-swap="innerHTML"></ul>
+       </div>
+       <p class="t-caption file-move-modal__selection">
+         Selected: <code data-move-selection>(none)</code>
+       </p>
+       <div class="file-move-modal__actions">
+         <button type="button" class="file-action-form__btn" data-move-submit disabled>Move here</button>
+         <button type="button" class="file-action-form__btn" data-move-cancel>Cancel</button>
+       </div>
+     </div>`;
+
+  // Re-arm htmx so the picker's load-trigger fires and lazy-load on
+  // sub-folders works inside the freshly-injected tree.
+  if (window.htmx && window.htmx.process) window.htmx.process(s);
+
+  const modal = s.querySelector("#file-move-modal");
+  const selBox = s.querySelector("[data-move-selection]");
+  const submit = s.querySelector("[data-move-submit]");
+  const cancel = s.querySelector("[data-move-cancel]");
+  let selected = null;
+
+  // Selecting "(server root)" when no row is clicked: provide a
+  // root-row affordance so the operator can move things into the root
+  // even when the source already lives inside a subfolder. Add it as
+  // the first picker entry.
+  modal.addEventListener("click", (evt) => {
+    const row = evt.target.closest && evt.target.closest("[data-picker-select]");
+    if (!row || !modal.contains(row)) return;
+    selected = row.dataset.pickerPath || "";
+    selBox.textContent = selected === "" ? "(server root)" : selected;
+    submit.disabled = false;
+    modal.querySelectorAll("[data-picker-select]").forEach((b) => b.classList.remove("is-selected"));
+    row.classList.add("is-selected");
+  });
+
+  // Re-process htmx whenever the picker swaps in new sub-children, so
+  // their hx-get triggers stay wired.
+  modal.addEventListener("htmx:afterSwap", () => {
+    if (window.htmx && window.htmx.process) window.htmx.process(modal);
+  });
+
+  submit.addEventListener("click", async () => {
+    if (submit.disabled || selected === null) return;
+    await performMove(sourcePath, selected);
+  });
+  cancel.addEventListener("click", () => { s.innerHTML = ""; });
+}
+
+async function performMove(source, destDir) {
+  const name = serverName();
+  if (!name) return;
+  const fd = new FormData();
+  fd.append("source", source);
+  fd.append("dest_dir", destDir);
+
+  let resp;
+  try {
+    resp = await fetch(`/servers/${encodeURIComponent(name)}/files/move`, {
+      method: "POST",
+      body: fd,
+    });
+  } catch (err) {
+    showError(`move failed: ${err.message}`);
+    return;
+  }
+
+  if (resp.status === 409) {
+    showError(`already exists at destination: ${source.split("/").pop()}`);
+    return;
+  }
+  if (!resp.ok) {
+    showError(`move failed: HTTP ${resp.status}`);
+    return;
+  }
+
+  const html = await resp.text();
+  swapTreeAt(parentOf(source), html);
   const s = status();
   if (s) s.innerHTML = "";
   const t = tree();
