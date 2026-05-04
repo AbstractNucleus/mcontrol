@@ -1,26 +1,28 @@
-"""Read-only file tree + view for a server's bind-mount directory.
+"""Read-only file tree + view + save for a server's bind-mount directory.
 
-Slice 5 PR 1. Path-safety contract (mirrors slice 5 plan):
+Slice 5 PR 1 shipped tree + view. Slice 5 PR 2 adds POST /files/save:
+CodeMirror-rendered text edit, atomic write, mtime stale-write check.
+
+Path-safety contract (mirrors slice 5 plan; applies to both read and write):
 
 1. Resolve `(<dir>) / operator_path` and refuse `..` traversal.
 2. Walk every component with `Path.is_symlink()` — refuse to follow
    any segment that is a symlink. Symlinks are still rendered in
-   listings (with a marker) but never traversed for read.
+   listings (with a marker) but never traversed for read or write.
 3. Sub-path check: the resolved target must live inside the resolved
    row `dir`. HTTP 400 otherwise.
 4. Special files (`S_ISBLK` / `S_ISCHR` / `S_ISFIFO` / `S_ISSOCK`) are
    skipped from listings and rejected at endpoints.
-
-Write paths (PR 2+) will inherit this same resolver.
 """
 
 import stat
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol import db
+from mcontrol.file_writer import atomic_write_text
 from mcontrol.templates import templates
 
 router = APIRouter()
@@ -94,6 +96,25 @@ def _list_dir(target: Path, base: Path) -> list[dict]:
     return entries
 
 
+def _stat_regular_file(target: Path) -> "stat.os.stat_result":
+    """Return lstat() of `target`, refusing symlinks/special/dirs.
+
+    Caller must already have run `_resolve_within`. Raises 404 if the
+    file vanished and 400 for symlink / special / directory.
+    """
+    try:
+        st = target.lstat()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="file not found") from exc
+    if stat.S_ISLNK(st.st_mode):
+        raise HTTPException(status_code=400, detail="symlinks are not followed")
+    if _is_special(st.st_mode):
+        raise HTTPException(status_code=400, detail="not a regular file")
+    if stat.S_ISDIR(st.st_mode):
+        raise HTTPException(status_code=400, detail="not a file")
+    return st
+
+
 @router.get("/servers/{name}/files/tree", response_class=HTMLResponse)
 async def tree(
     request: Request,
@@ -124,18 +145,7 @@ async def view(
 ) -> HTMLResponse:
     server = _server_or_404(name)
     target = _resolve_within(server["dir"], path)
-
-    try:
-        st = target.lstat()
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="file not found") from exc
-
-    if stat.S_ISLNK(st.st_mode):
-        raise HTTPException(status_code=400, detail="symlinks are not followed")
-    if _is_special(st.st_mode):
-        raise HTTPException(status_code=400, detail="not a regular file")
-    if stat.S_ISDIR(st.st_mode):
-        raise HTTPException(status_code=400, detail="not a file")
+    st = _stat_regular_file(target)
 
     base = Path(server["dir"]).resolve()
     rel = target.relative_to(base).as_posix()
@@ -161,5 +171,65 @@ async def view(
     return templates.TemplateResponse(
         request=request,
         name="_file_view.html",
-        context={"mode": "text", "filename": rel, "content": content, "size": size},
+        context={
+            "mode": "text",
+            "server_name": name,
+            "filename": rel,
+            "content": content,
+            "size": size,
+            "mtime_ns": st.st_mtime_ns,
+        },
+    )
+
+
+@router.post("/servers/{name}/files/save", response_class=HTMLResponse)
+async def save(
+    request: Request,
+    name: str,
+    path: str = Form(...),
+    content: str = Form(...),
+    mtime_ns: int = Form(...),
+    force: bool = Form(False),
+) -> HTMLResponse:
+    server = _server_or_404(name)
+    target = _resolve_within(server["dir"], path)
+    st = _stat_regular_file(target)
+
+    base = Path(server["dir"]).resolve()
+    rel = target.relative_to(base).as_posix()
+
+    # Browsers send CRLF in form-encoded textareas; CodeMirror uses LF.
+    # Normalise so the mtime check and on-disk content stay deterministic.
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n")
+
+    if not force and st.st_mtime_ns != mtime_ns:
+        return templates.TemplateResponse(
+            request=request,
+            name="_file_view.html",
+            context={
+                "mode": "text",
+                "server_name": name,
+                "filename": rel,
+                "content": normalized,
+                "size": st.st_size,
+                "mtime_ns": st.st_mtime_ns,
+                "conflict": True,
+            },
+            status_code=409,
+        )
+
+    atomic_write_text(target, normalized)
+    new_st = target.stat()
+    return templates.TemplateResponse(
+        request=request,
+        name="_file_view.html",
+        context={
+            "mode": "text",
+            "server_name": name,
+            "filename": rel,
+            "content": normalized,
+            "size": new_st.st_size,
+            "mtime_ns": new_st.st_mtime_ns,
+            "saved": True,
+        },
     )

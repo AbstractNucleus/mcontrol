@@ -164,8 +164,10 @@ async def test_view_returns_404_for_unknown_server(client, fake_server) -> None:
     assert response.status_code == 404
 
 
-async def test_view_renders_text_in_pre(client, fake_server, server_dir: Path) -> None:
-    (server_dir / "server.properties").write_text("level-name=world\n", encoding="utf-8")
+async def test_view_renders_text_in_editor(client, fake_server, server_dir: Path) -> None:
+    target = server_dir / "server.properties"
+    target.write_text("level-name=world\n", encoding="utf-8")
+    expected_mtime_ns = target.stat().st_mtime_ns
 
     response = await client.get(
         "/servers/atm10/files/view", params={"path": "server.properties"}
@@ -173,9 +175,14 @@ async def test_view_renders_text_in_pre(client, fake_server, server_dir: Path) -
 
     assert response.status_code == 200
     body = response.text
+    # Initial content lives in the textarea CodeMirror mounts over.
     assert "level-name=world" in body
-    assert "<pre" in body
-    assert "file-view__content" in body
+    assert "data-file-editor" in body
+    assert 'name="path" value="server.properties"' in body
+    assert f'name="mtime_ns" value="{expected_mtime_ns}"' in body
+    assert "/servers/atm10/files/save" in body
+    # The read-only <pre> placeholder from PR 1 is gone for text mode.
+    assert "<pre" not in body
 
 
 async def test_view_binary_file_renders_placeholder(
@@ -242,6 +249,211 @@ async def test_view_refuses_special_file(client, fake_server, server_dir: Path) 
     os.mkfifo(server_dir / "myfifo")
     response = await client.get("/servers/atm10/files/view", params={"path": "myfifo"})
     assert response.status_code == 400
+
+
+# ---- /files/save -------------------------------------------------------
+
+async def test_save_writes_content_and_returns_fresh_mtime(
+    client, fake_server, server_dir: Path
+) -> None:
+    target = server_dir / "server.properties"
+    target.write_text("level-name=world\n", encoding="utf-8")
+    mtime_ns = target.stat().st_mtime_ns
+
+    response = await client.post(
+        "/servers/atm10/files/save",
+        data={
+            "path": "server.properties",
+            "content": "level-name=overworld\nmotd=hi\n",
+            "mtime_ns": str(mtime_ns),
+        },
+    )
+
+    assert response.status_code == 200
+    assert target.read_text(encoding="utf-8") == "level-name=overworld\nmotd=hi\n"
+    new_mtime_ns = target.stat().st_mtime_ns
+    body = response.text
+    assert f'name="mtime_ns" value="{new_mtime_ns}"' in body
+    assert "saved" in body
+
+
+async def test_save_normalizes_crlf_to_lf(
+    client, fake_server, server_dir: Path
+) -> None:
+    target = server_dir / "notes.txt"
+    target.write_text("a\n", encoding="utf-8")
+    mtime_ns = target.stat().st_mtime_ns
+
+    response = await client.post(
+        "/servers/atm10/files/save",
+        data={
+            "path": "notes.txt",
+            "content": "a\r\nb\r\n",
+            "mtime_ns": str(mtime_ns),
+        },
+    )
+
+    assert response.status_code == 200
+    # Bytes on disk: no CR.
+    assert target.read_bytes() == b"a\nb\n"
+
+
+async def test_save_returns_409_on_mtime_mismatch(
+    client, fake_server, server_dir: Path
+) -> None:
+    target = server_dir / "server.properties"
+    target.write_text("a\n", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/save",
+        data={
+            "path": "server.properties",
+            "content": "operator-edit\n",
+            "mtime_ns": "1",  # bogus stale mtime
+        },
+    )
+
+    assert response.status_code == 409
+    body = response.text
+    # Conflict banner exposes all three resolution paths.
+    assert "file-conflict" in body
+    assert "Reload" in body
+    assert "Overwrite" in body
+    assert "Cancel" in body
+    # Editor stays mounted with the operator's pending content.
+    assert "operator-edit" in body
+    assert "data-file-editor" in body
+    # The form's mtime_ns was bumped to the disk's current value so a
+    # follow-up plain Save would also succeed.
+    current_mtime = target.stat().st_mtime_ns
+    assert f'name="mtime_ns" value="{current_mtime}"' in body
+    # On-disk content is unchanged.
+    assert target.read_text(encoding="utf-8") == "a\n"
+
+
+async def test_save_force_overwrite_after_mismatch(
+    client, fake_server, server_dir: Path
+) -> None:
+    target = server_dir / "server.properties"
+    target.write_text("disk-version\n", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/save",
+        data={
+            "path": "server.properties",
+            "content": "operator-version\n",
+            "mtime_ns": "1",
+            "force": "true",
+        },
+    )
+
+    assert response.status_code == 200
+    assert target.read_text(encoding="utf-8") == "operator-version\n"
+
+
+async def test_save_400_on_traversal(client, fake_server) -> None:
+    response = await client.post(
+        "/servers/atm10/files/save",
+        data={
+            "path": "../etc/passwd",
+            "content": "x",
+            "mtime_ns": "0",
+            "force": "true",
+        },
+    )
+    assert response.status_code == 400
+
+
+async def test_save_404_for_missing_file(client, fake_server) -> None:
+    response = await client.post(
+        "/servers/atm10/files/save",
+        data={
+            "path": "no-such.txt",
+            "content": "x",
+            "mtime_ns": "0",
+            "force": "true",
+        },
+    )
+    assert response.status_code == 404
+
+
+async def test_save_400_on_directory(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "subdir").mkdir()
+    response = await client.post(
+        "/servers/atm10/files/save",
+        data={
+            "path": "subdir",
+            "content": "x",
+            "mtime_ns": "0",
+            "force": "true",
+        },
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need privileges on Windows")
+async def test_save_refuses_symlink_target(
+    client, fake_server, server_dir: Path, tmp_path: Path
+) -> None:
+    secret = tmp_path / "secret.txt"
+    secret.write_text("untouched", encoding="utf-8")
+    (server_dir / "link.txt").symlink_to(secret)
+
+    response = await client.post(
+        "/servers/atm10/files/save",
+        data={
+            "path": "link.txt",
+            "content": "pwned",
+            "mtime_ns": "0",
+            "force": "true",
+        },
+    )
+
+    assert response.status_code == 400
+    assert secret.read_text(encoding="utf-8") == "untouched"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="FIFOs are POSIX-only")
+async def test_save_refuses_special_file(
+    client, fake_server, server_dir: Path
+) -> None:
+    os.mkfifo(server_dir / "myfifo")
+    response = await client.post(
+        "/servers/atm10/files/save",
+        data={
+            "path": "myfifo",
+            "content": "x",
+            "mtime_ns": "0",
+            "force": "true",
+        },
+    )
+    assert response.status_code == 400
+
+
+async def test_save_is_atomic_no_partial_visible(
+    client, fake_server, server_dir: Path
+) -> None:
+    """A successful save leaves no `.<name>.<rand>` tempfile next to target."""
+    target = server_dir / "server.properties"
+    target.write_text("a=1\n", encoding="utf-8")
+    mtime_ns = target.stat().st_mtime_ns
+
+    response = await client.post(
+        "/servers/atm10/files/save",
+        data={
+            "path": "server.properties",
+            "content": "a=2\n",
+            "mtime_ns": str(mtime_ns),
+        },
+    )
+
+    assert response.status_code == 200
+    assert target.read_text(encoding="utf-8") == "a=2\n"
+    # No leftover sibling tempfiles.
+    siblings = [p.name for p in server_dir.iterdir()]
+    assert siblings == ["server.properties"]
 
 
 # ---- server_detail integration ----------------------------------------
