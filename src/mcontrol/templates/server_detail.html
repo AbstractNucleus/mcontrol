@@ -65,6 +65,23 @@
               data-action-path=""
               title="New folder in root">+nf</button>
     </p>
+    <input type="search"
+           id="file-search-input"
+           class="file-search-input"
+           name="q"
+           placeholder="search filename (≥ 2 chars)…"
+           autocomplete="off"
+           hx-get="/servers/{{ server.name }}/files/search"
+           hx-trigger="input changed delay:200ms, search"
+           hx-target="#file-search-results"
+           hx-swap="innerHTML">
+    <div id="file-search-results"></div>
+    <div id="file-bulk-toolbar" class="file-bulk-toolbar" hidden>
+      <span class="t-caption" data-bulk-count>0 selected</span>
+      <button type="button" class="file-action-form__btn" data-bulk-action="move">Move selected</button>
+      <button type="button" class="file-action-form__btn file-delete-confirm__btn--danger" data-bulk-action="delete">Delete selected</button>
+      <button type="button" class="file-action-form__btn" data-bulk-action="clear">Clear</button>
+    </div>
     <div id="file-action-status" class="file-action-status"></div>
     <div class="files-pane__split">
       <ul class="file-tree"

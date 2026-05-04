@@ -3,6 +3,11 @@
     <li class="file-tree__entry file-tree__entry--dir"
         data-upload-target
         data-upload-path="{{ entry.path }}">
+      <input type="checkbox"
+             class="file-tree__checkbox"
+             data-select-path="{{ entry.path }}"
+             data-select-kind="dir"
+             data-select-name="{{ entry.name }}">
       <button class="file-tree__toggle"
               type="button"
               hx-get="/servers/{{ server_name }}/files/tree?path={{ entry.path|urlencode }}"
@@ -42,6 +47,11 @@
     </li>
   {% elif entry.kind == 'symlink' %}
     <li class="file-tree__entry file-tree__entry--symlink">
+      <input type="checkbox"
+             class="file-tree__checkbox"
+             data-select-path="{{ entry.path }}"
+             data-select-kind="symlink"
+             data-select-name="{{ entry.name }}">
       <a href="#"
          hx-get="/servers/{{ server_name }}/files/view?path={{ entry.path|urlencode }}"
          hx-target="#file-view"
@@ -68,6 +78,11 @@
     </li>
   {% else %}
     <li class="file-tree__entry file-tree__entry--file">
+      <input type="checkbox"
+             class="file-tree__checkbox"
+             data-select-path="{{ entry.path }}"
+             data-select-kind="file"
+             data-select-name="{{ entry.name }}">
       <a href="#"
          hx-get="/servers/{{ server_name }}/files/view?path={{ entry.path|urlencode }}"
          hx-target="#file-view"

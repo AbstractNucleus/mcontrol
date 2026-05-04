@@ -1,12 +1,15 @@
-"""File tree + view + save + upload + delete + mkdir + rename + move + download.
+"""File tree + view + save + upload + delete + mkdir + rename + move + download + search + bulk.
 
 Slice 5 PR 1 shipped tree + view. PR 2 added POST /files/save (CodeMirror
 edit, atomic write, mtime check). PR 3 added POST /files/upload (multipart,
 atomic per file, refuse-on-conflict with operator-confirmed force overwrite).
 PR 4 added POST /files/delete (file or recursive directory; dir requires
 type-name confirmation) and POST /files/mkdir. PR 5 added POST /files/rename,
-POST /files/move, and the dirs-only `?picker=1` tree variant. PR 6 adds
+POST /files/move, and the dirs-only `?picker=1` tree variant. PR 6 added
 GET /files/download — single-file FileResponse with attachment disposition.
+PR 7 (final) adds GET /files/search (case-insensitive recursive basename
+match, capped), POST /files/bulk_delete (operator types DELETE once),
+POST /files/bulk_move (refuse-on-any-collision).
 
 Path-safety contract (mirrors slice 5 plan; applies to every endpoint):
 
@@ -596,4 +599,207 @@ async def download(
         target,
         filename=target.name,
         media_type="application/octet-stream",
+    )
+
+
+_SEARCH_LIMIT = 200
+_SEARCH_MIN_LEN = 2
+
+
+@router.get("/servers/{name}/files/search", response_class=HTMLResponse)
+async def search(
+    request: Request,
+    name: str,
+    q: str = Query(""),
+) -> HTMLResponse:
+    """Recursive case-insensitive basename search (slice 5 PR 7).
+
+    Filename match only — no full-text grep, per slice contract.
+    Symlinked directories are not descended (followlinks=False); their
+    link entries can still match by name. Special files are skipped.
+    Capped at `_SEARCH_LIMIT` hits to keep both walk and render bounded
+    on large `world/region/` style trees.
+    """
+    server = _server_or_404(name)
+    needle = q.strip().lower()
+    if len(needle) < _SEARCH_MIN_LEN:
+        return templates.TemplateResponse(
+            request=request,
+            name="_file_search_results.html",
+            context={
+                "server_name": name,
+                "q": q,
+                "results": [],
+                "truncated": False,
+                "too_short": bool(needle),
+            },
+        )
+
+    base = Path(server["dir"]).resolve()
+    results: list[dict] = []
+    truncated = False
+    for root, dirs, files in os.walk(base, followlinks=False):
+        dirs.sort()
+        files.sort()
+        for entry_name in dirs + files:
+            if needle not in entry_name.lower():
+                continue
+            full = Path(root) / entry_name
+            try:
+                st = full.lstat()
+            except OSError:
+                continue
+            if _is_special(st.st_mode):
+                continue
+            kind = (
+                "symlink" if stat.S_ISLNK(st.st_mode)
+                else ("dir" if stat.S_ISDIR(st.st_mode) else "file")
+            )
+            rel = full.relative_to(base).as_posix()
+            results.append({"name": entry_name, "path": rel, "kind": kind})
+            if len(results) >= _SEARCH_LIMIT:
+                truncated = True
+                break
+        if truncated:
+            break
+
+    return templates.TemplateResponse(
+        request=request,
+        name="_file_search_results.html",
+        context={
+            "server_name": name,
+            "q": q,
+            "results": results,
+            "truncated": truncated,
+            "too_short": False,
+        },
+    )
+
+
+@router.post("/servers/{name}/files/bulk_delete", response_class=HTMLResponse)
+async def bulk_delete(
+    request: Request,
+    name: str,
+    paths: list[str] = Form(...),  # noqa: B008 — FastAPI dep-injection idiom
+    confirm: str = Form(""),
+) -> HTMLResponse:
+    """Delete every entry in `paths` (regular files, symlinks, or recursive
+    directories) after a single operator-typed `DELETE` confirmation.
+
+    The PR-4 per-dir basename-confirm doesn't scale to bulk; one global
+    typed phrase covers the whole batch instead. Each entry observes the
+    same path-safety contract as single delete: refuse symlinks-as-path-
+    components, refuse special files, refuse `paths == [""]` (root).
+    """
+    server = _server_or_404(name)
+    if confirm != "DELETE":
+        raise HTTPException(status_code=400, detail="confirm must be 'DELETE'")
+    cleaned = [p for p in paths if p]
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="no paths provided")
+    if any(not p for p in paths) or "" in cleaned:
+        # Defence-in-depth: refuse any empty-string path even mixed in.
+        raise HTTPException(status_code=400, detail="cannot delete server root")
+
+    # Resolve + classify everything first so we can refuse the whole batch
+    # if any single entry is illegal — partial deletes with a 400 mid-way
+    # would leave the operator with mystery state.
+    resolved: list[tuple[Path, int]] = []
+    for p in cleaned:
+        target = _resolve_within(server["dir"], p)
+        try:
+            st = target.lstat()
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"not found: {p}") from exc
+        if _is_special(st.st_mode):
+            raise HTTPException(status_code=400, detail=f"refuses special file: {p}")
+        resolved.append((target, st.st_mode))
+
+    for target, mode in resolved:
+        if stat.S_ISLNK(mode):
+            os.unlink(target)
+        elif stat.S_ISDIR(mode):
+            shutil.rmtree(target)
+        else:
+            os.unlink(target)
+
+    base = Path(server["dir"]).resolve()
+    entries = _list_dir(base, base)
+    return templates.TemplateResponse(
+        request=request,
+        name="_file_tree.html",
+        context={"server_name": name, "entries": entries},
+    )
+
+
+@router.post("/servers/{name}/files/bulk_move", response_class=HTMLResponse)
+async def bulk_move(
+    request: Request,
+    name: str,
+    sources: list[str] = Form(...),  # noqa: B008 — FastAPI dep-injection idiom
+    dest_dir: str = Form(""),
+) -> HTMLResponse:
+    """Move every `sources` entry into `dest_dir`, keeping each basename.
+
+    Refuses the entire batch (no partial moves) on any collision at the
+    destination, any cyclic move (dest inside source), any no-op
+    (dest == source.parent), missing source, root source, or a non-dir
+    destination. Once validated, performs every os.rename without rolling
+    back if a later one trips an OS-level error — that's a system fault,
+    not an operator-recoverable one.
+    """
+    server = _server_or_404(name)
+    if not sources:
+        raise HTTPException(status_code=400, detail="no sources")
+    if any(not s for s in sources):
+        raise HTTPException(status_code=400, detail="cannot move server root")
+
+    dst_parent = _resolve_within(server["dir"], dest_dir)
+    if not dst_parent.exists():
+        raise HTTPException(status_code=404, detail="destination not found")
+    if not dst_parent.is_dir():
+        raise HTTPException(status_code=400, detail="destination is not a directory")
+    dst_resolved = dst_parent.resolve(strict=False)
+
+    plan: list[tuple[Path, Path]] = []
+    for s in sources:
+        src = _resolve_within(server["dir"], s)
+        try:
+            src.lstat()
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"source not found: {s}") from exc
+
+        if dst_parent == src.parent:
+            raise HTTPException(
+                status_code=400,
+                detail=f"destination is the source's current parent: {s}",
+            )
+        src_resolved = src.resolve(strict=False)
+        if src_resolved == dst_resolved or src_resolved in dst_resolved.parents:
+            raise HTTPException(
+                status_code=400,
+                detail=f"destination is inside the source: {s}",
+            )
+
+        dest = dst_parent / src.name
+        try:
+            dest.lstat()
+        except FileNotFoundError:
+            pass
+        else:
+            raise HTTPException(
+                status_code=409,
+                detail=f"already exists at destination: {src.name}",
+            )
+        plan.append((src, dest))
+
+    for src, dest in plan:
+        os.rename(src, dest)
+
+    base = Path(server["dir"]).resolve()
+    entries = _list_dir(base, base)
+    return templates.TemplateResponse(
+        request=request,
+        name="_file_tree.html",
+        context={"server_name": name, "entries": entries},
     )

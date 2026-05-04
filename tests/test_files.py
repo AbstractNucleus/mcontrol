@@ -107,6 +107,9 @@ async def test_tree_dir_entries_emit_lazy_hx_get(client, fake_server, server_dir
     # PR-5: dir entries also carry rename + move triggers.
     assert 'data-action-rename' in body
     assert 'data-action-move' in body
+    # PR-7: every entry carries a multi-select checkbox.
+    assert 'data-select-path="config"' in body
+    assert 'data-select-kind="dir"' in body
 
 
 async def test_tree_file_entries_link_to_view(client, fake_server, server_dir: Path) -> None:
@@ -1395,6 +1398,287 @@ async def test_download_404_for_unknown_server(client, fake_server) -> None:
     assert response.status_code == 404
 
 
+# ---- /files/search -----------------------------------------------------
+
+async def test_search_short_query_returns_placeholder(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "match.txt").write_text("x", encoding="utf-8")
+
+    response = await client.get(
+        "/servers/atm10/files/search", params={"q": "m"}
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "type at least 2 characters" in body
+    # Placeholder must NOT include any matching results.
+    assert "match.txt" not in body
+
+
+async def test_search_finds_basename_match_recursive(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "match.txt").write_text("x", encoding="utf-8")
+    nested = server_dir / "sub" / "deep"
+    nested.mkdir(parents=True)
+    (nested / "alsoMATCH.log").write_text("y", encoding="utf-8")
+    (server_dir / "skip.cfg").write_text("z", encoding="utf-8")
+
+    response = await client.get(
+        "/servers/atm10/files/search", params={"q": "match"}
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "match.txt" in body
+    # Case-insensitive substring matches the nested file too.
+    assert "alsoMATCH.log" in body
+    assert "sub/deep/alsoMATCH.log" in body
+    assert "skip.cfg" not in body
+
+
+async def test_search_no_results(client, fake_server, server_dir: Path) -> None:
+    (server_dir / "foo.txt").write_text("x", encoding="utf-8")
+
+    response = await client.get(
+        "/servers/atm10/files/search", params={"q": "zzznotthere"}
+    )
+
+    assert response.status_code == 200
+    assert "no matches" in response.text
+
+
+async def test_search_caps_at_limit_and_marks_truncated(
+    client, fake_server, server_dir: Path, monkeypatch
+) -> None:
+    """Generate more than the cap so the truncated badge shows."""
+    monkeypatch.setattr("mcontrol.routes.files._SEARCH_LIMIT", 5)
+    for i in range(20):
+        (server_dir / f"matchX-{i}.txt").write_text("x", encoding="utf-8")
+
+    response = await client.get(
+        "/servers/atm10/files/search", params={"q": "matchX"}
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    # Truncation marker present and result count is at the cap.
+    assert "capped" in body or "truncated" in body
+    # `data-select-path="matchX-` appears once per rendered hit.
+    assert body.count('data-select-path="matchX-') == 5
+    # Late files weren't rendered — the cap stopped the walk early.
+    assert "matchX-19" not in body
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need privileges on Windows")
+async def test_search_does_not_descend_into_symlinked_dir(
+    client, fake_server, server_dir: Path, tmp_path: Path
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "matchABC.txt").write_text("x", encoding="utf-8")
+    (server_dir / "linkdir").symlink_to(outside)
+
+    response = await client.get(
+        "/servers/atm10/files/search", params={"q": "matchABC"}
+    )
+
+    assert response.status_code == 200
+    # The file inside the symlinked dir must NOT be reached.
+    assert "matchABC.txt" not in response.text
+
+
+# ---- /files/bulk_delete -----------------------------------------------
+
+async def test_bulk_delete_removes_multiple_files(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "a.txt").write_text("x", encoding="utf-8")
+    (server_dir / "b.txt").write_text("y", encoding="utf-8")
+    (server_dir / "stay.txt").write_text("z", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/bulk_delete",
+        data={"paths": ["a.txt", "b.txt"], "confirm": "DELETE"},
+    )
+
+    assert response.status_code == 200
+    assert not (server_dir / "a.txt").exists()
+    assert not (server_dir / "b.txt").exists()
+    assert (server_dir / "stay.txt").exists()
+
+
+async def test_bulk_delete_recursive_dir(
+    client, fake_server, server_dir: Path
+) -> None:
+    d = server_dir / "doomed"
+    (d / "nested").mkdir(parents=True)
+    (d / "nested" / "leaf.txt").write_text("x", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/bulk_delete",
+        data={"paths": ["doomed"], "confirm": "DELETE"},
+    )
+
+    assert response.status_code == 200
+    assert not d.exists()
+
+
+async def test_bulk_delete_400_without_DELETE_confirm(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "a.txt").write_text("x", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/bulk_delete",
+        data={"paths": ["a.txt"]},
+    )
+
+    assert response.status_code == 400
+    assert (server_dir / "a.txt").exists()
+
+
+async def test_bulk_delete_400_with_wrong_confirm(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "a.txt").write_text("x", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/bulk_delete",
+        data={"paths": ["a.txt"], "confirm": "delete"},
+    )
+
+    assert response.status_code == 400
+    assert (server_dir / "a.txt").exists()
+
+
+async def test_bulk_delete_400_refuses_root_in_paths(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "marker.txt").write_text("x", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/bulk_delete",
+        data={"paths": ["", "marker.txt"], "confirm": "DELETE"},
+    )
+
+    assert response.status_code == 400
+    # Nothing deleted.
+    assert (server_dir / "marker.txt").exists()
+
+
+async def test_bulk_delete_404_on_any_missing_aborts_batch(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "a.txt").write_text("x", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/bulk_delete",
+        data={"paths": ["a.txt", "no-such.txt"], "confirm": "DELETE"},
+    )
+
+    assert response.status_code == 404
+    # Refuse-on-any-bad-input: a.txt must NOT have been deleted.
+    assert (server_dir / "a.txt").exists()
+
+
+# ---- /files/bulk_move -------------------------------------------------
+
+async def test_bulk_move_relocates_multiple_files(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "a.txt").write_text("a", encoding="utf-8")
+    (server_dir / "b.txt").write_text("b", encoding="utf-8")
+    (server_dir / "dst").mkdir()
+
+    response = await client.post(
+        "/servers/atm10/files/bulk_move",
+        data={"sources": ["a.txt", "b.txt"], "dest_dir": "dst"},
+    )
+
+    assert response.status_code == 200
+    assert not (server_dir / "a.txt").exists()
+    assert not (server_dir / "b.txt").exists()
+    assert (server_dir / "dst" / "a.txt").read_text(encoding="utf-8") == "a"
+    assert (server_dir / "dst" / "b.txt").read_text(encoding="utf-8") == "b"
+
+
+async def test_bulk_move_409_on_any_collision_aborts_batch(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "a.txt").write_text("a", encoding="utf-8")
+    (server_dir / "b.txt").write_text("b", encoding="utf-8")
+    (server_dir / "dst").mkdir()
+    (server_dir / "dst" / "b.txt").write_text("victim", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/bulk_move",
+        data={"sources": ["a.txt", "b.txt"], "dest_dir": "dst"},
+    )
+
+    assert response.status_code == 409
+    # Refuse-on-any-collision: nothing moved.
+    assert (server_dir / "a.txt").exists()
+    assert (server_dir / "b.txt").exists()
+    assert (server_dir / "dst" / "b.txt").read_text(encoding="utf-8") == "victim"
+
+
+async def test_bulk_move_400_refuses_no_op_for_any_source(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "a.txt").write_text("a", encoding="utf-8")
+    (server_dir / "sub").mkdir()
+    (server_dir / "sub" / "b.txt").write_text("b", encoding="utf-8")
+
+    # `a.txt`'s parent IS the destination root → no-op for it.
+    response = await client.post(
+        "/servers/atm10/files/bulk_move",
+        data={"sources": ["a.txt", "sub/b.txt"], "dest_dir": ""},
+    )
+
+    assert response.status_code == 400
+    # Neither source moved.
+    assert (server_dir / "a.txt").exists()
+    assert (server_dir / "sub" / "b.txt").exists()
+
+
+async def test_bulk_move_400_refuses_root_source(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "dst").mkdir()
+    response = await client.post(
+        "/servers/atm10/files/bulk_move",
+        data={"sources": [""], "dest_dir": "dst"},
+    )
+    assert response.status_code == 400
+
+
+async def test_bulk_move_400_refuses_into_descendant(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "parent" / "child").mkdir(parents=True)
+
+    response = await client.post(
+        "/servers/atm10/files/bulk_move",
+        data={"sources": ["parent"], "dest_dir": "parent/child"},
+    )
+    assert response.status_code == 400
+    assert (server_dir / "parent" / "child").is_dir()
+
+
+async def test_bulk_move_404_when_destination_missing(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "a.txt").write_text("a", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/bulk_move",
+        data={"sources": ["a.txt"], "dest_dir": "no-such"},
+    )
+    assert response.status_code == 404
+
+
 # ---- server_detail integration ----------------------------------------
 
 async def test_server_detail_renders_files_pane(client, monkeypatch) -> None:
@@ -1428,3 +1712,9 @@ async def test_server_detail_renders_files_pane(client, monkeypatch) -> None:
     assert 'data-upload-trigger' in body
     # PR-4: root mkdir trigger is wired into the eyebrow.
     assert 'data-action-mkdir' in body
+    # PR-7: search input + bulk toolbar are present (toolbar starts hidden).
+    assert 'id="file-search-input"' in body
+    assert 'id="file-search-results"' in body
+    assert 'id="file-bulk-toolbar"' in body
+    assert 'data-bulk-action="delete"' in body
+    assert 'data-bulk-action="move"' in body

@@ -1,0 +1,40 @@
+{# Slot rendered by /files/search (slice 5 PR 7). Empty/short queries
+   show a placeholder; non-empty queries with no hits show "no matches".
+   Hits include a checkbox so the operator can roll the result into the
+   bulk selection (selection state is in JS).
+#}
+<div class="file-search-results">
+  {% if too_short %}
+    <p class="t-caption t-muted">type at least 2 characters</p>
+  {% elif not q %}
+    {# Empty input → empty slot (CSS hides the placeholder so this looks like nothing). #}
+  {% elif not results %}
+    <p class="t-caption t-muted">no matches for <code>{{ q }}</code></p>
+  {% else %}
+    <p class="t-caption">
+      {{ results|length }} match{{ '' if results|length == 1 else 'es' }}
+      {%- if truncated %} (capped — narrow the query){%- endif -%}
+    </p>
+    <ul class="file-search-list">
+      {% for r in results %}
+        <li class="file-search-list__entry file-search-list__entry--{{ r.kind }}">
+          <input type="checkbox"
+                 class="file-tree__checkbox"
+                 data-select-path="{{ r.path }}"
+                 data-select-kind="{{ r.kind }}"
+                 data-select-name="{{ r.name }}">
+          {% if r.kind == 'dir' %}
+            <span class="file-search-list__name">{{ r.path }}/</span>
+          {% elif r.kind == 'symlink' %}
+            <span class="file-search-list__name file-search-list__name--symlink">{{ r.path }} →</span>
+          {% else %}
+            <a href="#"
+               hx-get="/servers/{{ server_name }}/files/view?path={{ r.path|urlencode }}"
+               hx-target="#file-view"
+               hx-swap="innerHTML">{{ r.path }}</a>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</div>
