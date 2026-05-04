@@ -110,6 +110,9 @@ async def test_tree_dir_entries_emit_lazy_hx_get(client, fake_server, server_dir
     # PR-7: every entry carries a multi-select checkbox.
     assert 'data-select-path="config"' in body
     assert 'data-select-kind="dir"' in body
+    # follow-up: per-entry actions live inside a <details> popover.
+    assert '<details class="file-tree__menu">' in body
+    assert 'file-tree__menu-panel' in body
 
 
 async def test_tree_file_entries_link_to_view(client, fake_server, server_dir: Path) -> None:
@@ -1710,7 +1713,8 @@ async def test_server_detail_renders_files_pane(client, monkeypatch) -> None:
     # Root drop target + root upload trigger both carry data-upload-path="".
     assert 'data-upload-target' in body
     assert 'data-upload-trigger' in body
-    # PR-4: root mkdir trigger is wired into the eyebrow.
+    # PR-4: root mkdir trigger is wired into the eyebrow (now inside the
+    # follow-up's <details> popover).
     assert 'data-action-mkdir' in body
     # PR-7: search input + bulk toolbar are present (toolbar starts hidden).
     assert 'id="file-search-input"' in body
