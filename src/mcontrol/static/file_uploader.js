@@ -93,13 +93,25 @@ document.addEventListener("click", (evt) => {
 
 // Slice 5 follow-up: close the per-entry ⋯ popover after any action click
 // inside it, so the next action doesn't have to first dismiss the menu.
+// Also close any open popover on a click outside it — <details> doesn't
+// do outside-click dismissal natively.
 // requestAnimationFrame defers to the next frame so the action's own
 // handler runs first (e.g. opening the rename form, navigating download).
 document.addEventListener("click", (evt) => {
-  const inMenu = evt.target.closest && evt.target.closest(".file-tree__menu-panel");
-  if (!inMenu) return;
-  const det = inMenu.closest("details.file-tree__menu");
-  if (det) requestAnimationFrame(() => { det.open = false; });
+  const target = evt.target;
+  const inMenu = target.closest && target.closest(".file-tree__menu-panel");
+  if (inMenu) {
+    const det = inMenu.closest("details.file-tree__menu");
+    if (det) requestAnimationFrame(() => { det.open = false; });
+    return;
+  }
+  // Outside-click dismissal: close every open menu unless the click
+  // landed on a menu's own summary (which toggles natively).
+  const onSummary = target.closest && target.closest(".file-tree__menu-trigger");
+  document.querySelectorAll("details.file-tree__menu[open]").forEach((det) => {
+    if (onSummary && det.contains(onSummary)) return;
+    det.open = false;
+  });
 });
 
 document.addEventListener("change", async (evt) => {
