@@ -99,6 +99,11 @@ async def test_tree_dir_entries_emit_lazy_hx_get(client, fake_server, server_dir
     assert 'data-upload-target' in body
     assert 'data-upload-path="config"' in body
     assert 'data-upload-trigger' in body
+    # PR-4: dir entries also carry mkdir + delete triggers.
+    assert 'data-action-mkdir' in body
+    assert 'data-action-delete' in body
+    assert 'data-action-kind="dir"' in body
+    assert 'data-action-name="config"' in body
 
 
 async def test_tree_file_entries_link_to_view(client, fake_server, server_dir: Path) -> None:
@@ -106,8 +111,13 @@ async def test_tree_file_entries_link_to_view(client, fake_server, server_dir: P
 
     response = await client.get("/servers/atm10/files/tree")
 
-    assert "hx-get=\"/servers/atm10/files/view?path=server.properties\"" in response.text
-    assert "hx-target=\"#file-view\"" in response.text
+    body = response.text
+    assert "hx-get=\"/servers/atm10/files/view?path=server.properties\"" in body
+    assert "hx-target=\"#file-view\"" in body
+    # PR-4: file entries carry a one-shot delete trigger (no type-name confirm).
+    assert 'data-action-delete' in body
+    assert 'data-action-kind="file"' in body
+    assert 'data-action-name="server.properties"' in body
 
 
 async def test_tree_lazy_load_subdir(client, fake_server, server_dir: Path) -> None:
@@ -742,6 +752,263 @@ async def test_upload_conflict_lists_only_conflicting_files(
     assert "c.txt" not in body
 
 
+# ---- /files/delete -----------------------------------------------------
+
+async def test_delete_removes_a_regular_file(
+    client, fake_server, server_dir: Path
+) -> None:
+    target = server_dir / "doomed.txt"
+    target.write_text("bye", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/delete",
+        data={"path": "doomed.txt"},
+    )
+
+    assert response.status_code == 200
+    assert not target.exists()
+
+
+async def test_delete_returns_parent_listing(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "stay.txt").write_text("ok", encoding="utf-8")
+    (server_dir / "go.txt").write_text("bye", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/delete",
+        data={"path": "go.txt"},
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "stay.txt" in body
+    assert "go.txt" not in body
+
+
+async def test_delete_directory_requires_confirm_name(
+    client, fake_server, server_dir: Path
+) -> None:
+    d = server_dir / "config"
+    d.mkdir()
+    (d / "inside.txt").write_text("x", encoding="utf-8")
+
+    # No confirm_name → 400, dir untouched.
+    response = await client.post(
+        "/servers/atm10/files/delete",
+        data={"path": "config"},
+    )
+    assert response.status_code == 400
+    assert d.is_dir()
+    assert (d / "inside.txt").exists()
+
+
+async def test_delete_directory_with_wrong_confirm_name(
+    client, fake_server, server_dir: Path
+) -> None:
+    d = server_dir / "config"
+    d.mkdir()
+
+    response = await client.post(
+        "/servers/atm10/files/delete",
+        data={"path": "config", "confirm_name": "configg"},
+    )
+    assert response.status_code == 400
+    assert d.is_dir()
+
+
+async def test_delete_directory_recursive_with_matching_confirm_name(
+    client, fake_server, server_dir: Path
+) -> None:
+    d = server_dir / "config"
+    (d / "nested").mkdir(parents=True)
+    (d / "a.txt").write_text("a", encoding="utf-8")
+    (d / "nested" / "b.txt").write_text("b", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/delete",
+        data={"path": "config", "confirm_name": "config"},
+    )
+
+    assert response.status_code == 200
+    assert not d.exists()
+
+
+async def test_delete_refuses_root(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "marker.txt").write_text("x", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/delete",
+        data={"path": "", "confirm_name": Path(server_dir).name},
+    )
+    assert response.status_code == 400
+    # Server-dir root + its marker file are still on disk.
+    assert server_dir.exists()
+    assert (server_dir / "marker.txt").exists()
+
+
+async def test_delete_404_on_missing(client, fake_server) -> None:
+    response = await client.post(
+        "/servers/atm10/files/delete",
+        data={"path": "no-such.txt"},
+    )
+    assert response.status_code == 404
+
+
+async def test_delete_400_on_traversal(client, fake_server) -> None:
+    response = await client.post(
+        "/servers/atm10/files/delete",
+        data={"path": "../etc/passwd"},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need privileges on Windows")
+async def test_delete_symlink_unlinks_link_not_target(
+    client, fake_server, server_dir: Path, tmp_path: Path
+) -> None:
+    outside = tmp_path / "outside.txt"
+    outside.write_text("untouched", encoding="utf-8")
+    link = server_dir / "link.txt"
+    link.symlink_to(outside)
+
+    response = await client.post(
+        "/servers/atm10/files/delete",
+        data={"path": "link.txt"},
+    )
+
+    assert response.status_code == 200
+    assert not link.exists() and not link.is_symlink()
+    # The original file is untouched — we never followed the link.
+    assert outside.read_text(encoding="utf-8") == "untouched"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="FIFOs are POSIX-only")
+async def test_delete_refuses_special_file(
+    client, fake_server, server_dir: Path
+) -> None:
+    fifo = server_dir / "myfifo"
+    os.mkfifo(fifo)
+
+    response = await client.post(
+        "/servers/atm10/files/delete",
+        data={"path": "myfifo"},
+    )
+    assert response.status_code == 400
+    assert fifo.exists()
+
+
+# ---- /files/mkdir ------------------------------------------------------
+
+async def test_mkdir_creates_directory_at_root(
+    client, fake_server, server_dir: Path
+) -> None:
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "", "dirname": "newdir"},
+    )
+
+    assert response.status_code == 200
+    assert (server_dir / "newdir").is_dir()
+    # Response is the parent (root) listing including the new entry.
+    assert "newdir" in response.text
+
+
+async def test_mkdir_creates_directory_in_subpath(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "mods").mkdir()
+
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "mods", "dirname": "client"},
+    )
+
+    assert response.status_code == 200
+    assert (server_dir / "mods" / "client").is_dir()
+
+
+async def test_mkdir_409_when_name_already_exists_as_file(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "collision").write_text("x", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "", "dirname": "collision"},
+    )
+    assert response.status_code == 409
+    assert (server_dir / "collision").is_file()
+
+
+async def test_mkdir_409_when_name_already_exists_as_dir(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "collision").mkdir()
+
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "", "dirname": "collision"},
+    )
+    assert response.status_code == 409
+
+
+async def test_mkdir_404_when_parent_missing(
+    client, fake_server, server_dir: Path
+) -> None:
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "no-such-parent", "dirname": "x"},
+    )
+    assert response.status_code == 404
+
+
+async def test_mkdir_400_when_parent_is_a_file(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "f.txt").write_text("hi", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "f.txt", "dirname": "x"},
+    )
+    assert response.status_code == 400
+
+
+async def test_mkdir_rejects_traversal_in_dirname(
+    client, fake_server, server_dir: Path
+) -> None:
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "", "dirname": "../escape"},
+    )
+    assert response.status_code == 400
+    # No directory created.
+    assert list(server_dir.iterdir()) == []
+
+
+async def test_mkdir_rejects_dot_dirname(
+    client, fake_server, server_dir: Path
+) -> None:
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "", "dirname": "."},
+    )
+    assert response.status_code == 400
+
+
+async def test_mkdir_rejects_traversal_in_path(
+    client, fake_server, server_dir: Path
+) -> None:
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "../etc", "dirname": "x"},
+    )
+    assert response.status_code == 400
+
+
 # ---- server_detail integration ----------------------------------------
 
 async def test_server_detail_renders_files_pane(client, monkeypatch) -> None:
@@ -768,8 +1035,10 @@ async def test_server_detail_renders_files_pane(client, monkeypatch) -> None:
     assert 'hx-get="/servers/atm10/files/tree?path="' in body
     # PR-3: upload UI is wired into the pane.
     assert 'data-server-name="atm10"' in body
-    assert 'id="file-upload-status"' in body
+    assert 'id="file-action-status"' in body
     assert 'id="file-upload-input"' in body
     # Root drop target + root upload trigger both carry data-upload-path="".
     assert 'data-upload-target' in body
     assert 'data-upload-trigger' in body
+    # PR-4: root mkdir trigger is wired into the eyebrow.
+    assert 'data-action-mkdir' in body

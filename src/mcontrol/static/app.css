@@ -297,14 +297,14 @@ body {
   font-style: italic;
 }
 
-/* ---- File upload (drag-drop + button fallback) --------------------- */
+/* ---- File-tree actions (upload, new folder, delete) ---------------- */
 .files-pane__eyebrow {
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
 
-.file-tree__upload-btn {
+.file-tree__action-btn {
   background: transparent;
   border: 1px solid var(--sub-color);
   border-radius: var(--radius-sm);
@@ -316,9 +316,14 @@ body {
   margin-left: var(--space-2);
 }
 
-.file-tree__upload-btn:hover {
+.file-tree__action-btn:hover {
   border-color: var(--main-color);
   color: var(--main-color);
+}
+
+.file-tree__action-btn--danger:hover {
+  border-color: var(--error-color);
+  color: var(--error-color);
 }
 
 [data-upload-target].is-drop-active {
@@ -330,8 +335,60 @@ body {
   display: none;
 }
 
-.file-upload-status:empty {
+.file-action-status:empty {
   display: none;
+}
+
+.file-action-form,
+.file-delete-confirm {
+  background: var(--sub-alt-color);
+  border: 1px solid var(--main-color);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.file-delete-confirm--danger {
+  border-color: var(--error-color);
+}
+
+.file-action-form__actions,
+.file-delete-confirm__actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.file-action-form input[type="text"],
+.file-delete-confirm input[type="text"] {
+  background: var(--bg-color);
+  border: 1px solid var(--sub-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-color);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--fs-sm);
+}
+
+.file-action-form__btn,
+.file-delete-confirm__btn {
+  background: transparent;
+  border: 1px solid var(--main-color);
+  border-radius: var(--radius-sm);
+  color: var(--main-color);
+  padding: var(--space-1) var(--space-4);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+}
+
+.file-delete-confirm__btn--danger {
+  border-color: var(--error-color);
+  color: var(--error-color);
+}
+
+.file-delete-confirm__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .file-upload-conflict {

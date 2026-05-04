@@ -9,11 +9,23 @@
               hx-target="next .file-tree__children"
               hx-swap="innerHTML"
               hx-trigger="click once">{{ entry.name }}/</button>
-      <button class="file-tree__upload-btn"
+      <button class="file-tree__action-btn"
               type="button"
               data-upload-trigger
               data-upload-path="{{ entry.path }}"
-              title="Upload to {{ entry.name }}/">+</button>
+              title="Upload to {{ entry.name }}/">+up</button>
+      <button class="file-tree__action-btn"
+              type="button"
+              data-action-mkdir
+              data-action-path="{{ entry.path }}"
+              title="New folder in {{ entry.name }}/">+nf</button>
+      <button class="file-tree__action-btn file-tree__action-btn--danger"
+              type="button"
+              data-action-delete
+              data-action-path="{{ entry.path }}"
+              data-action-name="{{ entry.name }}"
+              data-action-kind="dir"
+              title="Delete {{ entry.name }}/">×</button>
       <ul class="file-tree__children"></ul>
     </li>
   {% elif entry.kind == 'symlink' %}
@@ -22,6 +34,13 @@
          hx-get="/servers/{{ server_name }}/files/view?path={{ entry.path|urlencode }}"
          hx-target="#file-view"
          hx-swap="innerHTML">{{ entry.name }} →</a>
+      <button class="file-tree__action-btn file-tree__action-btn--danger"
+              type="button"
+              data-action-delete
+              data-action-path="{{ entry.path }}"
+              data-action-name="{{ entry.name }}"
+              data-action-kind="symlink"
+              title="Delete symlink {{ entry.name }}">×</button>
     </li>
   {% else %}
     <li class="file-tree__entry file-tree__entry--file">
@@ -29,6 +48,13 @@
          hx-get="/servers/{{ server_name }}/files/view?path={{ entry.path|urlencode }}"
          hx-target="#file-view"
          hx-swap="innerHTML">{{ entry.name }}</a>
+      <button class="file-tree__action-btn file-tree__action-btn--danger"
+              type="button"
+              data-action-delete
+              data-action-path="{{ entry.path }}"
+              data-action-name="{{ entry.name }}"
+              data-action-kind="file"
+              title="Delete {{ entry.name }}">×</button>
     </li>
   {% endif %}
 {% endfor %}

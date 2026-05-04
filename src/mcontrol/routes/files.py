@@ -1,10 +1,12 @@
-"""Read-only file tree + view + save + upload for a server's bind-mount directory.
+"""File tree + view + save + upload + delete + mkdir for a server's bind-mount directory.
 
 Slice 5 PR 1 shipped tree + view. PR 2 added POST /files/save (CodeMirror
-edit, atomic write, mtime check). PR 3 adds POST /files/upload (multipart,
+edit, atomic write, mtime check). PR 3 added POST /files/upload (multipart,
 atomic per file, refuse-on-conflict with operator-confirmed force overwrite).
+PR 4 adds POST /files/delete (file or recursive directory; dir requires
+type-name confirmation) and POST /files/mkdir.
 
-Path-safety contract (mirrors slice 5 plan; applies to read, write, upload):
+Path-safety contract (mirrors slice 5 plan; applies to every endpoint):
 
 1. Resolve `(<dir>) / operator_path` and refuse `..` traversal.
 2. Walk every component with `Path.is_symlink()` — refuse to follow
@@ -14,10 +16,15 @@ Path-safety contract (mirrors slice 5 plan; applies to read, write, upload):
    row `dir`. HTTP 400 otherwise.
 4. Special files (`S_ISBLK` / `S_ISCHR` / `S_ISFIFO` / `S_ISSOCK`) are
    skipped from listings and rejected at endpoints.
-5. Upload filenames are operator-controlled; refuse `/`, `\\`, `..`, `.`,
-   empty, and null-byte names before anything touches disk.
+5. Upload + mkdir filenames are operator-controlled; refuse `/`, `\\`,
+   `..`, `.`, empty, and null-byte names before anything touches disk.
+6. Delete refuses `path=""` (the server's bind-mount root is sacred)
+   and refuses to follow symlinks — `os.unlink` removes the link entry,
+   never the target.
 """
 
+import os
+import shutil
 import stat
 from pathlib import Path
 
@@ -335,6 +342,105 @@ async def upload(
 
     base = Path(server["dir"]).resolve()
     entries = _list_dir(target_dir, base)
+    return templates.TemplateResponse(
+        request=request,
+        name="_file_tree.html",
+        context={"server_name": name, "entries": entries},
+    )
+
+
+def _parent_listing(server_dir: str, target: Path) -> tuple[Path, list[dict]]:
+    """Return (parent_dir, listing) for use as the action response.
+
+    Delete and mkdir both refresh the parent of their target — the JS
+    swaps that listing into the closest matching `<ul.file-tree__children>`.
+    """
+    base = Path(server_dir).resolve()
+    parent = target.parent if target != base else base
+    return parent, _list_dir(parent, base)
+
+
+@router.post("/servers/{name}/files/delete", response_class=HTMLResponse)
+async def delete(
+    request: Request,
+    name: str,
+    path: str = Form(""),
+    confirm_name: str = Form(""),
+) -> HTMLResponse:
+    """Delete a file, symlink, or directory.
+
+    Files and symlinks delete one-shot. Directories are recursive and
+    require `confirm_name` to match the directory's basename — the slice
+    plan's "type-name confirmation" guard against accidental rmrf.
+
+    The bind-mount root (`path=""`) is sacred and cannot be deleted.
+    Symlinks are unlinked as link entries; their targets are never
+    followed, consistent with the slice's path-safety contract.
+    """
+    server = _server_or_404(name)
+    if not path:
+        raise HTTPException(status_code=400, detail="cannot delete server root")
+    target = _resolve_within(server["dir"], path)
+
+    try:
+        st = target.lstat()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="file not found") from exc
+
+    if _is_special(st.st_mode):
+        raise HTTPException(status_code=400, detail="not a regular file or directory")
+
+    if stat.S_ISLNK(st.st_mode):
+        # Always one-shot; never follow.
+        os.unlink(target)
+    elif stat.S_ISDIR(st.st_mode):
+        if confirm_name != target.name:
+            raise HTTPException(
+                status_code=400,
+                detail=f"confirm_name must equal {target.name!r}",
+            )
+        # shutil.rmtree refuses to descend through symlinked subdirs by
+        # design — child symlinks are unlinked as entries, never followed.
+        shutil.rmtree(target)
+    else:
+        os.unlink(target)
+
+    _, entries = _parent_listing(server["dir"], target)
+    return templates.TemplateResponse(
+        request=request,
+        name="_file_tree.html",
+        context={"server_name": name, "entries": entries},
+    )
+
+
+@router.post("/servers/{name}/files/mkdir", response_class=HTMLResponse)
+async def mkdir(
+    request: Request,
+    name: str,
+    path: str = Form(""),
+    dirname: str = Form(...),
+) -> HTMLResponse:
+    """Create an empty directory `dirname` inside `path` (the parent dir)."""
+    server = _server_or_404(name)
+    parent = _resolve_within(server["dir"], path)
+    if not parent.exists():
+        raise HTTPException(status_code=404, detail="parent not found")
+    if not parent.is_dir():
+        raise HTTPException(status_code=400, detail="parent is not a directory")
+
+    _validate_upload_filename(dirname)
+
+    target = parent / dirname
+    # `lstat` catches both regular collisions and existing symlinks.
+    try:
+        target.lstat()
+    except FileNotFoundError:
+        target.mkdir()
+    else:
+        raise HTTPException(status_code=409, detail=f"already exists: {dirname}")
+
+    base = Path(server["dir"]).resolve()
+    entries = _list_dir(parent, base)
     return templates.TemplateResponse(
         request=request,
         name="_file_tree.html",
