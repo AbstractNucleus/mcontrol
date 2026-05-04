@@ -1,3 +1,9 @@
+{# Per-entry action buttons live inside a <details> popover (⋯ trigger).
+   Native <details> handles toggle + keyboard + outside-click well enough;
+   file_uploader.js closes the popover after any inner action click so
+   the next click doesn't have to first dismiss it. The checkbox + name
+   stay inline — they're the primary tap targets.
+#}
 {% for entry in entries %}
   {% if entry.kind == 'dir' %}
     <li class="file-tree__entry file-tree__entry--dir"
@@ -14,35 +20,35 @@
               hx-target="next .file-tree__children"
               hx-swap="innerHTML"
               hx-trigger="click once">{{ entry.name }}/</button>
-      <button class="file-tree__action-btn"
-              type="button"
-              data-upload-trigger
-              data-upload-path="{{ entry.path }}"
-              title="Upload to {{ entry.name }}/">+up</button>
-      <button class="file-tree__action-btn"
-              type="button"
-              data-action-mkdir
-              data-action-path="{{ entry.path }}"
-              title="New folder in {{ entry.name }}/">+nf</button>
-      <button class="file-tree__action-btn"
-              type="button"
-              data-action-rename
-              data-action-path="{{ entry.path }}"
-              data-action-name="{{ entry.name }}"
-              title="Rename {{ entry.name }}/">ren</button>
-      <button class="file-tree__action-btn"
-              type="button"
-              data-action-move
-              data-action-path="{{ entry.path }}"
-              data-action-name="{{ entry.name }}"
-              title="Move {{ entry.name }}/">mv</button>
-      <button class="file-tree__action-btn file-tree__action-btn--danger"
-              type="button"
-              data-action-delete
-              data-action-path="{{ entry.path }}"
-              data-action-name="{{ entry.name }}"
-              data-action-kind="dir"
-              title="Delete {{ entry.name }}/">×</button>
+      <details class="file-tree__menu">
+        <summary class="file-tree__menu-trigger" title="Actions for {{ entry.name }}/">⋯</summary>
+        <div class="file-tree__menu-panel">
+          <button class="file-tree__menu-item"
+                  type="button"
+                  data-upload-trigger
+                  data-upload-path="{{ entry.path }}">Upload</button>
+          <button class="file-tree__menu-item"
+                  type="button"
+                  data-action-mkdir
+                  data-action-path="{{ entry.path }}">New folder</button>
+          <button class="file-tree__menu-item"
+                  type="button"
+                  data-action-rename
+                  data-action-path="{{ entry.path }}"
+                  data-action-name="{{ entry.name }}">Rename</button>
+          <button class="file-tree__menu-item"
+                  type="button"
+                  data-action-move
+                  data-action-path="{{ entry.path }}"
+                  data-action-name="{{ entry.name }}">Move</button>
+          <button class="file-tree__menu-item file-tree__menu-item--danger"
+                  type="button"
+                  data-action-delete
+                  data-action-path="{{ entry.path }}"
+                  data-action-name="{{ entry.name }}"
+                  data-action-kind="dir">Delete</button>
+        </div>
+      </details>
       <ul class="file-tree__children"></ul>
     </li>
   {% elif entry.kind == 'symlink' %}
@@ -56,25 +62,27 @@
          hx-get="/servers/{{ server_name }}/files/view?path={{ entry.path|urlencode }}"
          hx-target="#file-view"
          hx-swap="innerHTML">{{ entry.name }} →</a>
-      <button class="file-tree__action-btn"
-              type="button"
-              data-action-rename
-              data-action-path="{{ entry.path }}"
-              data-action-name="{{ entry.name }}"
-              title="Rename {{ entry.name }}">ren</button>
-      <button class="file-tree__action-btn"
-              type="button"
-              data-action-move
-              data-action-path="{{ entry.path }}"
-              data-action-name="{{ entry.name }}"
-              title="Move {{ entry.name }}">mv</button>
-      <button class="file-tree__action-btn file-tree__action-btn--danger"
-              type="button"
-              data-action-delete
-              data-action-path="{{ entry.path }}"
-              data-action-name="{{ entry.name }}"
-              data-action-kind="symlink"
-              title="Delete symlink {{ entry.name }}">×</button>
+      <details class="file-tree__menu">
+        <summary class="file-tree__menu-trigger" title="Actions for {{ entry.name }}">⋯</summary>
+        <div class="file-tree__menu-panel">
+          <button class="file-tree__menu-item"
+                  type="button"
+                  data-action-rename
+                  data-action-path="{{ entry.path }}"
+                  data-action-name="{{ entry.name }}">Rename</button>
+          <button class="file-tree__menu-item"
+                  type="button"
+                  data-action-move
+                  data-action-path="{{ entry.path }}"
+                  data-action-name="{{ entry.name }}">Move</button>
+          <button class="file-tree__menu-item file-tree__menu-item--danger"
+                  type="button"
+                  data-action-delete
+                  data-action-path="{{ entry.path }}"
+                  data-action-name="{{ entry.name }}"
+                  data-action-kind="symlink">Delete symlink</button>
+        </div>
+      </details>
     </li>
   {% else %}
     <li class="file-tree__entry file-tree__entry--file">
@@ -87,29 +95,30 @@
          hx-get="/servers/{{ server_name }}/files/view?path={{ entry.path|urlencode }}"
          hx-target="#file-view"
          hx-swap="innerHTML">{{ entry.name }}</a>
-      <a class="file-tree__action-btn"
-         href="/servers/{{ server_name }}/files/download?path={{ entry.path|urlencode }}"
-         download
-         title="Download {{ entry.name }}">dl</a>
-      <button class="file-tree__action-btn"
-              type="button"
-              data-action-rename
-              data-action-path="{{ entry.path }}"
-              data-action-name="{{ entry.name }}"
-              title="Rename {{ entry.name }}">ren</button>
-      <button class="file-tree__action-btn"
-              type="button"
-              data-action-move
-              data-action-path="{{ entry.path }}"
-              data-action-name="{{ entry.name }}"
-              title="Move {{ entry.name }}">mv</button>
-      <button class="file-tree__action-btn file-tree__action-btn--danger"
-              type="button"
-              data-action-delete
-              data-action-path="{{ entry.path }}"
-              data-action-name="{{ entry.name }}"
-              data-action-kind="file"
-              title="Delete {{ entry.name }}">×</button>
+      <details class="file-tree__menu">
+        <summary class="file-tree__menu-trigger" title="Actions for {{ entry.name }}">⋯</summary>
+        <div class="file-tree__menu-panel">
+          <a class="file-tree__menu-item"
+             href="/servers/{{ server_name }}/files/download?path={{ entry.path|urlencode }}"
+             download>Download</a>
+          <button class="file-tree__menu-item"
+                  type="button"
+                  data-action-rename
+                  data-action-path="{{ entry.path }}"
+                  data-action-name="{{ entry.name }}">Rename</button>
+          <button class="file-tree__menu-item"
+                  type="button"
+                  data-action-move
+                  data-action-path="{{ entry.path }}"
+                  data-action-name="{{ entry.name }}">Move</button>
+          <button class="file-tree__menu-item file-tree__menu-item--danger"
+                  type="button"
+                  data-action-delete
+                  data-action-path="{{ entry.path }}"
+                  data-action-name="{{ entry.name }}"
+                  data-action-kind="file">Delete</button>
+        </div>
+      </details>
     </li>
   {% endif %}
 {% endfor %}

@@ -91,6 +91,17 @@ document.addEventListener("click", (evt) => {
   input.click();
 });
 
+// Slice 5 follow-up: close the per-entry ⋯ popover after any action click
+// inside it, so the next action doesn't have to first dismiss the menu.
+// requestAnimationFrame defers to the next frame so the action's own
+// handler runs first (e.g. opening the rename form, navigating download).
+document.addEventListener("click", (evt) => {
+  const inMenu = evt.target.closest && evt.target.closest(".file-tree__menu-panel");
+  if (!inMenu) return;
+  const det = inMenu.closest("details.file-tree__menu");
+  if (det) requestAnimationFrame(() => { det.open = false; });
+});
+
 document.addEventListener("change", async (evt) => {
   if (!evt.target || evt.target.id !== "file-upload-input") return;
   const path = evt.target.dataset.targetPath || "";
@@ -517,10 +528,34 @@ async function performMove(source, destDir) {
 
   const html = await resp.text();
   swapTreeAt(parentOf(source), html);
+  // Slice 5 follow-up: if the destination is currently expanded in the
+  // tree, refresh its listing too so the moved item appears without the
+  // operator having to collapse and re-expand.
+  await refreshTreeAt(destDir);
   const s = status();
   if (s) s.innerHTML = "";
   const t = tree();
   if (t && window.htmx && window.htmx.process) window.htmx.process(t);
+}
+
+async function refreshTreeAt(path) {
+  const name = serverName();
+  if (!name) return;
+  const sel = path === ""
+    ? "#file-tree"
+    : `[data-upload-target][data-upload-path="${cssEscape(path)}"] > .file-tree__children`;
+  const ul = document.querySelector(sel);
+  if (!ul) return;  // Not currently visible — skip the round-trip.
+  try {
+    const resp = await fetch(
+      `/servers/${encodeURIComponent(name)}/files/tree?path=${encodeURIComponent(path)}`
+    );
+    if (!resp.ok) return;
+    ul.innerHTML = await resp.text();
+    if (window.htmx && window.htmx.process) window.htmx.process(ul);
+  } catch (_err) {
+    // Best-effort refresh; fall back to operator manually re-expanding.
+  }
 }
 
 // ---- multi-select + bulk delete/move (slice 5 PR 7) -----------------
