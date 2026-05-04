@@ -72,6 +72,10 @@
          hx-get="/servers/{{ server_name }}/files/view?path={{ entry.path|urlencode }}"
          hx-target="#file-view"
          hx-swap="innerHTML">{{ entry.name }}</a>
+      <a class="file-tree__action-btn"
+         href="/servers/{{ server_name }}/files/download?path={{ entry.path|urlencode }}"
+         download
+         title="Download {{ entry.name }}">dl</a>
       <button class="file-tree__action-btn"
               type="button"
               data-action-rename
