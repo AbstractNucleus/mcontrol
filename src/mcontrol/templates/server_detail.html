@@ -51,11 +51,21 @@
 
   {% include "_bindings_card.html" %}
 
-  <section class="files-pane">
-    <p class="t-eyebrow">Files</p>
+  <section class="files-pane" data-server-name="{{ server.name }}">
+    <p class="t-eyebrow files-pane__eyebrow">
+      Files
+      <button class="file-tree__upload-btn"
+              type="button"
+              data-upload-trigger
+              data-upload-path=""
+              title="Upload to root">+</button>
+    </p>
+    <div id="file-upload-status" class="file-upload-status"></div>
     <div class="files-pane__split">
       <ul class="file-tree"
           id="file-tree"
+          data-upload-target
+          data-upload-path=""
           hx-get="/servers/{{ server.name }}/files/tree?path="
           hx-trigger="load"
           hx-swap="innerHTML"></ul>
@@ -63,6 +73,7 @@
         <p class="t-muted">Select a file to view its contents.</p>
       </div>
     </div>
+    <input type="file" id="file-upload-input" class="file-upload-input" multiple hidden>
   </section>
 
   {% include "_log_pane.html" %}

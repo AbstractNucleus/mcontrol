@@ -297,6 +297,84 @@ body {
   font-style: italic;
 }
 
+/* ---- File upload (drag-drop + button fallback) --------------------- */
+.files-pane__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.file-tree__upload-btn {
+  background: transparent;
+  border: 1px solid var(--sub-color);
+  border-radius: var(--radius-sm);
+  color: var(--sub-color);
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  padding: 0 var(--space-2);
+  line-height: 1.4;
+  margin-left: var(--space-2);
+}
+
+.file-tree__upload-btn:hover {
+  border-color: var(--main-color);
+  color: var(--main-color);
+}
+
+[data-upload-target].is-drop-active {
+  outline: 2px dashed var(--main-color);
+  outline-offset: -2px;
+}
+
+.file-upload-input {
+  display: none;
+}
+
+.file-upload-status:empty {
+  display: none;
+}
+
+.file-upload-conflict {
+  background: var(--sub-alt-color);
+  border: 1px solid var(--main-color);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.file-upload-conflict__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+}
+
+.file-upload-conflict__actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.file-upload-conflict__btn {
+  background: transparent;
+  border: 1px solid var(--main-color);
+  border-radius: var(--radius-sm);
+  color: var(--main-color);
+  padding: var(--space-1) var(--space-4);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+}
+
+.file-upload-error {
+  background: var(--sub-alt-color);
+  border: 1px solid var(--error-color);
+  border-radius: var(--radius-sm);
+  color: var(--error-color);
+  padding: var(--space-2) var(--space-4);
+}
+
 .file-view {
   background: var(--bg-color);
   border: 1px solid var(--sub-color);
