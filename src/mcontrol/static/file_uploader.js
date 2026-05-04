@@ -522,3 +522,210 @@ async function performMove(source, destDir) {
   const t = tree();
   if (t && window.htmx && window.htmx.process) window.htmx.process(t);
 }
+
+// ---- multi-select + bulk delete/move (slice 5 PR 7) -----------------
+
+const SELECTION = new Set();
+
+function bulkToolbar() { return document.getElementById("file-bulk-toolbar"); }
+
+function syncBulkUi() {
+  const tb = bulkToolbar();
+  if (!tb) return;
+  tb.hidden = SELECTION.size === 0;
+  const counter = tb.querySelector("[data-bulk-count]");
+  if (counter) {
+    counter.textContent = `${SELECTION.size} selected`;
+  }
+  // Reflect SELECTION in every visible checkbox — covers the case where
+  // the operator selected something, then expanded a folder (htmx swap)
+  // and the new DOM rows would otherwise come up unchecked.
+  document.querySelectorAll("[data-select-path]").forEach((cb) => {
+    const p = cb.dataset.selectPath || "";
+    cb.checked = SELECTION.has(p);
+  });
+}
+
+document.addEventListener("change", (evt) => {
+  const cb = evt.target.closest && evt.target.closest("[data-select-path]");
+  if (!cb) return;
+  const p = cb.dataset.selectPath || "";
+  if (cb.checked) SELECTION.add(p);
+  else SELECTION.delete(p);
+  syncBulkUi();
+});
+
+document.body.addEventListener("htmx:afterSwap", () => syncBulkUi());
+
+document.addEventListener("click", (evt) => {
+  const btn = evt.target.closest && evt.target.closest("[data-bulk-action]");
+  if (!btn) return;
+  evt.preventDefault();
+  const action = btn.dataset.bulkAction;
+  if (action === "clear") {
+    SELECTION.clear();
+    syncBulkUi();
+    const s = status();
+    if (s) s.innerHTML = "";
+    return;
+  }
+  if (SELECTION.size === 0) return;
+  if (action === "delete") showBulkDeleteConfirm();
+  else if (action === "move") showBulkMoveModal();
+});
+
+function showBulkDeleteConfirm() {
+  const s = status();
+  if (!s) return;
+  const paths = [...SELECTION];
+  const sample = paths.slice(0, 6).map(escapeHtml).join(", ") +
+    (paths.length > 6 ? `, … (${paths.length - 6} more)` : "");
+  s.innerHTML = `<div class="file-delete-confirm file-delete-confirm--danger">
+       <p class="t-caption">Delete ${paths.length} selected item${paths.length === 1 ? "" : "s"}? Recursive for folders.</p>
+       <p class="t-caption"><code>${sample}</code></p>
+       <p class="t-caption">Type <code>DELETE</code> to confirm:</p>
+       <div class="file-delete-confirm__actions">
+         <input type="text" autocomplete="off" data-bulk-confirm-input>
+         <button type="button" class="file-delete-confirm__btn file-delete-confirm__btn--danger" data-bulk-confirm-submit disabled>Delete all</button>
+         <button type="button" class="file-delete-confirm__btn" data-bulk-confirm-cancel>Cancel</button>
+       </div>
+     </div>`;
+
+  const input = s.querySelector("[data-bulk-confirm-input]");
+  const submit = s.querySelector("[data-bulk-confirm-submit]");
+  const cancel = s.querySelector("[data-bulk-confirm-cancel]");
+
+  if (input && submit) {
+    input.addEventListener("input", () => {
+      submit.disabled = input.value !== "DELETE";
+    });
+    input.focus();
+  }
+  submit.addEventListener("click", async () => {
+    if (submit.disabled) return;
+    await performBulkDelete(paths);
+  });
+  cancel.addEventListener("click", () => { s.innerHTML = ""; });
+}
+
+async function performBulkDelete(paths) {
+  const name = serverName();
+  if (!name) return;
+  const fd = new FormData();
+  for (const p of paths) fd.append("paths", p);
+  fd.append("confirm", "DELETE");
+
+  let resp;
+  try {
+    resp = await fetch(`/servers/${encodeURIComponent(name)}/files/bulk_delete`, {
+      method: "POST",
+      body: fd,
+    });
+  } catch (err) {
+    showError(`bulk delete failed: ${err.message}`);
+    return;
+  }
+  if (!resp.ok) {
+    showError(`bulk delete failed: HTTP ${resp.status}`);
+    return;
+  }
+
+  const html = await resp.text();
+  // Multi-parent batches are flattened into a root-listing refresh.
+  swapTreeAt("", html);
+  SELECTION.clear();
+  syncBulkUi();
+  const s = status();
+  if (s) s.innerHTML = "";
+  const t = tree();
+  if (t && window.htmx && window.htmx.process) window.htmx.process(t);
+}
+
+function showBulkMoveModal() {
+  const s = status();
+  if (!s) return;
+  const sname = serverName();
+  if (!sname) return;
+  const sources = [...SELECTION];
+
+  s.innerHTML = `<div class="file-move-modal" id="file-bulk-move-modal">
+       <p class="t-caption">Move ${sources.length} selected item${sources.length === 1 ? "" : "s"} to:</p>
+       <div class="file-picker">
+         <button type="button" class="file-picker__select file-picker__root"
+                 data-picker-select data-picker-path="">(server root)</button>
+         <ul class="file-picker__children"
+             hx-get="/servers/${encodeURIComponent(sname)}/files/tree?picker=1"
+             hx-trigger="load"
+             hx-swap="innerHTML"></ul>
+       </div>
+       <p class="t-caption file-move-modal__selection">
+         Selected destination: <code data-move-selection>(none)</code>
+       </p>
+       <div class="file-move-modal__actions">
+         <button type="button" class="file-action-form__btn" data-bulk-move-submit disabled>Move here</button>
+         <button type="button" class="file-action-form__btn" data-bulk-move-cancel>Cancel</button>
+       </div>
+     </div>`;
+
+  if (window.htmx && window.htmx.process) window.htmx.process(s);
+
+  const modal = s.querySelector("#file-bulk-move-modal");
+  const selBox = s.querySelector("[data-move-selection]");
+  const submit = s.querySelector("[data-bulk-move-submit]");
+  const cancel = s.querySelector("[data-bulk-move-cancel]");
+  let selectedDest = null;
+
+  modal.addEventListener("click", (evt) => {
+    const row = evt.target.closest && evt.target.closest("[data-picker-select]");
+    if (!row || !modal.contains(row)) return;
+    selectedDest = row.dataset.pickerPath || "";
+    selBox.textContent = selectedDest === "" ? "(server root)" : selectedDest;
+    submit.disabled = false;
+    modal.querySelectorAll("[data-picker-select]").forEach((b) => b.classList.remove("is-selected"));
+    row.classList.add("is-selected");
+  });
+  modal.addEventListener("htmx:afterSwap", () => {
+    if (window.htmx && window.htmx.process) window.htmx.process(modal);
+  });
+  submit.addEventListener("click", async () => {
+    if (submit.disabled || selectedDest === null) return;
+    await performBulkMove(sources, selectedDest);
+  });
+  cancel.addEventListener("click", () => { s.innerHTML = ""; });
+}
+
+async function performBulkMove(sources, destDir) {
+  const name = serverName();
+  if (!name) return;
+  const fd = new FormData();
+  for (const src of sources) fd.append("sources", src);
+  fd.append("dest_dir", destDir);
+
+  let resp;
+  try {
+    resp = await fetch(`/servers/${encodeURIComponent(name)}/files/bulk_move`, {
+      method: "POST",
+      body: fd,
+    });
+  } catch (err) {
+    showError(`bulk move failed: ${err.message}`);
+    return;
+  }
+  if (resp.status === 409) {
+    showError("name collision at destination — refused; resolve and retry");
+    return;
+  }
+  if (!resp.ok) {
+    showError(`bulk move failed: HTTP ${resp.status}`);
+    return;
+  }
+
+  const html = await resp.text();
+  swapTreeAt("", html);
+  SELECTION.clear();
+  syncBulkUi();
+  const s = status();
+  if (s) s.innerHTML = "";
+  const t = tree();
+  if (t && window.htmx && window.htmx.process) window.htmx.process(t);
+}

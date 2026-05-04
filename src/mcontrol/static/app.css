@@ -497,6 +497,75 @@ body {
   font-style: italic;
 }
 
+/* ---- Search + multi-select + bulk toolbar (slice 5 PR 7) ---------- */
+.file-search-input {
+  background: var(--bg-color);
+  border: 1px solid var(--sub-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-color);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-sm);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#file-search-results:empty {
+  display: none;
+}
+
+.file-search-results {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.file-search-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 14rem;
+  overflow: auto;
+  background: var(--bg-color);
+  border: 1px solid var(--sub-color);
+  border-radius: var(--radius-sm);
+}
+
+.file-search-list__entry {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--fs-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.file-search-list__entry > a {
+  color: var(--text-color);
+  text-decoration: none;
+}
+
+.file-search-list__entry > a:hover {
+  color: var(--main-color);
+}
+
+.file-search-list__name--symlink {
+  color: var(--sub-color);
+  font-style: italic;
+}
+
+.file-tree__checkbox {
+  margin-right: var(--space-2);
+  vertical-align: middle;
+}
+
+.file-bulk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--sub-alt-color);
+  border: 1px solid var(--main-color);
+  border-radius: var(--radius-sm);
+}
+
 .file-view {
   background: var(--bg-color);
   border: 1px solid var(--sub-color);
