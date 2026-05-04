@@ -104,6 +104,9 @@ async def test_tree_dir_entries_emit_lazy_hx_get(client, fake_server, server_dir
     assert 'data-action-delete' in body
     assert 'data-action-kind="dir"' in body
     assert 'data-action-name="config"' in body
+    # PR-5: dir entries also carry rename + move triggers.
+    assert 'data-action-rename' in body
+    assert 'data-action-move' in body
 
 
 async def test_tree_file_entries_link_to_view(client, fake_server, server_dir: Path) -> None:
@@ -1005,6 +1008,308 @@ async def test_mkdir_rejects_traversal_in_path(
     response = await client.post(
         "/servers/atm10/files/mkdir",
         data={"path": "../etc", "dirname": "x"},
+    )
+    assert response.status_code == 400
+
+
+# ---- /files/tree?picker=1 ---------------------------------------------
+
+async def test_tree_picker_returns_dirs_only(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "mods").mkdir()
+    (server_dir / "config").mkdir()
+    (server_dir / "server.properties").write_text("x", encoding="utf-8")
+    (server_dir / "Dockerfile").write_text("y", encoding="utf-8")
+
+    response = await client.get("/servers/atm10/files/tree?picker=1")
+
+    assert response.status_code == 200
+    body = response.text
+    assert "mods" in body
+    assert "config" in body
+    # Files are filtered out of the picker.
+    assert "server.properties" not in body
+    assert "Dockerfile" not in body
+    # Picker rows carry the select hook.
+    assert "data-picker-select" in body
+    # Lazy-load URLs preserve the picker flag.
+    assert "picker=1" in body
+
+
+async def test_tree_picker_recurses_with_flag(
+    client, fake_server, server_dir: Path
+) -> None:
+    nested = server_dir / "server" / "config"
+    nested.mkdir(parents=True)
+    (nested / "deep").mkdir()
+    (nested / "leaf.txt").write_text("x", encoding="utf-8")
+
+    response = await client.get(
+        "/servers/atm10/files/tree", params={"path": "server/config", "picker": "1"}
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "deep" in body
+    assert "leaf.txt" not in body
+
+
+# ---- /files/rename -----------------------------------------------------
+
+async def test_rename_renames_a_file(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "old.txt").write_text("hi", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/rename",
+        data={"path": "old.txt", "new_name": "new.txt"},
+    )
+
+    assert response.status_code == 200
+    assert not (server_dir / "old.txt").exists()
+    assert (server_dir / "new.txt").read_text(encoding="utf-8") == "hi"
+    body = response.text
+    assert "new.txt" in body
+    assert "old.txt" not in body
+
+
+async def test_rename_renames_a_directory(
+    client, fake_server, server_dir: Path
+) -> None:
+    d = server_dir / "old"
+    d.mkdir()
+    (d / "inside.txt").write_text("x", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/rename",
+        data={"path": "old", "new_name": "new"},
+    )
+
+    assert response.status_code == 200
+    assert not d.exists()
+    assert (server_dir / "new" / "inside.txt").read_text(encoding="utf-8") == "x"
+
+
+async def test_rename_409_on_collision(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "src.txt").write_text("a", encoding="utf-8")
+    (server_dir / "dest.txt").write_text("b", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/rename",
+        data={"path": "src.txt", "new_name": "dest.txt"},
+    )
+    assert response.status_code == 409
+    # Neither file mutated.
+    assert (server_dir / "src.txt").read_text(encoding="utf-8") == "a"
+    assert (server_dir / "dest.txt").read_text(encoding="utf-8") == "b"
+
+
+async def test_rename_400_refuses_root(
+    client, fake_server, server_dir: Path
+) -> None:
+    response = await client.post(
+        "/servers/atm10/files/rename",
+        data={"path": "", "new_name": "irrelevant"},
+    )
+    assert response.status_code == 400
+
+
+async def test_rename_404_on_missing(client, fake_server) -> None:
+    response = await client.post(
+        "/servers/atm10/files/rename",
+        data={"path": "no-such.txt", "new_name": "x.txt"},
+    )
+    assert response.status_code == 404
+
+
+async def test_rename_400_on_traversal_in_path(client, fake_server) -> None:
+    response = await client.post(
+        "/servers/atm10/files/rename",
+        data={"path": "../etc/passwd", "new_name": "x"},
+    )
+    assert response.status_code == 400
+
+
+async def test_rename_rejects_invalid_new_name(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "ok.txt").write_text("x", encoding="utf-8")
+
+    for bad in ["../escape", "with/slash", "with\\backslash", "..", "."]:
+        response = await client.post(
+            "/servers/atm10/files/rename",
+            data={"path": "ok.txt", "new_name": bad},
+        )
+        assert response.status_code == 400, f"expected 400 for new_name={bad!r}"
+    # File unchanged across all bad attempts.
+    assert (server_dir / "ok.txt").read_text(encoding="utf-8") == "x"
+
+
+async def test_rename_no_op_keeps_file(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "same.txt").write_text("x", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/rename",
+        data={"path": "same.txt", "new_name": "same.txt"},
+    )
+    assert response.status_code == 200
+    assert (server_dir / "same.txt").read_text(encoding="utf-8") == "x"
+
+
+# ---- /files/move ------------------------------------------------------
+
+async def test_move_relocates_a_file(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "f.txt").write_text("x", encoding="utf-8")
+    (server_dir / "subdir").mkdir()
+
+    response = await client.post(
+        "/servers/atm10/files/move",
+        data={"source": "f.txt", "dest_dir": "subdir"},
+    )
+
+    assert response.status_code == 200
+    assert not (server_dir / "f.txt").exists()
+    assert (server_dir / "subdir" / "f.txt").read_text(encoding="utf-8") == "x"
+
+
+async def test_move_relocates_a_directory(
+    client, fake_server, server_dir: Path
+) -> None:
+    src = server_dir / "from"
+    src.mkdir()
+    (src / "leaf.txt").write_text("x", encoding="utf-8")
+    (server_dir / "to").mkdir()
+
+    response = await client.post(
+        "/servers/atm10/files/move",
+        data={"source": "from", "dest_dir": "to"},
+    )
+
+    assert response.status_code == 200
+    assert not src.exists()
+    assert (server_dir / "to" / "from" / "leaf.txt").read_text(encoding="utf-8") == "x"
+
+
+async def test_move_response_is_source_parent_listing(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "moved.txt").write_text("x", encoding="utf-8")
+    (server_dir / "stayer.txt").write_text("y", encoding="utf-8")
+    (server_dir / "elsewhere").mkdir()
+
+    response = await client.post(
+        "/servers/atm10/files/move",
+        data={"source": "moved.txt", "dest_dir": "elsewhere"},
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    # Source's parent (root) is what JS swaps in — moved.txt must be gone
+    # from it, stayer.txt must still appear.
+    assert "stayer.txt" in body
+    assert "moved.txt" not in body
+
+
+async def test_move_409_on_destination_collision(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "f.txt").write_text("source", encoding="utf-8")
+    (server_dir / "dst").mkdir()
+    (server_dir / "dst" / "f.txt").write_text("victim", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/move",
+        data={"source": "f.txt", "dest_dir": "dst"},
+    )
+
+    assert response.status_code == 409
+    # Neither side mutated.
+    assert (server_dir / "f.txt").read_text(encoding="utf-8") == "source"
+    assert (server_dir / "dst" / "f.txt").read_text(encoding="utf-8") == "victim"
+
+
+async def test_move_400_refuses_root_source(client, fake_server) -> None:
+    response = await client.post(
+        "/servers/atm10/files/move",
+        data={"source": "", "dest_dir": "anywhere"},
+    )
+    assert response.status_code == 400
+
+
+async def test_move_400_refuses_no_op(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "f.txt").write_text("x", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/move",
+        data={"source": "f.txt", "dest_dir": ""},
+    )
+    assert response.status_code == 400
+    # File still in place.
+    assert (server_dir / "f.txt").read_text(encoding="utf-8") == "x"
+
+
+async def test_move_400_refuses_into_descendant(
+    client, fake_server, server_dir: Path
+) -> None:
+    parent = server_dir / "parent"
+    (parent / "child").mkdir(parents=True)
+
+    response = await client.post(
+        "/servers/atm10/files/move",
+        data={"source": "parent", "dest_dir": "parent/child"},
+    )
+    assert response.status_code == 400
+    # Source still in place.
+    assert (parent / "child").is_dir()
+
+
+async def test_move_404_on_missing_source(client, fake_server) -> None:
+    response = await client.post(
+        "/servers/atm10/files/move",
+        data={"source": "no-such.txt", "dest_dir": ""},
+    )
+    assert response.status_code == 404
+
+
+async def test_move_404_on_missing_destination(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "f.txt").write_text("x", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/move",
+        data={"source": "f.txt", "dest_dir": "no-such-dir"},
+    )
+    assert response.status_code == 404
+
+
+async def test_move_400_when_destination_is_a_file(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "f.txt").write_text("x", encoding="utf-8")
+    (server_dir / "g.txt").write_text("y", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/move",
+        data={"source": "f.txt", "dest_dir": "g.txt"},
+    )
+    assert response.status_code == 400
+
+
+async def test_move_400_on_traversal(client, fake_server) -> None:
+    response = await client.post(
+        "/servers/atm10/files/move",
+        data={"source": "../etc/passwd", "dest_dir": ""},
     )
     assert response.status_code == 400
 

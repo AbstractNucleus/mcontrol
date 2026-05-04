@@ -130,7 +130,14 @@ async def tree(
     request: Request,
     name: str,
     path: str = Query(""),
+    picker: bool = Query(False),
 ) -> HTMLResponse:
+    """Render a directory listing.
+
+    `picker=1` returns a dirs-only variant via `_file_dir_picker.html` for
+    the move-destination modal (slice 5 PR 5). Lazy-load uses the same
+    endpoint with the same flag so child fetches stay dirs-only.
+    """
     server = _server_or_404(name)
     target = _resolve_within(server["dir"], path)
     if not target.exists():
@@ -140,6 +147,13 @@ async def tree(
 
     base = Path(server["dir"]).resolve()
     entries = _list_dir(target, base)
+    if picker:
+        entries = [e for e in entries if e["kind"] == "dir"]
+        return templates.TemplateResponse(
+            request=request,
+            name="_file_dir_picker.html",
+            context={"server_name": name, "entries": entries},
+        )
     return templates.TemplateResponse(
         request=request,
         name="_file_tree.html",
@@ -441,6 +455,118 @@ async def mkdir(
 
     base = Path(server["dir"]).resolve()
     entries = _list_dir(parent, base)
+    return templates.TemplateResponse(
+        request=request,
+        name="_file_tree.html",
+        context={"server_name": name, "entries": entries},
+    )
+
+
+@router.post("/servers/{name}/files/rename", response_class=HTMLResponse)
+async def rename(
+    request: Request,
+    name: str,
+    path: str = Form(""),
+    new_name: str = Form(...),
+) -> HTMLResponse:
+    """Rename an entry within its current parent.
+
+    Refuses `path=""` (server root has no parent), names that fail the
+    upload-filename validator, and any pre-existing collision (no force).
+    """
+    server = _server_or_404(name)
+    if not path:
+        raise HTTPException(status_code=400, detail="cannot rename server root")
+    target = _resolve_within(server["dir"], path)
+
+    try:
+        target.lstat()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="path not found") from exc
+
+    _validate_upload_filename(new_name)
+
+    if new_name == target.name:
+        # No-op rename — pretend success without touching disk so the
+        # client sees a coherent listing without any extra error path.
+        _, entries = _parent_listing(server["dir"], target)
+        return templates.TemplateResponse(
+            request=request,
+            name="_file_tree.html",
+            context={"server_name": name, "entries": entries},
+        )
+
+    dest = target.parent / new_name
+    try:
+        dest.lstat()
+    except FileNotFoundError:
+        pass
+    else:
+        raise HTTPException(status_code=409, detail=f"already exists: {new_name}")
+
+    os.rename(target, dest)
+
+    _, entries = _parent_listing(server["dir"], target)
+    return templates.TemplateResponse(
+        request=request,
+        name="_file_tree.html",
+        context={"server_name": name, "entries": entries},
+    )
+
+
+@router.post("/servers/{name}/files/move", response_class=HTMLResponse)
+async def move(
+    request: Request,
+    name: str,
+    source: str = Form(""),
+    dest_dir: str = Form(""),
+) -> HTMLResponse:
+    """Move an entry into a different directory, keeping its basename.
+
+    Refuses moving the server root, no-op moves (`dest_dir == source.parent`),
+    moving a directory into itself or any descendant (would loop), and any
+    pre-existing collision at the destination (no force).
+    """
+    server = _server_or_404(name)
+    if not source:
+        raise HTTPException(status_code=400, detail="cannot move server root")
+    src = _resolve_within(server["dir"], source)
+    dst_parent = _resolve_within(server["dir"], dest_dir)
+
+    try:
+        src.lstat()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="source not found") from exc
+
+    if not dst_parent.exists():
+        raise HTTPException(status_code=404, detail="destination not found")
+    if not dst_parent.is_dir():
+        raise HTTPException(status_code=400, detail="destination is not a directory")
+
+    if dst_parent == src.parent:
+        raise HTTPException(status_code=400, detail="destination is the source's current parent")
+
+    # Refuse moving a directory into itself or any of its descendants —
+    # the resulting structure would be unreachable / cyclic.
+    src_resolved = src.resolve(strict=False)
+    dst_resolved = dst_parent.resolve(strict=False)
+    if src_resolved == dst_resolved or src_resolved in dst_resolved.parents:
+        raise HTTPException(
+            status_code=400,
+            detail="destination is inside the source",
+        )
+
+    dest = dst_parent / src.name
+    try:
+        dest.lstat()
+    except FileNotFoundError:
+        pass
+    else:
+        raise HTTPException(status_code=409, detail=f"already exists at destination: {src.name}")
+
+    os.rename(src, dest)
+
+    _, entries = _parent_listing(server["dir"], src)
     return templates.TemplateResponse(
         request=request,
         name="_file_tree.html",
