@@ -1,10 +1,12 @@
-"""File tree + view + save + upload + delete + mkdir for a server's bind-mount directory.
+"""File tree + view + save + upload + delete + mkdir + rename + move + download.
 
 Slice 5 PR 1 shipped tree + view. PR 2 added POST /files/save (CodeMirror
 edit, atomic write, mtime check). PR 3 added POST /files/upload (multipart,
 atomic per file, refuse-on-conflict with operator-confirmed force overwrite).
-PR 4 adds POST /files/delete (file or recursive directory; dir requires
-type-name confirmation) and POST /files/mkdir.
+PR 4 added POST /files/delete (file or recursive directory; dir requires
+type-name confirmation) and POST /files/mkdir. PR 5 added POST /files/rename,
+POST /files/move, and the dirs-only `?picker=1` tree variant. PR 6 adds
+GET /files/download — single-file FileResponse with attachment disposition.
 
 Path-safety contract (mirrors slice 5 plan; applies to every endpoint):
 
@@ -29,7 +31,7 @@ import stat
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from mcontrol import db
 from mcontrol.file_writer import atomic_write_stream, atomic_write_text
@@ -571,4 +573,27 @@ async def move(
         request=request,
         name="_file_tree.html",
         context={"server_name": name, "entries": entries},
+    )
+
+
+@router.get("/servers/{name}/files/download")
+async def download(
+    name: str,
+    path: str = Query(...),
+) -> FileResponse:
+    """Stream a single regular file to the operator with attachment disposition.
+
+    Reuses `_stat_regular_file` so symlinks, directories, special files,
+    traversal, and missing paths all refuse identically to the view
+    endpoint. The browser triggers a save dialog because FileResponse
+    sets `Content-Disposition: attachment; filename="..."` when `filename`
+    is provided.
+    """
+    server = _server_or_404(name)
+    target = _resolve_within(server["dir"], path)
+    _stat_regular_file(target)
+    return FileResponse(
+        target,
+        filename=target.name,
+        media_type="application/octet-stream",
     )

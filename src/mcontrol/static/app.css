@@ -305,6 +305,7 @@ body {
 }
 
 .file-tree__action-btn {
+  display: inline-block;
   background: transparent;
   border: 1px solid var(--sub-color);
   border-radius: var(--radius-sm);
@@ -314,6 +315,7 @@ body {
   padding: 0 var(--space-2);
   line-height: 1.4;
   margin-left: var(--space-2);
+  text-decoration: none;
 }
 
 .file-tree__action-btn:hover {
