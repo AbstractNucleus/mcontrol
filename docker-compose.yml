@@ -9,8 +9,9 @@ services:
     ports:
       - "${BSERVER_HOST_BIND_IP:-127.0.0.1}:8003:8000"
     volumes:
-      # Slice 4: rw so we can `docker start/stop/exec`, attach networks,
-      # and `docker compose up -d --force-recreate` from inside the panel.
+      # rw so we can `docker start/stop/exec` and attach networks for the
+      # RCON console (decision 006).
       - /var/run/docker.sock:/var/run/docker.sock:rw
-      # Slice 4: rw so we can write <dir>/.env (RCON_PASSWORD) per decision 010.
+      # rw so we can scaffold compose + start_server.sh and operator-edit
+      # files via the file browser (decisions 023, 012).
       - ${SERVER_BASE_PATH}:${SERVER_BASE_PATH}:rw
