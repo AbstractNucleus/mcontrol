@@ -141,6 +141,28 @@ async def test_run_discovery_processes_dirs_in_sorted_order(tmp_path, db_calls, 
     assert seen == ["alpha", "mu", "zeta"]
 
 
+async def test_run_discovery_skips_dot_prefixed_directories(
+    tmp_path, db_calls, monkeypatch
+):
+    """Decision 026: tombstoned dirs (.deleted-foo-...), .git, and other
+    dot-prefixed utility dirs must not appear as servers."""
+    _make_dirs(
+        tmp_path,
+        ["atm10", ".deleted-monifactory-1735689600", ".git", ".cache"],
+    )
+    monkeypatch.setattr(
+        discovery.docker_client,
+        "container_states_by_name",
+        AsyncMock(return_value={}),
+    )
+
+    count = await discovery.run_discovery(tmp_path)
+
+    assert count == 1
+    seen = [c[1]["name"] for c in db_calls["calls"]]
+    assert seen == ["atm10"]
+
+
 async def test_run_discovery_state_lookup_uses_container_name_override(
     tmp_path, db_calls, monkeypatch
 ):

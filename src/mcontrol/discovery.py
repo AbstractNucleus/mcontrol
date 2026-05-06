@@ -32,6 +32,11 @@ async def run_discovery(base_path: Path) -> int:
     for entry in sorted(base_path.iterdir(), key=lambda p: p.name):
         if not entry.is_dir():
             continue
+        # Decision 026: skip dot-prefixed dirs so tombstoned dirs don't
+        # resurrect on the next scan. Same filter handles .git,
+        # lost+found, and any other operator-introduced non-server dir.
+        if entry.name.startswith("."):
+            continue
 
         existing = db.get_server(entry.name)
         if existing is None:

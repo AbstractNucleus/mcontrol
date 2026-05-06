@@ -1,0 +1,46 @@
+<section class="delete-zone" id="delete-zone">
+  <p class="t-eyebrow delete-zone__title">Delete server</p>
+  {% if confirm %}
+    <p class="t-caption delete-zone__hint">
+      Renames <code>{{ server.dir }}</code> to a tombstone in the same parent and
+      deletes the row. Files are not removed — recover by renaming the tombstone
+      back from a shell.
+    </p>
+    <form class="delete-zone__form"
+          hx-post="/servers/{{ server.name }}/delete"
+          hx-target="#delete-zone"
+          hx-swap="outerHTML">
+      <label>
+        <span class="t-caption">Type <code>{{ server.name }}</code> to confirm:</span>
+        <input type="text"
+               name="confirm_name"
+               value="{{ typed or '' }}"
+               autocomplete="off"
+               autofocus
+               required>
+      </label>
+      {% if error %}<small class="delete-zone__error">{{ error }}</small>{% endif %}
+      <div class="delete-zone__actions">
+        <button type="submit" class="delete-zone__btn--danger">Delete</button>
+        <a hx-get="/servers/{{ server.name }}/delete"
+           hx-target="#delete-zone"
+           hx-swap="outerHTML"
+           href="#">Cancel</a>
+      </div>
+    </form>
+  {% else %}
+    {% set is_running = server.state == 'running' %}
+    <button type="button"
+            class="delete-zone__btn--danger"
+            {% if is_running %}disabled
+            title="Stop the server before deleting."
+            {% else %}
+            hx-get="/servers/{{ server.name }}/delete?confirm=1"
+            hx-target="#delete-zone"
+            hx-swap="outerHTML"
+            {% endif %}>Delete server</button>
+    {% if is_running %}
+      <small class="t-caption delete-zone__hint">Stop the server first.</small>
+    {% endif %}
+  {% endif %}
+</section>

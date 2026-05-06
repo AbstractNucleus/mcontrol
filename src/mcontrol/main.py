@@ -9,6 +9,7 @@ from mcontrol import discovery
 from mcontrol.routes import (
     bindings,
     console,
+    delete_server,
     files,
     home,
     lifecycle,
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     app.include_router(bindings.router)
     app.include_router(variables.router)
     app.include_router(regenerate.router)
+    app.include_router(delete_server.router)
     app.include_router(files.router)
 
     @app.get("/healthz")
