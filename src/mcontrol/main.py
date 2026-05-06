@@ -6,7 +6,17 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from mcontrol import discovery
-from mcontrol.routes import bindings, console, files, home, lifecycle, logs, new_server, server
+from mcontrol.routes import (
+    bindings,
+    console,
+    files,
+    home,
+    lifecycle,
+    logs,
+    new_server,
+    server,
+    variables,
+)
 from mcontrol.settings import Settings
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -44,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(logs.router)
     app.include_router(console.router)
     app.include_router(bindings.router)
+    app.include_router(variables.router)
     app.include_router(files.router)
 
     @app.get("/healthz")

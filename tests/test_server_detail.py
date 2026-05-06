@@ -107,3 +107,71 @@ async def test_server_detail_links_back_to_home(client, fake_get_server):
     fake_get_server["atm10"] = _row("atm10")
     response = await client.get("/servers/atm10")
     assert 'href="/"' in response.text
+
+
+async def test_server_detail_legacy_row_has_no_variables_card_or_banner(
+    client, fake_get_server
+):
+    """scaffolded_at=None → legacy: no Variables card and no health banner."""
+    row = _row("atm10")
+    row["scaffolded_at"] = None
+    fake_get_server["atm10"] = row
+
+    response = await client.get("/servers/atm10")
+    body = response.text
+    assert 'id="variables"' not in body
+    assert "health-banner" not in body
+    # Legacy still shows the inline kv-list of variables.
+    assert "no variables set" in body or "kv-list" in body
+
+
+async def test_server_detail_scaffolded_row_renders_variables_card(
+    client, fake_get_server, tmp_path
+):
+    from mcontrol import scaffolding
+
+    server_dir = tmp_path / "newshire"
+    variables = {"memory_budget_gb": 8, "port": 25575, "server_jar": "paper.jar"}
+    scaffolding.scaffold("newshire", variables, tmp_path)
+
+    row = {
+        "name": "newshire", "container_name": None, "dir": str(server_dir),
+        "image_base": "eclipse-temurin:21-jre", "state": "created",
+        "variables": variables, "rcon_password": None,
+        "scaffolded_at": "2026-05-06T12:00:00+00:00",
+        "created_at": "2026-05-06T11:00:00Z",
+        "updated_at": "2026-05-06T12:00:00Z",
+    }
+    fake_get_server["newshire"] = row
+
+    response = await client.get("/servers/newshire")
+    body = response.text
+    assert response.status_code == 200
+    assert 'id="variables"' in body
+    assert 'hx-get="/servers/newshire/variables?edit=1"' in body
+    # No health banner when files are intact and variables are complete.
+    assert "health-banner" not in body
+    # Legacy inline `variables` row is suppressed for scaffolded rows.
+    # (Card carries the canonical view; the kv-list would be redundant.)
+    body_dl = body.split('class="server-detail"', 1)[1].split('</dl>', 1)[0]
+    assert "kv-list" not in body_dl
+
+
+async def test_server_detail_renders_health_banner_for_stuck_scaffolding(
+    client, fake_get_server, tmp_path
+):
+    row = {
+        "name": "newshire", "container_name": None, "dir": str(tmp_path / "newshire"),
+        "image_base": None, "state": "scaffolding",
+        "variables": {"memory_budget_gb": 8, "port": 25575, "server_jar": "paper.jar"},
+        "rcon_password": None,
+        "scaffolded_at": "2026-05-06T12:00:00+00:00",
+        "created_at": "2026-05-06T11:00:00Z",
+        "updated_at": "2026-05-06T12:00:00Z",
+    }
+    fake_get_server["newshire"] = row
+
+    response = await client.get("/servers/newshire")
+    body = response.text
+    assert "health-banner" in body
+    assert "stuck-scaffolding" in body

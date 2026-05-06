@@ -1,0 +1,32 @@
+<section class="variables-card" id="variables">
+  <header class="variables-card__head">
+    <p class="t-eyebrow">Variables</p>
+    <a class="variables-card__edit"
+       hx-get="/servers/{{ server.name }}/variables?edit=1"
+       hx-target="#variables"
+       hx-swap="outerHTML"
+       href="#">Edit</a>
+  </header>
+  {% if variables_error %}
+    <p class="variables-card__error">Render failed: {{ variables_error }}</p>
+  {% endif %}
+  {% set vars = server.variables or {} %}
+  <dl class="variables-card__body">
+    <dt class="t-caption">memory budget (GB)</dt>
+    <dd>{% if 'memory_budget_gb' in vars %}<code>{{ vars.memory_budget_gb }}</code>{% else %}<span class="t-muted">—</span>{% endif %}</dd>
+
+    <dt class="t-caption">port</dt>
+    <dd>{% if 'port' in vars %}<code>{{ vars.port }}</code>{% else %}<span class="t-muted">—</span>{% endif %}</dd>
+
+    <dt class="t-caption">server jar</dt>
+    <dd>{% if 'server_jar' in vars %}<code>{{ vars.server_jar }}</code>{% else %}<span class="t-muted">—</span>{% endif %}</dd>
+
+    <dt class="t-caption">jvm extra args</dt>
+    <dd>{% if vars.jvm_extra_args %}<code>{{ vars.jvm_extra_args }}</code>{% else %}<span class="t-muted">—</span>{% endif %}</dd>
+  </dl>
+  {% if scripts_stale %}
+    <p class="variables-card__stale t-caption">
+      Scripts on disk differ from current variables.
+    </p>
+  {% endif %}
+</section>

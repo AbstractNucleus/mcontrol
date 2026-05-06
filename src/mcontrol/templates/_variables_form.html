@@ -1,0 +1,57 @@
+<section class="variables-card" id="variables">
+  <header class="variables-card__head">
+    <p class="t-eyebrow">Variables</p>
+  </header>
+  {% set vars = form or (server.variables or {}) %}
+  <form class="variables-form"
+        hx-post="/servers/{{ server.name }}/variables"
+        hx-target="#variables"
+        hx-swap="outerHTML">
+    <label>
+      <span class="t-caption">memory budget (GB)</span>
+      <input type="number"
+             name="memory_budget_gb"
+             min="2"
+             value="{{ vars.memory_budget_gb if vars.memory_budget_gb is not none else '' }}"
+             required>
+      {% if errors.memory_budget_gb %}<small class="variables-form__error">{{ errors.memory_budget_gb }}</small>{% endif %}
+    </label>
+
+    <label>
+      <span class="t-caption">port</span>
+      <input type="number"
+             name="port"
+             min="1024"
+             max="65535"
+             value="{{ vars.port if vars.port is not none else '' }}"
+             required>
+      {% if errors.port %}<small class="variables-form__error">{{ errors.port }}</small>{% endif %}
+    </label>
+
+    <label>
+      <span class="t-caption">server jar filename</span>
+      <input type="text"
+             name="server_jar"
+             value="{{ vars.server_jar or '' }}"
+             autocomplete="off"
+             required>
+      {% if errors.server_jar %}<small class="variables-form__error">{{ errors.server_jar }}</small>{% endif %}
+    </label>
+
+    <label>
+      <span class="t-caption">jvm extra args (optional)</span>
+      <input type="text"
+             name="jvm_extra_args"
+             value="{{ vars.jvm_extra_args or '' }}"
+             autocomplete="off">
+    </label>
+
+    <div class="variables-form__actions">
+      <button type="submit">Save</button>
+      <a hx-get="/servers/{{ server.name }}/variables"
+         hx-target="#variables"
+         hx-swap="outerHTML"
+         href="#">Cancel</a>
+    </div>
+  </form>
+</section>
