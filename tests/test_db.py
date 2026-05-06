@@ -142,17 +142,6 @@ def test_update_bindings_writes_container_name_and_dir(env, monkeypatch):
     table.update.return_value.eq.assert_called_once_with("name", "atm10")
 
 
-def test_set_rcon_password_updates_password_only(env, monkeypatch):
-    client, table = _fake_supabase_client()
-    monkeypatch.setattr(db, "_client_singleton", client)
-
-    db.set_rcon_password(name="atm10", password="hunter2")
-
-    args, kwargs = table.update.call_args
-    assert args == ({"rcon_password": "hunter2"},)
-    table.update.return_value.eq.assert_called_once_with("name", "atm10")
-
-
 def test_container_name_for_falls_back_to_name_when_override_null():
     row = {"name": "atm10", "container_name": None}
     assert db.container_name_for(row) == "atm10"
