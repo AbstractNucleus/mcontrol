@@ -19,7 +19,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 
 | ID  | Title                                                | Status   | Date       |
 | --- | ---------------------------------------------------- | -------- | ---------- |
-| 001 | Base image: `eclipse-temurin:21-jre`                 | Accepted | 2026-04-26 |
+| 001 | Base image: `eclipse-temurin:21-jre`                 | Superseded by 023 | 2026-04-26 |
 | 002 | UI palette: `AbstractNucleus/design`                 | Accepted | 2026-04-26 |
 | 003 | Tailnet-only access via Cloudflare DNS-01            | Accepted | 2026-04-26 |
 | 004 | Thin custom panel, single-host                       | Accepted | 2026-04-26 |
@@ -28,7 +28,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 007 | Shared Supabase, schema `app_mcontrol`               | Accepted | 2026-04-26 |
 | 008 | Bind mounts at `~abstract/servers/minecraft/<name>/` | Accepted | 2026-04-26 |
 | 009 | Single memory-budget knob; derive `-Xmx` + `mem_limit` | Accepted | 2026-04-26 |
-| 010 | RCON secrets in DB; mcontrol writes `.env`           | Accepted | 2026-04-26 |
+| 010 | RCON secrets in DB; mcontrol writes `.env`           | Superseded by 024 | 2026-04-26 |
 | 011 | `SERVICE_ROLE_KEY` server-side; no app-level user    | Accepted | 2026-04-26 |
 | 012 | Scaffold + file/upload UI; no auto-installers        | Accepted | 2026-04-26 |
 | 013 | Bespoke variable schema in `servers.variables` JSONB | Accepted | 2026-04-26 |
@@ -41,10 +41,14 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 020 | Pin Docker image references; no floating tags        | Accepted | 2026-04-27 |
 | 021 | Per-server `container_name` override + discovery preserves operator edits | Accepted | 2026-04-29 |
 | 022 | Panel host-bind in base compose, parameterised       | Accepted | 2026-05-02 |
+| 023 | No-Dockerfile scaffold model                         | Accepted | 2026-05-05 |
+| 024 | RCON password operator-managed in `server.properties` | Accepted | 2026-05-05 |
+| 025 | Regenerate clobbers against the confirmed diff; mtime drift aborts | Accepted | 2026-05-05 |
+| 026 | Delete tombstones; discovery skips `.`-prefixed dirs | Accepted | 2026-05-05 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
-**Status:** Accepted · 2026-04-26
+**Status:** Superseded by 023 · 2026-04-26
 
 All Minecraft server containers run on `eclipse-temurin:21-jre` as the base image. The custom Dockerfile pattern (`COPY entrypoint.sh; ENTRYPOINT ["/entrypoint.sh"]`) stays — `entrypoint.sh` does `cd /data && exec ./start_server.sh` and `start_server.sh` invokes `java -Xmx... -jar <loader>.jar nogui`.
 
@@ -134,7 +138,7 @@ Trade-off: hitting the cgroup limit kills the container abruptly (SIGKILL), whic
 
 ## 010. RCON secrets in DB; mcontrol writes `.env`
 
-**Status:** Accepted · 2026-04-26
+**Status:** Superseded by 024 · 2026-04-26
 
 Each server's RCON password is stored in `app_mcontrol.servers.rcon_password` (or a dedicated `secrets` column / table). `mcontrol` generates a random secret on server creation and on rotation. When starting or recreating a server's container, `mcontrol` writes `RCON_PASSWORD=<value>` to `/home/abstract/servers/minecraft/<name>/.env` (gitignored), which docker-compose reads. Rotation is a UI button: generate new secret → write new `.env` → `docker compose up -d --force-recreate`. RCON stays bound to loopback by default — the password is defence-in-depth.
 
@@ -337,3 +341,61 @@ Rejected:
 - **Bind on `0.0.0.0` and rely on host firewall.** Conflicts with decision 003's tailnet-only posture; one misconfigured firewall and the panel is on the public LAN.
 
 Trade-off: a `docker compose up -d` on bserver without `BSERVER_HOST_BIND_IP` set in `.env` will bind to `127.0.0.1:8003`, invisible to aserver-nginx — the failure mode is "panel runs but vhost gives 502," same as the bug this decision fixes. The named env var and `.env.example` comment are the mitigations; an explicit `${BSERVER_HOST_BIND_IP:?must be set in production}` was rejected because it'd block local-dev `docker compose up -d` for anyone who hasn't copied `.env.example`.
+
+## 023. No-Dockerfile scaffold model
+
+**Status:** Accepted · 2026-05-05
+
+Servers scaffolded by mcontrol have **no per-server Dockerfile, no entrypoint.sh, and no `.dockerignore`**. The generated `<dir>/docker-compose.yml` references `eclipse-temurin:21-jre` directly via `image:`, bind-mounts `<dir>/server/` to `/data` inside the container, sets `working_dir: /data`, and runs `command: ["./start_server.sh"]`. `start_server.sh` lives at `<dir>/server/start_server.sh` — inside the bind-mount, alongside the operator's jars, mods, configs, and world data. There is nothing for `docker build` to produce; `docker compose up` does a `docker pull` of the upstream image (cached fleet-wide after first pull) and runs the container.
+
+This supersedes decision 001. The Dockerfile pattern (`COPY entrypoint.sh; ENTRYPOINT ["/entrypoint.sh"]`) inherited from the legacy fleet was justified there as preserving operational continuity, but with bind-mounts (decision 008) carrying everything operator-edited, the Dockerfile layer adds no value: there is nothing to bake into the image that isn't already on the host filesystem. Removing it eliminates per-server image builds entirely (build time literally zero), removes the build-context-size footgun where a multi-GB world directory gets re-shipped to the daemon on every rebuild, and collapses the regenerate flow from four files to two.
+
+Rejected: **thin Dockerfile + `.dockerignore`** (the original slice 6 plan). Builds would be fast (~1 s, tiny context with `server/` excluded), but the layer adds nothing the bind-mount doesn't already cover, and decision 012 explicitly rules out baking per-server customisation into images. Three scaffold files (Dockerfile + entrypoint + .dockerignore) for no functional gain. Rejected: **per-server local-build images with `:latest` tag**, then with **`:scaffold-<timestamp>` tags** — both became moot once the Dockerfile itself was removed.
+
+The pin policy in decision 020 applies cleanly: `eclipse-temurin:21-jre` is the only upstream reference the scaffold introduces, lives in one fixed string in `src/mcontrol/scaffolding/templates/docker-compose.yml.j2`, and bumps are one-line PRs. Tightening to a fully-resolved tag (e.g. `21.0.5_11-jre`) is a future option; the channel-pointer form matches the existing fleet's pin granularity for now.
+
+Decision 014's mechanism updates accordingly: the legacy migration becomes "delete `Dockerfile` + `entrypoint.sh`, edit `docker-compose.yml` to point at `eclipse-temurin:21-jre` directly" rather than "rewrite Dockerfile and rebuild." 014's outcome (atm10 + monifactory running on temurin under mcontrol-managed config) is unchanged; only the steps change.
+
+Trade-off: the scaffolded server depends on the upstream Eclipse Temurin image being pullable at start time. A registry outage delays start of any not-yet-cached server. Acceptable: the same risk applies to slice 1's `python:3.12-slim` and `ghcr.io/astral-sh/uv:0.11.7` references, and the cache means it's a one-time-per-version concern.
+
+## 024. RCON password operator-managed in `server.properties`
+
+**Status:** Accepted · 2026-05-05
+
+The RCON password lives **only in `<dir>/server/server.properties`**, managed by the operator the same way `motd`, `view-distance`, `difficulty`, and every other Minecraft server property is managed. mcontrol does not generate it, write it, store it, or sync it. The RCON console route (slice 4) parses `rcon.password=` out of `server.properties` at SSE connect time to authenticate; if `enable-rcon=false` or the line is empty or the file is missing, the console surfaces a friendly error and lifecycle / logs / files keep working unchanged.
+
+This supersedes decision 010. 010's premise — "DB is the source of truth, mcontrol writes `.env`, operator clicks Rotate" — required either env-var interpolation that vanilla MC doesn't do, or a `start_server.sh` `sed`-substitution sync, or an operator-paste step. Each option leaked complexity into a slice that didn't need to own RCON-password lifecycle. Operator-managed in `server.properties` makes the contract identical to every other server property: edit the file via the slice-5 editor, restart, done.
+
+Slice-6 PR 0 closes 010's machinery: deletes `env_writer.py`, `passwords.py`, their tests, and the `_ensure_env_matches_db` branch in `routes/lifecycle.py`. Lifecycle's Start/Stop/Restart now hit the Docker API directly (no compose-up-on-env-change branch). The `app_mcontrol.servers.rcon_password` column becomes dormant; a future migration can drop it once we're confident nothing reads it.
+
+Rejected: **`start_server.sh` sed-substitutes the `rcon.password` line on launch**. Targeted, idempotent, would have made decision 010's rotation flow auto-sync. But it conflicts with the cleaner stance that *server.properties is operator territory*, full stop — even one mcontrol-owned line erodes that invariant and creates rotation paths that depend on container restart timing. Rejected: **prompt the operator for the password in the panel when opening the console**. Adds friction for a value the operator already has on disk.
+
+Trade-off: when the operator wants RCON, they enable it in `server.properties` (set `enable-rcon=true`, `rcon.port=25575`, pick a `rcon.password=`), restart, and open the console. Rotation = edit `server.properties`, restart. mcontrol provides no rotation button. The simplification is worth the lost button: rotation was a single-user nicety on an interface that isn't exposed off-tailnet anyway (decision 003). Disabling RCON entirely now genuinely "doesn't break anything else" — lifecycle, logs, file browser, scaffolding, variables, regenerate, delete all keep working without RCON.
+
+## 025. Regenerate clobbers against the confirmed diff; mtime drift aborts
+
+**Status:** Accepted · 2026-05-05
+
+The Variables-card "Regenerate" flow (slice 6 PR 4) writes new `<dir>/docker-compose.yml` and `<dir>/server/start_server.sh` from templates, **clobbering operator hand-edits** to those two files. The diff preview is the operator's checkpoint: they see the unified diff between rendered template and disk, click Confirm, and the write proceeds. There is no merge logic.
+
+Concurrency contract: the diff endpoint captures both files' mtimes alongside the rendered output; the modal carries them as hidden form fields; the confirm endpoint re-stats both files before writing and aborts with "Files changed since diff was shown — [Re-show diff] [Cancel]" if either mtime drifted. File-not-found is treated the same as drift. This preserves the "diff is the checkpoint" property: the operator can only clobber what they actually saw in the diff, even if a slice-5 editor save or upload landed in the gap between Regenerate-click and Confirm-click. Atomic-write uses the same `file_writer.atomic_write_text` helper as slice 5 so partial writes are impossible.
+
+Rejected: **merge logic** for the two files. Both are short, structurally simple, and operator hand-edits are rare enough that diff-and-clobber is honest. Maintaining a key-by-key merge for compose YAML is real complexity for marginal benefit. Rejected: **clobber unconditionally on confirm**, ignoring concurrent edits. The diff would be stale and the operator's "yes, clobber" decision would apply to bytes they hadn't seen — defeats the checkpoint property. Rejected: **block all writes from any other route while a Regenerate is staged**. Cross-route locking for a single-user panel is a sledgehammer; mtime checks already give the operator a clean retry.
+
+Slice-7 and beyond inherit the contract: any future "regenerate" affordance on operator-editable files (server.properties templating, plugin configs, etc.) follows the same diff-preview + mtime-check + clobber pattern. The merge-logic exit ramp stays closed by default.
+
+Trade-off: a regenerate that races against a separate file-browser save round-trips the operator (re-show diff, re-confirm). At single-user fleet sizes this is theoretical — the operator is the only writer, and they're not racing themselves. The protection is real for the future-bug case where mcontrol acquires a background writer (auto-update, scheduled backups, etc.) that touches scaffold-shape files.
+
+## 026. Delete tombstones; discovery skips `.`-prefixed dirs
+
+**Status:** Accepted · 2026-05-05
+
+Deleting a server through the panel **renames** `<base>/<name>/` to `<base>/.deleted-<name>-<unix-ts>/` and deletes the corresponding `app_mcontrol.servers` row. Files are not removed by mcontrol; permanent purge is a host-side `rm -rf` (or a future "Empty trash" affordance). Discovery (decision 021's contract) gains a single new filter: `if entry.name.startswith("."): continue` — so tombstoned directories are invisible to scans, as are `.git`, `lost+found`, and any other operator-introduced non-server dir under `<base>`.
+
+The Delete button is **disabled when `state='running'`**, with a tooltip directing the operator to Stop first. The POST endpoint re-checks state at request time (returns 409 if running) — protecting against the operator starting the server in another tab between page render and confirm-click. The delete flow is type-name-confirm to match the destructive-op friction of slice-5's recursive-delete dialogue.
+
+Rejected: **always wipe** (`rmtree(<dir>)` on confirm). Sharper edge for a destructive op on potentially gigabytes of world data; recovery would mean restoring from backup (decision 017 — backups are operator-managed via mods, not mcontrol). Tombstone is reversible by `mv .deleted-foo-* foo` from the host shell. Rejected: **cascade-stop** (Delete button stops the container automatically). Mixes two destructive operations into one click and hides the lifecycle effect; the running server might be mid-autosave when the cascade fires. Rejected: **soft-delete column on the row** (`deleted_at timestamptz`). Adds schema surface area for a state the disk-rename already encodes; discovery would still need to filter, and the column adds an "is this row really deleted" question to every read path. The disk tombstone is the source of truth.
+
+Discovery's `.`-prefix filter is a robustness win independent of Delete: it preempts the failure mode where an operator drops `.git/`, `lost+found/`, or any other utility directory into `<base>` and discovery treats it as a server. Existing fleet members (atm10, monifactory, kobra_kollektivet) all use slug-shaped names, so the filter has no impact on legacy rows.
+
+Trade-off: tombstoned directories accumulate on disk indefinitely until the operator manually purges. At single-host scale with rare deletes, the cost is small; the recovery path (rename back) is genuinely useful when an operator clicks Delete by mistake. A future "Empty trash" affordance can sweep tombstones older than N days when the cost stops being theoretical.
