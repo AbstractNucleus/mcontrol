@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -euo pipefail
+exec java -Xmx{{ xmx_gb }}g {{ jvm_extra_args }} -jar {{ server_jar }} nogui

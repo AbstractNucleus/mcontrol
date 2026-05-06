@@ -1,0 +1,14 @@
+services:
+  {{ name }}:
+    image: eclipse-temurin:21-jre
+    container_name: {{ name }}
+    restart: unless-stopped
+    mem_limit: {{ memory_budget_gb }}g
+    ports:
+      - "{{ port }}:25565"
+    volumes:
+      - ./server:/data
+    working_dir: /data
+    command: ["./start_server.sh"]
+    stdin_open: true
+    tty: true
