@@ -1,0 +1,11 @@
+<section class="health-banner" role="alert">
+  <p class="t-eyebrow health-banner__title">Health</p>
+  <ul class="health-banner__list">
+    {% for issue in health_issues %}
+      <li class="health-banner__item">
+        <code class="health-banner__code">{{ issue.code }}</code>
+        <span>{{ issue.message }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+</section>

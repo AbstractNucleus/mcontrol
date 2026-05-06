@@ -131,6 +131,17 @@ def test_update_server_state_writes_only_state(env, monkeypatch):
     table.update.return_value.eq.assert_called_once_with("name", "atm10")
 
 
+def test_update_variables_writes_only_variables(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+
+    db.update_variables(name="atm10", variables={"port": 25577, "memory_budget_gb": 12})
+
+    args, kwargs = table.update.call_args
+    assert args == ({"variables": {"port": 25577, "memory_budget_gb": 12}},)
+    table.update.return_value.eq.assert_called_once_with("name", "atm10")
+
+
 def test_update_bindings_writes_container_name_and_dir(env, monkeypatch):
     client, table = _fake_supabase_client()
     monkeypatch.setattr(db, "_client_singleton", client)

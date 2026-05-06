@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import __version__, db
+from mcontrol import __version__, db, health
 from mcontrol.templates import templates
 
 router = APIRouter()
@@ -19,5 +19,7 @@ async def server_detail(request: Request, name: str) -> HTMLResponse:
             "version": __version__,
             "server": server,
             "state": server.get("state", "unknown"),
+            "health_issues": health.compute_issues(server),
+            "scripts_stale": health.compute_scripts_stale(server),
         },
     )

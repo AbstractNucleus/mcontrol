@@ -750,3 +750,107 @@ body {
   gap: var(--space-3);
   align-items: center;
 }
+
+/* ---- Health banner ------------------------------------------------- */
+.health-banner {
+  background: var(--sub-alt-color);
+  border: 1px solid var(--error-color);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.health-banner__title {
+  color: var(--error-color);
+  margin: 0;
+}
+
+.health-banner__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.health-banner__item {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.health-banner__code {
+  color: var(--error-color);
+}
+
+/* ---- Variables card ------------------------------------------------- */
+.variables-card {
+  background: var(--sub-alt-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-6);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.variables-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.variables-card__edit {
+  border: 1px solid var(--main-color);
+  border-radius: var(--radius-sm);
+  color: var(--main-color);
+  padding: var(--space-1) var(--space-4);
+  text-decoration: none;
+  font-size: var(--fs-sm);
+}
+
+.variables-card__error {
+  color: var(--error-color);
+  margin: 0;
+}
+
+.variables-card__body {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: var(--space-6);
+  row-gap: var(--space-2);
+  margin: 0;
+}
+
+.variables-card__stale {
+  color: var(--sub-color);
+}
+
+.variables-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.variables-form label {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.variables-form input {
+  background: var(--bg-color);
+  border: 1px solid var(--sub-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-color);
+  padding: var(--space-2) var(--space-3);
+}
+
+.variables-form__error {
+  color: var(--error-color);
+  font-size: var(--fs-sm);
+}
+
+.variables-form__actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}

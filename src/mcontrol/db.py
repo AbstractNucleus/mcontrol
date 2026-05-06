@@ -55,6 +55,12 @@ def update_server_state(*, name: str, state: str) -> None:
     _table().update({"state": state}).eq("name", name).execute()
 
 
+def update_variables(*, name: str, variables: dict[str, Any]) -> None:
+    """Replace the row's variables JSONB. Used by the Variables card
+    write-back (slice 6 PR 3)."""
+    _table().update({"variables": variables}).eq("name", name).execute()
+
+
 def update_bindings(*, name: str, container_name: str | None, dir: str) -> None:
     """Operator-driven update of the row's container-name override and
     on-disk directory. `container_name=None` clears the override (back
