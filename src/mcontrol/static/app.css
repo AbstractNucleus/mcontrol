@@ -854,3 +854,29 @@ body {
   gap: var(--space-3);
   align-items: center;
 }
+
+/* ---- Regenerate diff partial -------------------------------------- */
+.regenerate-diff__hint {
+  color: var(--sub-color);
+  margin: 0;
+}
+
+.regenerate-diff__file {
+  background: var(--bg-color);
+  border: 1px solid var(--sub-color);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.regenerate-diff__pre {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-sm);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.regenerate-diff__actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}

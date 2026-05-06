@@ -28,5 +28,10 @@
     <p class="variables-card__stale t-caption">
       Scripts on disk differ from current variables.
     </p>
+    <a class="variables-card__edit"
+       hx-get="/servers/{{ server.name }}/regenerate"
+       hx-target="#variables"
+       hx-swap="outerHTML"
+       href="#">Regenerate</a>
   {% endif %}
 </section>
