@@ -4,7 +4,10 @@
 
 {% block main %}
 <section>
-  <p class="t-eyebrow">Servers</p>
+  <div class="home-header">
+    <p class="t-eyebrow">Servers</p>
+    <a class="home-header__new" href="/servers/new">New server</a>
+  </div>
   {% if servers %}
     <ul class="server-list">
       {% for server in servers %}
