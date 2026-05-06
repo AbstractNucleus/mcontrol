@@ -5,6 +5,7 @@ constructed lazily on first use and cached for the lifetime of the
 process.
 """
 
+from datetime import UTC, datetime
 from typing import Any
 
 from supabase import Client, create_client
@@ -73,6 +74,33 @@ def container_name_for(server: dict[str, Any]) -> str:
     if override:
         return override
     return server["name"]
+
+
+def insert_scaffolding_server(*, name: str, dir: str, variables: dict[str, Any]) -> None:
+    """Create a new mcontrol-scaffolded row in state='scaffolding'.
+
+    Slice 6 PR 2 — first of the two DB writes that bracket the
+    on-disk scaffold. mark_scaffolded transitions the row to 'created'
+    once the files are written.
+    """
+    _table().insert(
+        {"name": name, "dir": dir, "state": "scaffolding", "variables": variables}
+    ).execute()
+
+
+def mark_scaffolded(*, name: str) -> None:
+    """Transition a row from state='scaffolding' to 'created' and stamp
+    scaffolded_at=now(). Presence of scaffolded_at is the canonical
+    'this row is mcontrol-scaffolded' signal (decision 023)."""
+    _table().update(
+        {"state": "created", "scaffolded_at": datetime.now(UTC).isoformat()}
+    ).eq("name", name).execute()
+
+
+def delete_server(name: str) -> None:
+    """Hard-delete a row by name. Used by PR 2's rollback path and by
+    PR 5's delete flow."""
+    _table().delete().eq("name", name).execute()
 
 
 # upsert_server stays as-is for any external caller; discovery no

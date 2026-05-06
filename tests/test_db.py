@@ -142,6 +142,53 @@ def test_update_bindings_writes_container_name_and_dir(env, monkeypatch):
     table.update.return_value.eq.assert_called_once_with("name", "atm10")
 
 
+def test_insert_scaffolding_server_writes_state_and_variables(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+
+    db.insert_scaffolding_server(
+        name="newshire",
+        dir="/srv/newshire",
+        variables={"port": 25575, "memory_budget_gb": 8, "server_jar": "paper.jar"},
+    )
+
+    table.insert.assert_called_once_with(
+        {
+            "name": "newshire",
+            "dir": "/srv/newshire",
+            "state": "scaffolding",
+            "variables": {"port": 25575, "memory_budget_gb": 8, "server_jar": "paper.jar"},
+        }
+    )
+    table.insert.return_value.execute.assert_called_once_with()
+
+
+def test_mark_scaffolded_sets_state_created_and_stamps_scaffolded_at(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+
+    db.mark_scaffolded(name="newshire")
+
+    args, kwargs = table.update.call_args
+    payload = args[0]
+    assert payload["state"] == "created"
+    # Timestamp is server-time-now in ISO 8601; just check shape.
+    assert "scaffolded_at" in payload
+    assert "T" in payload["scaffolded_at"]
+    table.update.return_value.eq.assert_called_once_with("name", "newshire")
+
+
+def test_delete_server_filters_on_name(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+
+    db.delete_server("newshire")
+
+    table.delete.assert_called_once_with()
+    table.delete.return_value.eq.assert_called_once_with("name", "newshire")
+    table.delete.return_value.eq.return_value.execute.assert_called_once_with()
+
+
 def test_container_name_for_falls_back_to_name_when_override_null():
     row = {"name": "atm10", "container_name": None}
     assert db.container_name_for(row) == "atm10"
