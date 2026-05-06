@@ -63,10 +63,6 @@ def update_bindings(*, name: str, container_name: str | None, dir: str) -> None:
     ).eq("name", name).execute()
 
 
-def set_rcon_password(*, name: str, password: str) -> None:
-    _table().update({"rcon_password": password}).eq("name", name).execute()
-
-
 def container_name_for(server: dict[str, Any]) -> str:
     """Resolve the docker container name for a server row.
 

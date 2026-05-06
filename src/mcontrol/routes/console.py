@@ -1,18 +1,24 @@
 """SSE-streamed RCON console + POST endpoint for command submission.
 
-Slice-4 model: one open SSE per server at a time. The route attaches
-the mcontrol container to the MC's docker network on connect, opens an
-RCON connection to <container_name>:25575, and streams server output
-back as SSE `data:` messages. POST /servers/{name}/rcon (form-encoded
+One open SSE per server at a time. The route attaches the mcontrol
+container to the MC's docker network on connect, opens an RCON
+connection to <container_name>:25575, and streams server output back
+as SSE `data:` messages. POST /servers/{name}/rcon (form-encoded
 command=...) finds the live connection by server name and submits the
 command; the response flows back through the SSE stream.
 
-If no SSE is open for a server, POST returns 409 ("open the console
-first").
+The RCON password is read from `<dir>/server/server.properties` at
+SSE connect time (decision 024). If `enable-rcon=false`, the line is
+empty, or the file is missing, the stream yields a friendly info
+message and ends — lifecycle, logs, and the rest of the panel stay
+working when RCON is disabled.
+
+If no SSE is open for a server, POST returns 409.
 """
 
 import asyncio
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -27,13 +33,48 @@ _active_connections: dict[str, rcon._RconConnection] = {}
 # Server name → asyncio.Queue[str] of output lines (responses from POST flow back here).
 _output_queues: dict[str, asyncio.Queue] = {}
 
+_RCON_DISABLED_MSG = (
+    b"data: [info] RCON is not enabled for this server. Set "
+    b"enable-rcon=true and rcon.password=... in server/server.properties, "
+    b"then restart.\n\n"
+)
+
+
+def _read_rcon_properties(props_path: Path) -> tuple[bool, str]:
+    """Return (enabled, password) parsed from a server.properties file.
+
+    `enabled` is True iff `enable-rcon=true`. `password` is the
+    `rcon.password=` value, or "" if absent. Missing file → (False, "").
+    """
+    if not props_path.exists():
+        return False, ""
+    enabled = False
+    password = ""
+    for raw_line in props_path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if key == "enable-rcon":
+            enabled = value.lower() == "true"
+        elif key == "rcon.password":
+            password = value
+    return enabled, password
+
 
 async def _stream(
     request: Request,
     name: str,
     container_name: str,
-    password: str,
+    server_dir: Path,
 ) -> AsyncIterator[bytes]:
+    enabled, password = _read_rcon_properties(server_dir / "server" / "server.properties")
+    if not enabled or not password:
+        yield _RCON_DISABLED_MSG
+        return
+
     network_name = await docker_client.find_network_name(container_name)
     if network_name is None:
         yield b"data: [error] no docker network found for container\n\n"
@@ -73,16 +114,8 @@ async def stream(request: Request, name: str) -> StreamingResponse:
     if server is None:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    password = server.get("rcon_password")
-    if not password:
-        raise HTTPException(
-            status_code=424,
-            detail="rcon_password not yet set — start the server first to generate one",
-        )
-
-    container_name = db.container_name_for(server)
     return StreamingResponse(
-        _stream(request, name, container_name, password),
+        _stream(request, name, db.container_name_for(server), Path(server["dir"])),
         media_type="text/event-stream",
     )
 
