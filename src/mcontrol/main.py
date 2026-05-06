@@ -14,6 +14,7 @@ from mcontrol.routes import (
     lifecycle,
     logs,
     new_server,
+    regenerate,
     server,
     variables,
 )
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(console.router)
     app.include_router(bindings.router)
     app.include_router(variables.router)
+    app.include_router(regenerate.router)
     app.include_router(files.router)
 
     @app.get("/healthz")

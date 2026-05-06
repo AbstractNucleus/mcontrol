@@ -1,0 +1,47 @@
+<section class="variables-card regenerate-diff" id="variables">
+  <header class="variables-card__head">
+    <p class="t-eyebrow">Regenerate scripts</p>
+  </header>
+
+  {% if drifted %}
+    <p class="variables-card__error">
+      Files changed since diff was shown — review the new diff before confirming.
+    </p>
+  {% endif %}
+
+  <p class="t-caption regenerate-diff__hint">
+    Confirming will clobber any hand-edits to <code>docker-compose.yml</code> and
+    <code>server/start_server.sh</code>.
+  </p>
+
+  <details class="regenerate-diff__file" open>
+    <summary class="t-caption">docker-compose.yml</summary>
+    {% if compose_diff %}
+      <pre class="regenerate-diff__pre">{{ compose_diff }}</pre>
+    {% else %}
+      <p class="t-muted t-caption">no changes</p>
+    {% endif %}
+  </details>
+
+  <details class="regenerate-diff__file" open>
+    <summary class="t-caption">server/start_server.sh</summary>
+    {% if start_diff %}
+      <pre class="regenerate-diff__pre">{{ start_diff }}</pre>
+    {% else %}
+      <p class="t-muted t-caption">no changes</p>
+    {% endif %}
+  </details>
+
+  <form class="regenerate-diff__actions"
+        hx-post="/servers/{{ server.name }}/regenerate/confirm"
+        hx-target="#variables"
+        hx-swap="outerHTML">
+    <input type="hidden" name="compose_mtime_ns" value="{{ compose_mtime_ns }}">
+    <input type="hidden" name="start_mtime_ns" value="{{ start_mtime_ns }}">
+    <button type="submit">Confirm</button>
+    <a hx-get="/servers/{{ server.name }}/variables"
+       hx-target="#variables"
+       hx-swap="outerHTML"
+       href="#">Cancel</a>
+  </form>
+</section>
