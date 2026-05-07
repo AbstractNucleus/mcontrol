@@ -36,7 +36,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 015 | DB migrations live in `supabase-server`, not here    | Accepted | 2026-04-26 |
 | 016 | Backend stack: Python + FastAPI + Jinja + HTMX       | Accepted | 2026-04-26 |
 | 017 | Backups out of scope; delegate to plugins/mods       | Accepted | 2026-04-26 |
-| 018 | Whitelist + ops management                           | Accepted | 2026-04-26 |
+| 018 | Whitelist + ops management                           | Superseded by 027 | 2026-04-26 |
 | 019 | TLS termination at aserver-nginx, not in-repo Caddy  | Accepted | 2026-04-27 |
 | 020 | Pin Docker image references; no floating tags        | Accepted | 2026-04-27 |
 | 021 | Per-server `container_name` override + discovery preserves operator edits | Accepted | 2026-04-29 |
@@ -45,6 +45,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 024 | RCON password operator-managed in `server.properties` | Accepted | 2026-05-05 |
 | 025 | Regenerate clobbers against the confirmed diff; mtime drift aborts | Accepted | 2026-05-05 |
 | 026 | Delete tombstones; discovery skips `.`-prefixed dirs | Accepted | 2026-05-05 |
+| 027 | DB-backed player roster; disk-only per-server membership | Accepted | 2026-05-08 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -399,3 +400,31 @@ Rejected: **always wipe** (`rmtree(<dir>)` on confirm). Sharper edge for a destr
 Discovery's `.`-prefix filter is a robustness win independent of Delete: it preempts the failure mode where an operator drops `.git/`, `lost+found/`, or any other utility directory into `<base>` and discovery treats it as a server. Existing fleet members (atm10, monifactory, kobra_kollektivet) all use slug-shaped names, so the filter has no impact on legacy rows.
 
 Trade-off: tombstoned directories accumulate on disk indefinitely until the operator manually purges. At single-host scale with rare deletes, the cost is small; the recovery path (rename back) is genuinely useful when an operator clicks Delete by mistake. A future "Empty trash" affordance can sweep tombstones older than N days when the cost stops being theoretical.
+
+## 027. DB-backed player roster; disk-only per-server membership
+
+**Status:** Accepted · 2026-05-08
+
+`mcontrol` ships whitelist + ops management as a unified Players page plus per-server affordances. The model:
+
+- A new table `app_mcontrol.players(uuid uuid pk, name text not null, added_at timestamptz not null default now())` holds the operator-trusted **roster** — one row per Minecraft identity. UUID is the key; `name` is the human-friendly handle and is refreshed on the Mojang lookup path or on Import.
+- Per-server membership lives **only on disk**, in each server's `whitelist.json` and `ops.json`. mcontrol does not mirror membership into the database. The central Players page renders by reading every server's two files at request time and joining UUIDs against `players`.
+- Adding to the roster is a synchronous Mojang lookup (`GET https://api.mojang.com/users/profiles/minecraft/{name}`). 204 → form error. 5xx/timeout → form error. 200 → upsert by UUID, refresh `name` if it differs.
+- Adding a roster member to a server's whitelist or ops happens on the per-server detail page, picker-only — there is no free-type-name on per-server pages.
+- Writes use the established split: RCON when running (`/whitelist add/remove`, `/op`/`/deop`); atomic JSON read-modify-write with mtime stale-write check when offline (slice 5/6 pattern). Output is vanilla-shaped: 2-space indent, list of objects, trailing newline, insertion order on round-trip.
+- Removing from the roster opens a cascade-confirm modal: "Roster only" leaves disk untouched; "Remove from all servers" runs the per-server remove for each membership before deleting the `players` row. Pre-scan for the modal is the same render-time read we already do for the matrix.
+- An Import button on the Players page walks every server's two files, upserts unknown UUIDs into `players` (taking the JSON's `name` at face value — those entries were authored by the Minecraft server itself from authoritative Mojang data on first join). The page top surfaces "N memberships on disk for unknown UUIDs" as an affordance pointing at this button when the count is non-zero.
+- No level dropdown for ops; vanilla `/op` always grants level 4 and `ops.json` cannot be hot-reloaded for non-default levels without restart. Granular levels remain a slice-5-file-browser task.
+- No `white-list` / `enforce-whitelist` toggle in the UI — `server.properties` stays operator-managed (decision 024). The central page surfaces a small "whitelist disabled on this server" indicator when `white-list=false` so the failure mode is legible.
+- No legacy gating. The whitelist/ops affordances render on every server regardless of `scaffolded_at` state — `whitelist.json` and `ops.json` exist for all server kinds, and the disk-as-truth model doesn't depend on scaffold templates.
+
+This supersedes **decision 018**, which sketched the same scope but rejected DB-mirrored player lists ("defer until that's a felt pain") and promised a level dropdown, `bypassesPlayerLimit` flag, and toggle UI that this decision drops. The felt pain has now been articulated: the operator wants to type a name once and reuse the identity across servers without re-typing on each per-server flow. The original rejection rationale stands for **per-server membership** — that part stays disk-only — but a roster table is a different concept and is added.
+
+Rejected:
+- **Mirror per-server membership in DB** (`whitelisted_on(player_uuid, server_name)` etc.). At ~6 servers and ~tens of players, the file scan is faster than the round-trip to Postgres, and slice 5's file editor can mutate `whitelist.json` directly — which means any DB mirror must reconcile drift on every render. The DB would become a cache of disk state, which is the wrong direction; disk-as-truth eliminates the failure mode.
+- **Soft-delete from roster.** `players` rows are hard-deleted; the cascade modal handles the consequence question explicitly. A soft-delete column would add schema surface area for a state the cascade decision already resolves.
+- **Auto-cascade on roster delete.** Single click that pretends to be simple while removing players from N servers is exactly the footgun a confirm modal exists to prevent.
+- **Per-server level dropdown for ops.** Vanilla doesn't reload `ops.json` without restart; surfacing a dropdown that promises levels but requires a restart for any non-default value would either lie about the UX or import a restart-and-apply flow that no other slice-7 affordance needs.
+- **Online-mode-and-offline-mode support.** The fleet runs online-mode-only and there's no signal of an offline-mode server appearing. Mojang lookup is a hard dependency for adds; a future slice can add offline-UUID derivation if it ever matters.
+
+Trade-off: roster-add depends on Mojang reachability — operator can't register new players when Mojang is down. Acceptable: rare, transient, and the failure surfaces cleanly. Render-time disk reads on every Players page hit cost ~6 file opens at single-host scale; acceptable. The cascade modal is more code than a one-button delete, but it's the difference between a panel that surprises the operator and one that doesn't. The roster table itself is one-column-shy of trivial; bumping its schema later (e.g. adding a `notes` column for "this is Bob's friend, OK to op") is a small migration whenever the need is felt.
