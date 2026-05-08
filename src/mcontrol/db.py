@@ -1,4 +1,4 @@
-"""Thin wrapper over supabase-py, scoped to app_mcontrol.servers.
+"""Thin wrapper over supabase-py, scoped to app_mcontrol.
 
 All callers go through the helpers below. The underlying client is
 constructed lazily on first use and cached for the lifetime of the
@@ -14,6 +14,7 @@ from mcontrol.settings import Settings
 
 _SCHEMA = "app_mcontrol"
 _TABLE = "servers"
+_PLAYERS_TABLE = "players"
 
 _client_singleton: Client | None = None
 
@@ -31,6 +32,10 @@ def _client() -> Client:
 
 def _table():
     return _client().schema(_SCHEMA).table(_TABLE)
+
+
+def _players_table():
+    return _client().schema(_SCHEMA).table(_PLAYERS_TABLE)
 
 
 def list_servers() -> list[dict[str, Any]]:
@@ -117,3 +122,56 @@ def upsert_server(*, name: str, dir: str, state: str) -> None:
         {"name": name, "dir": dir, "state": state},
         on_conflict="name",
     ).execute()
+
+
+# ---------------------------------------------------------------------------
+# Player roster (slice 7, decision 027). Per-server whitelist/ops
+# membership lives on disk; this table is identity-only.
+# ---------------------------------------------------------------------------
+
+
+def list_players() -> list[dict[str, Any]]:
+    response = _players_table().select("*").order("name").execute()
+    return response.data
+
+
+def get_player(uuid: str) -> dict[str, Any] | None:
+    response = _players_table().select("*").eq("uuid", uuid).limit(1).execute()
+    return response.data[0] if response.data else None
+
+
+def insert_player(*, uuid: str, name: str) -> None:
+    """Insert a single roster row. Caller is responsible for ensuring
+    uuid is unique; collisions raise from supabase-py."""
+    _players_table().insert({"uuid": uuid, "name": name}).execute()
+
+
+def delete_player(uuid: str) -> None:
+    """Hard-delete a roster row by UUID. The cascade-confirm modal
+    (slice 7 PR 4) is responsible for having already removed any
+    per-server memberships that the operator chose to clear."""
+    _players_table().delete().eq("uuid", uuid).execute()
+
+
+def upsert_player_from_mojang(*, uuid: str, name: str) -> dict[str, Any]:
+    """Upsert a roster row from a Mojang lookup result.
+
+    Returns a dict describing the outcome so the caller can render the
+    flash message:
+
+      ``{"created": True,  "previous_name": None}``  — new row inserted.
+      ``{"created": False, "previous_name": "<old>"}`` — UUID already
+        present; ``previous_name`` is the value recorded *before* this
+        call (equal to ``name`` when nothing changed).
+
+    Refreshes ``name`` only when it differs from the stored value, to
+    avoid pointless writes on the common already-current case.
+    """
+    existing = get_player(uuid)
+    if existing is None:
+        insert_player(uuid=uuid, name=name)
+        return {"created": True, "previous_name": None}
+    previous_name = existing["name"]
+    if previous_name != name:
+        _players_table().update({"name": name}).eq("uuid", uuid).execute()
+    return {"created": False, "previous_name": previous_name}
