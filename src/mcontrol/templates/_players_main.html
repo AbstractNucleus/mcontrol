@@ -1,0 +1,76 @@
+<section class="players-page" id="players-main">
+  <p class="t-eyebrow"><a href="/">← all servers</a></p>
+  <h2 class="t-h3">Players</h2>
+
+  {% if flash %}
+    <p class="players-page__flash players-page__flash--{{ flash.kind }}">
+      {{ flash.message }}
+    </p>
+  {% endif %}
+
+  {% if unknown_count > 0 %}
+    <form class="players-page__import"
+          hx-post="/players/import"
+          hx-target="#players-main"
+          hx-swap="outerHTML">
+      <button class="players-page__import-btn" type="submit">
+        {{ unknown_count }} membership(s) on disk for unknown UUID(s) — Import
+      </button>
+    </form>
+  {% endif %}
+
+  <form class="players-page__add"
+        hx-post="/players"
+        hx-target="#players-main"
+        hx-swap="outerHTML">
+    <label class="t-caption" for="players-page-name">Add by Minecraft name</label>
+    <input id="players-page-name"
+           name="name"
+           type="text"
+           required
+           autocomplete="off"
+           placeholder="e.g. Notch"
+           value="{{ form.name }}">
+    <button type="submit">Look up + add</button>
+    {% if errors.name %}
+      <p class="players-page__error">{{ errors.name }}</p>
+    {% endif %}
+  </form>
+
+  {% if roster %}
+    <table class="players-page__table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Whitelisted on</th>
+          <th>Op on</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in roster %}
+          <tr>
+            <td><code>{{ p.name }}</code></td>
+            <td>
+              {% if p.whitelist_servers %}
+                {% for s in p.whitelist_servers %}<a href="/servers/{{ s.name }}">{{ s.name }}</a>{% if s.whitelist_disabled %} <span class="t-muted players-page__wl-off">(whitelist disabled)</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+              {% else %}
+                <span class="t-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if p.op_servers %}
+                {% for s in p.op_servers %}<a href="/servers/{{ s }}">{{ s }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+              {% else %}
+                <span class="t-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="card">
+      <p class="t-body">Roster is empty. Add a player by Minecraft name above, or — if any servers already have whitelist/ops entries on disk — use Import.</p>
+    </div>
+  {% endif %}
+</section>
