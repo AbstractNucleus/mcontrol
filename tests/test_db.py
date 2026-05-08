@@ -311,6 +311,29 @@ def test_upsert_player_from_mojang_skips_update_when_name_unchanged(env, monkeyp
     assert result == {"created": False, "previous_name": "Notch"}
 
 
+def test_insert_players_bulk_writes_all_rows_in_one_call(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+
+    rows = [
+        {"uuid": _NOTCH_UUID, "name": "Notch"},
+        {"uuid": "ec561538-f3fd-461d-aff5-086b22154bce", "name": "Herobrine"},
+    ]
+    db.insert_players_bulk(rows)
+
+    table.insert.assert_called_once_with(rows)
+    table.insert.return_value.execute.assert_called_once_with()
+
+
+def test_insert_players_bulk_is_noop_for_empty_list(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+
+    db.insert_players_bulk([])
+
+    table.insert.assert_not_called()
+
+
 def test_upsert_player_from_mojang_refreshes_name_when_it_differs(env, monkeypatch):
     client, table = _fake_supabase_client()
     monkeypatch.setattr(db, "_client_singleton", client)

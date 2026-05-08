@@ -146,6 +146,15 @@ def insert_player(*, uuid: str, name: str) -> None:
     _players_table().insert({"uuid": uuid, "name": name}).execute()
 
 
+def insert_players_bulk(rows: list[dict[str, Any]]) -> None:
+    """Insert many roster rows in a single PostgREST request — which
+    PostgREST executes as a single SQL transaction. Used by slice 7
+    PR 3's Import flow (decision 027). Empty list is a no-op."""
+    if not rows:
+        return
+    _players_table().insert(rows).execute()
+
+
 def delete_player(uuid: str) -> None:
     """Hard-delete a roster row by UUID. The cascade-confirm modal
     (slice 7 PR 4) is responsible for having already removed any
