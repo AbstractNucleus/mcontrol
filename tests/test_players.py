@@ -344,3 +344,229 @@ async def test_import_takes_first_encountered_name_for_a_given_uuid(
 
     bulk = fake_db["inserted_bulk"][0]
     assert bulk == [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+
+
+# ---------------------------------------------------------------------------
+# PR 4: cascade-remove modal + handler
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def fake_db_with_delete(fake_db, monkeypatch):
+    """Extend the basic fake_db with delete_player tracking."""
+    deleted: list[str] = []
+
+    def delete_player(uuid):
+        fake_db["players"][:] = [p for p in fake_db["players"] if p["uuid"] != uuid]
+        deleted.append(uuid)
+
+    monkeypatch.setattr(db, "delete_player", delete_player)
+    fake_db["deleted"] = deleted
+    return fake_db
+
+
+async def test_remove_modal_returns_404_when_uuid_unknown(
+    client, fake_db_with_delete
+):
+    response = await client.get(f"/players/{_NOTCH_UUID}/remove")
+    assert response.status_code == 404
+
+
+async def test_remove_modal_returns_400_on_invalid_uuid(
+    client, fake_db_with_delete
+):
+    response = await client.get("/players/not-a-uuid/remove")
+    assert response.status_code == 400
+
+
+async def test_remove_modal_lists_pre_scanned_memberships(
+    client, fake_db_with_delete, tmp_path
+):
+    fake_db_with_delete["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    atm = _server_row(tmp_path, "atm10")
+    moni = _server_row(tmp_path, "monifactory")
+    fake_db_with_delete["servers"] = [atm, moni]
+    membership.add_whitelist_entry(Path(atm["dir"]), uuid=_NOTCH_UUID, name="Notch")
+    membership.add_op_entry(Path(atm["dir"]), uuid=_NOTCH_UUID, name="Notch")
+    membership.add_whitelist_entry(Path(moni["dir"]), uuid=_NOTCH_UUID, name="Notch")
+
+    response = await client.get(f"/players/{_NOTCH_UUID}/remove")
+
+    assert response.status_code == 200
+    body = response.text
+    assert "Remove Notch from roster?" in body
+    assert "atm10" in body
+    assert "monifactory" in body
+    assert "(whitelist)" in body
+    assert "(ops)" in body
+    assert 'value="all"' in body  # "Remove from all servers" form is shown
+
+
+async def test_remove_modal_hides_remove_all_when_no_memberships(
+    client, fake_db_with_delete, tmp_path
+):
+    fake_db_with_delete["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    fake_db_with_delete["servers"] = [_server_row(tmp_path, "atm10")]
+
+    response = await client.get(f"/players/{_NOTCH_UUID}/remove")
+
+    assert response.status_code == 200
+    body = response.text
+    assert "is not on any server" in body
+    assert 'value="all"' not in body
+    assert 'value="roster"' in body  # "Roster only" still rendered
+
+
+async def test_post_scope_roster_deletes_row_only(
+    client, fake_db_with_delete, tmp_path
+):
+    fake_db_with_delete["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    atm = _server_row(tmp_path, "atm10")
+    fake_db_with_delete["servers"] = [atm]
+    membership.add_whitelist_entry(Path(atm["dir"]), uuid=_NOTCH_UUID, name="Notch")
+
+    response = await client.post(
+        f"/players/{_NOTCH_UUID}/remove", data={"scope": "roster"}
+    )
+
+    assert response.status_code == 200
+    assert _NOTCH_UUID in fake_db_with_delete["deleted"]
+    # Disk untouched.
+    entries, _ = membership.read_whitelist(Path(atm["dir"]))
+    assert entries == [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    assert "On-disk memberships were not touched" in response.text
+
+
+async def test_post_scope_all_offline_runs_per_server_remove_then_deletes(
+    client, fake_db_with_delete, tmp_path
+):
+    fake_db_with_delete["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    atm = _server_row(tmp_path, "atm10")
+    moni = _server_row(tmp_path, "monifactory")
+    fake_db_with_delete["servers"] = [atm, moni]
+    membership.add_whitelist_entry(Path(atm["dir"]), uuid=_NOTCH_UUID, name="Notch")
+    membership.add_op_entry(Path(atm["dir"]), uuid=_NOTCH_UUID, name="Notch")
+    membership.add_whitelist_entry(Path(moni["dir"]), uuid=_NOTCH_UUID, name="Notch")
+
+    response = await client.post(
+        f"/players/{_NOTCH_UUID}/remove", data={"scope": "all"}
+    )
+
+    assert response.status_code == 200
+    assert _NOTCH_UUID in fake_db_with_delete["deleted"]
+    # Disk cleaned.
+    assert membership.read_whitelist(Path(atm["dir"]))[0] == []
+    assert membership.read_ops(Path(atm["dir"]))[0] == []
+    assert membership.read_whitelist(Path(moni["dir"]))[0] == []
+    body = response.text
+    assert "Removed Notch from atm10 (whitelist)" in body
+    assert "atm10 (ops)" in body
+    assert "monifactory (whitelist)" in body
+
+
+async def test_post_scope_all_running_uses_rcon(
+    client, fake_db_with_delete, tmp_path, monkeypatch
+):
+    fake_db_with_delete["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    atm = _server_row(tmp_path, "atm10")
+    atm["state"] = "running"
+    fake_db_with_delete["servers"] = [atm]
+    membership.add_whitelist_entry(Path(atm["dir"]), uuid=_NOTCH_UUID, name="Notch")
+    membership.add_op_entry(Path(atm["dir"]), uuid=_NOTCH_UUID, name="Notch")
+
+    from mcontrol import server_rcon
+
+    commands: list[str] = []
+
+    async def fake_run(server, command):
+        commands.append(command)
+        return ""
+
+    monkeypatch.setattr(server_rcon, "run_command", fake_run)
+
+    response = await client.post(
+        f"/players/{_NOTCH_UUID}/remove", data={"scope": "all"}
+    )
+
+    assert response.status_code == 200
+    assert sorted(commands) == ["deop Notch", "whitelist remove Notch"]
+    # Disk on a running server is owned by the JVM — RCON path leaves it
+    # to the server to update.
+    assert _NOTCH_UUID in fake_db_with_delete["deleted"]
+
+
+async def test_post_scope_all_partial_failure_surfaces_in_flash(
+    client, fake_db_with_delete, tmp_path, monkeypatch
+):
+    fake_db_with_delete["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    atm = _server_row(tmp_path, "atm10")
+    moni = _server_row(tmp_path, "monifactory")
+    fake_db_with_delete["servers"] = [atm, moni]
+    membership.add_whitelist_entry(Path(atm["dir"]), uuid=_NOTCH_UUID, name="Notch")
+    membership.add_whitelist_entry(Path(moni["dir"]), uuid=_NOTCH_UUID, name="Notch")
+
+    # Stub remove on monifactory to raise.
+    real_remove = membership.remove_whitelist_entry
+
+    def selective_remove(server_dir, *, uuid):
+        if str(server_dir) == moni["dir"]:
+            raise membership.StaleWriteError("simulated drift")
+        return real_remove(server_dir, uuid=uuid)
+
+    monkeypatch.setattr(
+        membership, "remove_whitelist_entry", selective_remove
+    )
+
+    response = await client.post(
+        f"/players/{_NOTCH_UUID}/remove", data={"scope": "all"}
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "Removed Notch from atm10 (whitelist)." in body
+    assert "Remove Notch from monifactory (whitelist) failed" in body
+    # Per decision 027, the row is still hard-deleted; partial state
+    # surfaces as an unknown-UUID affordance on the next page render.
+    assert _NOTCH_UUID in fake_db_with_delete["deleted"]
+
+
+async def test_post_scope_all_with_no_memberships_says_so(
+    client, fake_db_with_delete, tmp_path
+):
+    fake_db_with_delete["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    fake_db_with_delete["servers"] = [_server_row(tmp_path, "atm10")]
+
+    response = await client.post(
+        f"/players/{_NOTCH_UUID}/remove", data={"scope": "all"}
+    )
+
+    assert response.status_code == 200
+    assert "had no memberships on disk" in response.text
+    assert _NOTCH_UUID in fake_db_with_delete["deleted"]
+
+
+async def test_post_returns_400_on_invalid_scope(client, fake_db_with_delete):
+    fake_db_with_delete["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+
+    response = await client.post(
+        f"/players/{_NOTCH_UUID}/remove", data={"scope": "wat"}
+    )
+
+    assert response.status_code == 400
+
+
+async def test_post_returns_404_when_uuid_unknown(client, fake_db_with_delete):
+    response = await client.post(
+        f"/players/{_NOTCH_UUID}/remove", data={"scope": "roster"}
+    )
+    assert response.status_code == 404
+
+
+async def test_get_renders_remove_link_in_each_row(client, fake_db, tmp_path):
+    fake_db["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    fake_db["servers"] = []
+
+    body = (await client.get("/players")).text
+
+    assert f'hx-get="/players/{_NOTCH_UUID}/remove"' in body
+    assert 'hx-target="#player-modal"' in body

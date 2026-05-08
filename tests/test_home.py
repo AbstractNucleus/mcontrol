@@ -53,3 +53,10 @@ async def test_home_links_each_server_to_detail_page(client, fake_servers):
 
     assert response.status_code == 200
     assert 'href="/servers/atm10"' in response.text
+
+
+async def test_home_links_to_central_players_page(client, fake_servers):
+    response = await client.get("/")
+
+    assert response.status_code == 200
+    assert 'href="/players"' in response.text

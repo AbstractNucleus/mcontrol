@@ -6,7 +6,10 @@
 <section>
   <div class="home-header">
     <p class="t-eyebrow">Servers</p>
-    <a class="home-header__new" href="/servers/new">New server</a>
+    <div class="home-header__actions">
+      <a class="home-header__nav" href="/players">Players</a>
+      <a class="home-header__new" href="/servers/new">New server</a>
+    </div>
   </div>
   {% if servers %}
     <ul class="server-list">
