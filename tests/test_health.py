@@ -36,7 +36,44 @@ def _scaffold_files(tmp_path: Path, row: dict) -> None:
 
 def test_compute_issues_returns_empty_for_legacy_row(tmp_path):
     row = _scaffolded_row(tmp_path, scaffolded_at=None)
+    # Legacy rows skip the scaffold-only checks (decision: those don't apply).
+    # The membership-file checks DO run on legacy rows (slice 7 / decision 027),
+    # but with no whitelist.json/ops.json on disk they're no-ops.
+    Path(row["dir"]).mkdir(parents=True, exist_ok=True)
     assert health.compute_issues(row) == []
+
+
+def test_compute_issues_flags_malformed_whitelist_on_legacy_row(tmp_path):
+    row = _scaffolded_row(tmp_path, scaffolded_at=None)
+    server_dir = Path(row["dir"])
+    (server_dir / "server").mkdir(parents=True)
+    (server_dir / "server" / "whitelist.json").write_text("{not json")
+
+    issues = health.compute_issues(row)
+    codes = [i["code"] for i in issues]
+    assert "whitelist-malformed" in codes
+
+
+def test_compute_issues_flags_malformed_ops_on_scaffolded_row(tmp_path):
+    row = _scaffolded_row(tmp_path)
+    _scaffold_files(tmp_path, row)
+    (Path(row["dir"]) / "server" / "ops.json").write_text("not json")
+
+    issues = health.compute_issues(row)
+    codes = [i["code"] for i in issues]
+    assert "ops-malformed" in codes
+
+
+def test_compute_issues_flags_both_malformed_files_simultaneously(tmp_path):
+    row = _scaffolded_row(tmp_path, scaffolded_at=None)
+    server_dir = Path(row["dir"])
+    (server_dir / "server").mkdir(parents=True)
+    (server_dir / "server" / "whitelist.json").write_text("not")
+    (server_dir / "server" / "ops.json").write_text("[1, 2, 3]")  # not list-of-objects
+
+    codes = [i["code"] for i in health.compute_issues(row)]
+    assert "whitelist-malformed" in codes
+    assert "ops-malformed" in codes
 
 
 def test_compute_issues_returns_stuck_when_state_is_scaffolding(tmp_path):

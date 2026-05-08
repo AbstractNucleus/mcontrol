@@ -61,6 +61,11 @@
 
   {% include "_bindings_card.html" %}
 
+  <section id="server-players"
+           hx-get="/servers/{{ server.name }}/players"
+           hx-trigger="load"
+           hx-swap="outerHTML"></section>
+
   <section class="files-pane" data-server-name="{{ server.name }}">
     <p class="t-eyebrow files-pane__eyebrow">
       Files

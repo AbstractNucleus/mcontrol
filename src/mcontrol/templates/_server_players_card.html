@@ -1,0 +1,88 @@
+<section class="players-card" id="server-players">
+  <header class="players-card__head">
+    <p class="t-eyebrow">Players</p>
+    {% if running %}
+      <span class="t-caption">live (RCON)</span>
+    {% else %}
+      <span class="t-caption">offline (file edit)</span>
+    {% endif %}
+  </header>
+
+  {% if flash %}
+    <p class="players-card__flash players-card__flash--{{ flash.kind }}">
+      {{ flash.message }}
+    </p>
+  {% endif %}
+
+  {% if 'whitelist' in malformed %}
+    <p class="players-card__flash players-card__flash--error">
+      whitelist.json failed to parse — fix it via the Files panel before
+      adding or removing players.
+    </p>
+  {% endif %}
+  {% if 'ops' in malformed %}
+    <p class="players-card__flash players-card__flash--error">
+      ops.json failed to parse — fix it via the Files panel before
+      adding or removing ops.
+    </p>
+  {% endif %}
+
+  {% if members %}
+    <table class="players-card__table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Whitelist</th>
+          <th>Op</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in members %}
+          <tr>
+            <td><code>{{ m.name }}</code></td>
+            <td>
+              <form hx-post="/servers/{{ server.name }}/players/{{ m.uuid }}/whitelist"
+                    hx-target="#server-players"
+                    hx-swap="outerHTML"
+                    class="players-card__toggle">
+                <input type="hidden" name="enabled" value="{{ '0' if m.in_whitelist else '1' }}">
+                <input type="checkbox"
+                       {% if m.in_whitelist %}checked{% endif %}
+                       onchange="this.form.requestSubmit()">
+              </form>
+            </td>
+            <td>
+              <form hx-post="/servers/{{ server.name }}/players/{{ m.uuid }}/op"
+                    hx-target="#server-players"
+                    hx-swap="outerHTML"
+                    class="players-card__toggle">
+                <input type="hidden" name="enabled" value="{{ '0' if m.in_op else '1' }}">
+                <input type="checkbox"
+                       {% if m.in_op %}checked{% endif %}
+                       onchange="this.form.requestSubmit()">
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="t-muted">No players on this server yet.</p>
+  {% endif %}
+
+  <form class="players-card__add"
+        hx-post="/servers/{{ server.name }}/players"
+        hx-target="#server-players"
+        hx-swap="outerHTML">
+    <label class="t-caption" for="players-card-roster-{{ server.name }}">
+      Add from roster (whitelist)
+    </label>
+    <select id="players-card-roster-{{ server.name }}" name="roster_uuid" required>
+      <option value="" disabled selected>Pick a player…</option>
+      {% for p in roster %}
+        <option value="{{ p.uuid }}">{{ p.name }}</option>
+      {% endfor %}
+    </select>
+    <button class="players-card__add-btn" type="submit">Add</button>
+  </form>
+</section>

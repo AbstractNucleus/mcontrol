@@ -16,3 +16,4 @@ Thumbs.db
 
 # Claude Code per-project workspace (session worktrees, scratch state).
 .claude/worktrees/
+.claude/*.lock

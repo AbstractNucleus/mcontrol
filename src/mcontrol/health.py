@@ -1,14 +1,22 @@
 """Per-server scaffold-integrity checks for the detail-page health banner.
 
-Three issue types ship in slice 6 PR 3:
+Issue types:
 
-  - stuck-scaffolding   — row stuck in state='scaffolding'; PR 2's
-                          insert succeeded but the scaffold-files
-                          step did not.
+  - stuck-scaffolding     — row stuck in state='scaffolding'; PR 2's
+                            insert succeeded but the scaffold-files
+                            step did not. (Slice 6 PR 3.)
   - missing-scaffold-file — compose or start_server.sh absent on disk.
-  - variables-incomplete — rendering the templates against the row's
-                           variables JSONB raises (KeyError or
-                           jinja2.UndefinedError).
+                            (Slice 6 PR 3.)
+  - variables-incomplete  — rendering the templates against the row's
+                            variables JSONB raises (KeyError or
+                            jinja2.UndefinedError). (Slice 6 PR 3.)
+  - whitelist-malformed   — server/whitelist.json is not valid
+                            list-of-objects JSON. (Slice 7 PR 2 — runs
+                            on legacy rows too, since whitelist/ops are
+                            disk-only and apply regardless of scaffold
+                            state per decision 027.)
+  - ops-malformed         — server/ops.json is not valid list-of-objects
+                            JSON. (Slice 7 PR 2.)
 
 Computed on every detail-page render, never stored. PR 4 (Regenerate)
 also calls compute_scripts_stale to gate its button.
@@ -19,7 +27,7 @@ from typing import Any
 
 from jinja2 import UndefinedError
 
-from mcontrol import scaffolding
+from mcontrol import membership, scaffolding
 
 
 def _compose_path(server: dict[str, Any]) -> Path:
@@ -43,17 +51,47 @@ def variables_render_error(server: dict[str, Any]) -> str | None:
     return None
 
 
-def compute_issues(server: dict[str, Any]) -> list[dict[str, str]]:
-    """Return a list of {code, message} dicts for the health banner.
+def _membership_issues(server: dict[str, Any]) -> list[dict[str, str]]:
+    """Membership-file checks. Run on every server (legacy + scaffolded);
+    decision 027 makes the whitelist/ops affordances apply uniformly."""
+    issues: list[dict[str, str]] = []
+    server_dir = Path(server["dir"])
+    try:
+        membership.read_whitelist(server_dir)
+    except membership.MalformedFileError as exc:
+        issues.append(
+            {
+                "code": "whitelist-malformed",
+                "message": (
+                    f"server/whitelist.json failed to parse ({exc}). Fix it via "
+                    "the Files panel before adding or removing players."
+                ),
+            }
+        )
+    try:
+        membership.read_ops(server_dir)
+    except membership.MalformedFileError as exc:
+        issues.append(
+            {
+                "code": "ops-malformed",
+                "message": (
+                    f"server/ops.json failed to parse ({exc}). Fix it via the "
+                    "Files panel before adding or removing ops."
+                ),
+            }
+        )
+    return issues
 
-    Empty for legacy (non-scaffolded) rows — those are operator-managed
-    via the slice-5 file browser and have no scaffold contract to check.
-    """
+
+def compute_issues(server: dict[str, Any]) -> list[dict[str, str]]:
+    """Return a list of {code, message} dicts for the health banner."""
+    issues: list[dict[str, str]] = list(_membership_issues(server))
+
     if server.get("scaffolded_at") is None:
-        return []
+        return issues
 
     if server.get("state") == "scaffolding":
-        return [
+        issues.append(
             {
                 "code": "stuck-scaffolding",
                 "message": (
@@ -61,9 +99,8 @@ def compute_issues(server: dict[str, Any]) -> list[dict[str, str]]:
                     "not. Delete the row and try again."
                 ),
             }
-        ]
-
-    issues: list[dict[str, str]] = []
+        )
+        return issues
 
     if not _compose_path(server).exists():
         issues.append(
