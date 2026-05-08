@@ -208,3 +208,120 @@ def test_container_name_for_falls_back_to_name_when_override_null():
 def test_container_name_for_uses_override_when_present():
     row = {"name": "atm10", "container_name": "atm10-prod"}
     assert db.container_name_for(row) == "atm10-prod"
+
+
+# ---------------------------------------------------------------------------
+# Player roster (slice 7 PR 0).
+# ---------------------------------------------------------------------------
+
+
+_NOTCH_UUID = "069a79f4-44e9-4726-a5be-fca90e38aaf5"
+
+
+def test_players_table_targets_app_mcontrol_players(env, monkeypatch):
+    client, _ = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+
+    db._players_table()
+
+    client.schema.assert_called_once_with("app_mcontrol")
+    client.schema.return_value.table.assert_called_once_with("players")
+
+
+def test_list_players_orders_by_name(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+    table.select.return_value.order.return_value.execute.return_value.data = [
+        {"uuid": _NOTCH_UUID, "name": "Notch"},
+    ]
+
+    rows = db.list_players()
+
+    table.select.assert_called_once_with("*")
+    table.select.return_value.order.assert_called_once_with("name")
+    assert rows == [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+
+
+def test_get_player_returns_first_row(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+    table.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {"uuid": _NOTCH_UUID, "name": "Notch"},
+    ]
+
+    row = db.get_player(_NOTCH_UUID)
+
+    table.select.return_value.eq.assert_called_once_with("uuid", _NOTCH_UUID)
+    assert row == {"uuid": _NOTCH_UUID, "name": "Notch"}
+
+
+def test_get_player_returns_none_when_missing(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+    table.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
+
+    assert db.get_player(_NOTCH_UUID) is None
+
+
+def test_insert_player_writes_uuid_and_name(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+
+    db.insert_player(uuid=_NOTCH_UUID, name="Notch")
+
+    table.insert.assert_called_once_with({"uuid": _NOTCH_UUID, "name": "Notch"})
+    table.insert.return_value.execute.assert_called_once_with()
+
+
+def test_delete_player_filters_on_uuid(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+
+    db.delete_player(_NOTCH_UUID)
+
+    table.delete.assert_called_once_with()
+    table.delete.return_value.eq.assert_called_once_with("uuid", _NOTCH_UUID)
+    table.delete.return_value.eq.return_value.execute.assert_called_once_with()
+
+
+def test_upsert_player_from_mojang_inserts_when_uuid_is_new(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+    # get_player returns None (not in roster).
+    table.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
+
+    result = db.upsert_player_from_mojang(uuid=_NOTCH_UUID, name="Notch")
+
+    table.insert.assert_called_once_with({"uuid": _NOTCH_UUID, "name": "Notch"})
+    table.update.assert_not_called()
+    assert result == {"created": True, "previous_name": None}
+
+
+def test_upsert_player_from_mojang_skips_update_when_name_unchanged(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+    table.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {"uuid": _NOTCH_UUID, "name": "Notch"},
+    ]
+
+    result = db.upsert_player_from_mojang(uuid=_NOTCH_UUID, name="Notch")
+
+    table.insert.assert_not_called()
+    table.update.assert_not_called()
+    assert result == {"created": False, "previous_name": "Notch"}
+
+
+def test_upsert_player_from_mojang_refreshes_name_when_it_differs(env, monkeypatch):
+    client, table = _fake_supabase_client()
+    monkeypatch.setattr(db, "_client_singleton", client)
+    table.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {"uuid": _NOTCH_UUID, "name": "OldNotch"},
+    ]
+
+    result = db.upsert_player_from_mojang(uuid=_NOTCH_UUID, name="NewNotch")
+
+    table.insert.assert_not_called()
+    args, _ = table.update.call_args
+    assert args == ({"name": "NewNotch"},)
+    table.update.return_value.eq.assert_called_once_with("uuid", _NOTCH_UUID)
+    assert result == {"created": False, "previous_name": "OldNotch"}
