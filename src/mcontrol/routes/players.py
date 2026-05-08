@@ -1,30 +1,39 @@
-"""Central Players page (slice 7 PR 3).
+"""Central Players page (slice 7 PR 3 + PR 4).
 
-  GET  /players          → roster + per-row "Whitelisted on / Op on" summary,
-                           plus the "N memberships on disk for unknown UUIDs"
-                           Import affordance.
-  POST /players          → form: name → Mojang lookup → upsert players row.
-                           Decision 027 outcomes:
-                             204            → "no Minecraft account with that name"
-                             5xx / timeout  → "Mojang lookup failed; try again"
-                             200, new UUID  → "Added <Name> to the roster"
-                             200, same name → "<Name> is already in the roster"
-                             200, diff name → "<Name> is already in the roster (was: <Old>)"
-  POST /players/import   → walk every server's whitelist.json + ops.json,
-                           upsert UUIDs not already in the roster. Returns
-                           the count newly inserted as a flash.
+  GET  /players                    → roster + per-row "Whitelisted on / Op on"
+                                     summary, plus the "N memberships on disk
+                                     for unknown UUIDs" Import affordance.
+  POST /players                    → form: name → Mojang lookup → upsert.
+                                     Decision 027 outcomes:
+                                       204            → "no Minecraft account with that name"
+                                       5xx / timeout  → "Mojang lookup failed; try again"
+                                       200, new UUID  → "Added <Name> to the roster"
+                                       200, same name → "<Name> is already in the roster"
+                                       200, diff name → "<Name> is already in the roster
+                                                         (was: <Old>)"
+  POST /players/import             → walk every server's whitelist.json + ops.json,
+                                     upsert UUIDs not already in the roster.
 
-The Add and Import flows return the page partial (``_players_main.html``)
-so HTMX swaps the section in place. GET returns the full page.
+  GET  /players/{uuid}/remove      → cascade-confirm modal (PR 4).
+  POST /players/{uuid}/remove      → form: scope ∈ {roster, all}.
+                                     scope=roster: hard-delete the row only.
+                                     scope=all:    cascade through every server
+                                                   where this UUID has a
+                                                   membership, then hard-delete.
+
+The Add / Import / Remove flows return the page partial
+(``_players_main.html``) so HTMX swaps the section in place. GET
+returns the full page.
 """
 
 import re
 from pathlib import Path
+from uuid import UUID
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import __version__, db, membership, mojang, server_props
+from mcontrol import __version__, db, membership, mojang, server_props, server_rcon
 from mcontrol.templates import templates
 
 router = APIRouter()
@@ -213,3 +222,162 @@ async def import_unknown(request: Request) -> HTMLResponse:
         "message": f"Imported {len(new_rows)} new player(s) from disk.",
     }
     return _partial(request, _ctx(_build_view(), flash=flash))
+
+
+# ---------------------------------------------------------------------------
+# Cascade-remove modal + handler (PR 4)
+# ---------------------------------------------------------------------------
+
+
+def _validate_uuid(value: str) -> str:
+    try:
+        return str(UUID(value))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="invalid uuid") from exc
+
+
+def _player_or_404(uuid: str) -> dict:
+    player = db.get_player(uuid)
+    if player is None:
+        raise HTTPException(status_code=404, detail="Player not found")
+    return player
+
+
+def _memberships_for(uuid: str) -> list[dict]:
+    """Pre-scan every server for memberships matching ``uuid``."""
+    server_rows = db.list_servers()
+    return [m for m in membership.scan_memberships(server_rows) if m["uuid"] == uuid]
+
+
+@router.get("/players/{uuid}/remove", response_class=HTMLResponse)
+async def remove_modal(request: Request, uuid: str) -> HTMLResponse:
+    uuid = _validate_uuid(uuid)
+    player = _player_or_404(uuid)
+    memberships = _memberships_for(uuid)
+    return templates.TemplateResponse(
+        request=request,
+        name="_player_remove_modal.html",
+        context={"player": player, "memberships": memberships},
+    )
+
+
+async def _cascade_remove(player: dict) -> tuple[list[str], list[dict]]:
+    """Run a per-server remove for every server where this UUID has a
+    membership. Returns ``(removed_from, failures)`` where:
+
+      ``removed_from`` is a list of ``"<server_name> (<kind>)"`` strings.
+      ``failures``     is a list of ``{server_name, kind, reason}`` dicts.
+
+    Best-effort: a failure on one leg doesn't abort the rest. The flash
+    message surfaces both lists so the operator can see exactly what
+    state ended up on disk.
+    """
+    uuid = player["uuid"]
+    name = player["name"]
+
+    server_rows = db.list_servers()
+    server_by_name = {s["name"]: s for s in server_rows}
+    memberships = [
+        m for m in membership.scan_memberships(server_rows) if m["uuid"] == uuid
+    ]
+
+    removed: list[str] = []
+    failures: list[dict] = []
+
+    for record in memberships:
+        kind = record["kind"]
+        server = server_by_name.get(record["server_name"])
+        if server is None:
+            # Server was deleted between scan and act — skip rather than
+            # raise, surface as a failure so the operator can investigate.
+            failures.append(
+                {
+                    "server_name": record["server_name"],
+                    "kind": kind,
+                    "reason": "server row vanished mid-cascade",
+                }
+            )
+            continue
+        try:
+            if server.get("state") == "running":
+                cmd = (
+                    f"whitelist remove {name}"
+                    if kind == "whitelist"
+                    else f"deop {name}"
+                )
+                await server_rcon.run_command(server, cmd)
+            else:
+                server_dir = Path(server["dir"])
+                if kind == "whitelist":
+                    membership.remove_whitelist_entry(server_dir, uuid=uuid)
+                else:
+                    membership.remove_op_entry(server_dir, uuid=uuid)
+            removed.append(f"{record['server_name']} ({kind})")
+        except server_rcon.RconUnavailable as exc:
+            failures.append(
+                {"server_name": record["server_name"], "kind": kind, "reason": str(exc)}
+            )
+        except membership.StaleWriteError:
+            failures.append(
+                {
+                    "server_name": record["server_name"],
+                    "kind": kind,
+                    "reason": "file changed mid-write — retry",
+                }
+            )
+        except membership.MalformedFileError as exc:
+            failures.append(
+                {
+                    "server_name": record["server_name"],
+                    "kind": kind,
+                    "reason": f"file failed to parse: {exc}",
+                }
+            )
+
+    return removed, failures
+
+
+def _cascade_flash(player_name: str, removed: list[str], failures: list[dict]) -> dict:
+    """Build the flash message for a scope=all remove. Format follows
+    decision 027 / the slice-7 plan: 'removed from A, B; remove from X
+    failed: <reason>'."""
+    parts: list[str] = []
+    if removed:
+        parts.append(f"Removed {player_name} from {', '.join(removed)}.")
+    if failures:
+        for f in failures:
+            parts.append(
+                f"Remove {player_name} from {f['server_name']} ({f['kind']}) "
+                f"failed: {f['reason']}."
+            )
+    if not parts:
+        parts.append(f"{player_name} had no memberships on disk.")
+    return {"kind": "error" if failures else "ok", "message": " ".join(parts)}
+
+
+@router.post("/players/{uuid}/remove", response_class=HTMLResponse)
+async def remove(
+    request: Request, uuid: str, scope: str = Form(...)
+) -> HTMLResponse:
+    uuid = _validate_uuid(uuid)
+    player = _player_or_404(uuid)
+
+    if scope == "roster":
+        db.delete_player(uuid)
+        flash = {
+            "kind": "ok",
+            "message": (
+                f"Removed {player['name']} from the roster. "
+                "On-disk memberships were not touched — they'll resurface as "
+                "'unknown UUIDs' on this page until you Import or remove them."
+            ),
+        }
+        return _partial(request, _ctx(_build_view(), flash=flash))
+
+    if scope == "all":
+        removed, failures = await _cascade_remove(player)
+        db.delete_player(uuid)
+        flash = _cascade_flash(player["name"], removed, failures)
+        return _partial(request, _ctx(_build_view(), flash=flash))
+
+    raise HTTPException(status_code=400, detail="scope must be 'roster' or 'all'")

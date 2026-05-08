@@ -1,0 +1,52 @@
+<div class="player-remove-modal" role="dialog" aria-labelledby="player-remove-title">
+  <div class="player-remove-modal__panel">
+    <h3 id="player-remove-title" class="t-h4">Remove {{ player.name }} from roster?</h3>
+
+    {% if memberships %}
+      <p class="t-body">This UUID currently appears on:</p>
+      <ul class="player-remove-modal__list">
+        {% for m in memberships %}
+          <li>
+            <a href="/servers/{{ m.server_name }}">{{ m.server_name }}</a>
+            <span class="t-caption">({{ m.kind }})</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="t-body">{{ player.name }} is not on any server's whitelist or ops list right now.</p>
+    {% endif %}
+
+    <div class="player-remove-modal__actions">
+      <form hx-post="/players/{{ player.uuid }}/remove"
+            hx-target="#players-main"
+            hx-swap="outerHTML"
+            class="player-remove-modal__form">
+        <input type="hidden" name="scope" value="roster">
+        <button type="submit" class="player-remove-modal__btn">
+          Roster only
+        </button>
+        <p class="t-caption">Removes the row only — disk is untouched.</p>
+      </form>
+
+      {% if memberships %}
+        <form hx-post="/players/{{ player.uuid }}/remove"
+              hx-target="#players-main"
+              hx-swap="outerHTML"
+              class="player-remove-modal__form">
+          <input type="hidden" name="scope" value="all">
+          <button type="submit"
+                  class="player-remove-modal__btn player-remove-modal__btn--danger">
+            Remove from all servers
+          </button>
+          <p class="t-caption">Runs whitelist remove / deop on each server, then deletes the row.</p>
+        </form>
+      {% endif %}
+
+      <button type="button"
+              class="player-remove-modal__btn"
+              onclick="this.closest('.player-remove-modal').remove()">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>

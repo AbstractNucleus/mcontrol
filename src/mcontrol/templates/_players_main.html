@@ -44,6 +44,7 @@
           <th>Name</th>
           <th>Whitelisted on</th>
           <th>Op on</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -64,6 +65,13 @@
                 <span class="t-muted">—</span>
               {% endif %}
             </td>
+            <td>
+              <a class="players-page__remove"
+                 href="#"
+                 hx-get="/players/{{ p.uuid }}/remove"
+                 hx-target="#player-modal"
+                 hx-swap="innerHTML">Remove</a>
+            </td>
           </tr>
         {% endfor %}
       </tbody>
@@ -73,4 +81,6 @@
       <p class="t-body">Roster is empty. Add a player by Minecraft name above, or — if any servers already have whitelist/ops entries on disk — use Import.</p>
     </div>
   {% endif %}
+
+  <div id="player-modal"></div>
 </section>
