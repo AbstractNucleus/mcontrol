@@ -1,0 +1,78 @@
+<section class="migrate-card" id="migrate-card">
+  <header class="migrate-card__head">
+    <p class="t-eyebrow">Legacy server</p>
+    <span class="t-caption">unmigrated</span>
+  </header>
+
+  <p class="t-body migrate-card__intro">
+    This server still uses the legacy Dockerfile + entrypoint shape.
+    Migrate to the scaffolded shape to enable the Variables card and Regenerate flow.
+  </p>
+
+  {% if legacy_filenames %}
+    <p class="t-caption migrate-card__legacy">
+      Will delete: {% for f in legacy_filenames %}<code>{{ f }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+      <code>docker-compose.yml</code> and <code>server/start_server.sh</code> are re-rendered from your form values.
+    </p>
+  {% endif %}
+
+  {% if error_banner %}
+    <p class="migrate-card__error">{{ error_banner }}</p>
+  {% endif %}
+
+  <form class="migrate-card__form"
+        hx-post="/servers/{{ server.name }}/migrate"
+        hx-target="#migrate-card"
+        hx-swap="outerHTML">
+    <label>
+      <span class="t-caption">memory budget (GB)</span>
+      <input type="number"
+             name="memory_budget_gb"
+             min="2"
+             value="{{ form.memory_budget_gb }}"
+             required>
+      <small class="t-caption migrate-card__hint">Drives <code>mem_limit</code> and <code>-Xmx</code> (= budget − 2 GB).</small>
+      {% if errors.memory_budget_gb %}<small class="migrate-card__error">{{ errors.memory_budget_gb }}</small>{% endif %}
+    </label>
+
+    <label>
+      <span class="t-caption">port</span>
+      <input type="number"
+             name="port"
+             min="1024"
+             max="65535"
+             value="{{ form.port }}"
+             required>
+      {% if errors.port %}<small class="migrate-card__error">{{ errors.port }}</small>{% endif %}
+    </label>
+
+    <label>
+      <span class="t-caption">server jar filename</span>
+      <input type="text"
+             name="server_jar"
+             value="{{ form.server_jar }}"
+             autocomplete="off"
+             required>
+      {% if errors.server_jar %}<small class="migrate-card__error">{{ errors.server_jar }}</small>{% endif %}
+    </label>
+
+    <label>
+      <span class="t-caption">jvm extra args (optional)</span>
+      <input type="text"
+             name="jvm_extra_args"
+             value="{{ form.jvm_extra_args }}"
+             autocomplete="off">
+      {% if errors.jvm_extra_args %}<small class="migrate-card__error">{{ errors.jvm_extra_args }}</small>{% endif %}
+    </label>
+
+    <div class="migrate-card__actions">
+      {% if running %}
+        <button type="submit" class="migrate-card__btn" disabled
+                title="Stop the server before migrating.">Migrate to scaffolded shape</button>
+        <small class="t-caption migrate-card__hint">Stop the server first.</small>
+      {% else %}
+        <button type="submit" class="migrate-card__btn">Migrate to scaffolded shape</button>
+      {% endif %}
+    </div>
+  </form>
+</section>

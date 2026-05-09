@@ -944,3 +944,76 @@ body {
   cursor: not-allowed;
   opacity: 0.6;
 }
+
+/* ---- Migrate card (legacy → scaffolded; slice 8) ------------------ */
+.migrate-card {
+  background: var(--sub-alt-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-6);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.migrate-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.migrate-card__intro {
+  margin: 0;
+}
+
+.migrate-card__legacy {
+  color: var(--sub-color);
+  margin: 0;
+}
+
+.migrate-card__form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.migrate-card__form label {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.migrate-card__form input {
+  background: var(--bg-color);
+  border: 1px solid var(--sub-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-color);
+  padding: var(--space-2) var(--space-3);
+}
+
+.migrate-card__hint {
+  color: var(--sub-color);
+}
+
+.migrate-card__error {
+  color: var(--error-color);
+  font-size: var(--fs-sm);
+}
+
+.migrate-card__actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.migrate-card__btn {
+  background: transparent;
+  border: 1px solid var(--main-color);
+  border-radius: var(--radius-sm);
+  color: var(--main-color);
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+}
+
+.migrate-card__btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

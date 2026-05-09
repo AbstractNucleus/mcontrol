@@ -57,6 +57,11 @@
 
   {% if server.scaffolded_at %}
     {% include "_variables_card.html" %}
+  {% else %}
+    <section id="migrate-card"
+             hx-get="/servers/{{ server.name }}/migrate"
+             hx-trigger="load"
+             hx-swap="outerHTML"></section>
   {% endif %}
 
   {% include "_bindings_card.html" %}
