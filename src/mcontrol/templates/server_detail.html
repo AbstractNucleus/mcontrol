@@ -29,6 +29,11 @@
     </div>
   </div>
 
+  <section id="server-resources"
+           hx-get="/servers/{{ server.name }}/resources"
+           hx-trigger="load, every 5s"
+           hx-swap="outerHTML"></section>
+
   <dl class="server-detail">
     <dt class="t-caption">directory</dt>
     <dd><code>{{ server.dir }}</code></dd>

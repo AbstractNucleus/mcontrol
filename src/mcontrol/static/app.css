@@ -143,6 +143,39 @@ body {
   color: var(--main-color);
 }
 
+/* ---- Resources card ------------------------------------------------ */
+.resources-card {
+  margin-top: var(--space-2);
+  padding: var(--space-4) var(--space-6);
+  background: var(--sub-alt-color);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.resources-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.resources-card__body {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: var(--space-6);
+  row-gap: var(--space-2);
+  margin: 0;
+}
+
+.resources-card__body dt,
+.resources-card__body dd {
+  margin: 0;
+}
+
+.resources-card__caption {
+  margin: 0;
+}
+
 /* ---- Bindings card ------------------------------------------------- */
 .bindings-card {
   margin-top: var(--space-8);
