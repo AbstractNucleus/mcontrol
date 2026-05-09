@@ -46,6 +46,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 025 | Regenerate clobbers against the confirmed diff; mtime drift aborts | Accepted | 2026-05-05 |
 | 026 | Delete tombstones; discovery skips `.`-prefixed dirs | Accepted | 2026-05-05 |
 | 027 | DB-backed player roster; disk-only per-server membership | Accepted | 2026-05-08 |
+| 028 | One-shot legacy-to-scaffold migration; no dual-shape framework | Accepted | 2026-05-09 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -428,3 +429,26 @@ Rejected:
 - **Online-mode-and-offline-mode support.** The fleet runs online-mode-only and there's no signal of an offline-mode server appearing. Mojang lookup is a hard dependency for adds; a future slice can add offline-UUID derivation if it ever matters.
 
 Trade-off: roster-add depends on Mojang reachability — operator can't register new players when Mojang is down. Acceptable: rare, transient, and the failure surfaces cleanly. Render-time disk reads on every Players page hit cost ~6 file opens at single-host scale; acceptable. The cascade modal is more code than a one-button delete, but it's the difference between a panel that surprises the operator and one that doesn't. The roster table itself is one-column-shy of trivial; bumping its schema later (e.g. adding a `notes` column for "this is Bob's friend, OK to op") is a small migration whenever the need is felt.
+
+## 028. One-shot legacy-to-scaffold migration; no dual-shape framework
+
+**Status:** Accepted · 2026-05-09
+
+The legacy itzg-shaped servers (`atm10`, `monifactory`; `kobra_kollektivet` excluded by operator stance per decision 014) are converted to the slice-6 scaffold shape **per server, on operator click, one-way**. The detail page surfaces a "Legacy server — Migrate to scaffolded shape" card whenever `scaffolded_at IS NULL`. The form is pre-populated by a best-effort regex parse of the legacy `server/start_server.sh` and `docker-compose.yml`; the operator confirms the values and clicks Migrate. POST renders both scaffold templates, atomic-writes `<dir>/docker-compose.yml` + `<dir>/server/start_server.sh` (chmod 0o755), unlinks `<dir>/Dockerfile` + `<dir>/entrypoint.sh` + `<dir>/.dockerignore` + `<dir>/.env` (each `missing_ok=True`), then writes `variables` JSONB and stamps `scaffolded_at = now()`. Once stamped, the row is treated identically to a slice-6 scaffolded row for the rest of its life — Variables card, Regenerate, and Delete behave the same; the migration card never reappears.
+
+The migration runs **only when state ≠ 'running'**: the button is disabled when running, the POST endpoint re-checks state at request time and returns 409 on race, mirroring the Delete flow's pre-flight (decision 026). RCON has no pre-flight — decision 024 puts `rcon.password` in `server.properties` as operator territory, and the legacy fleet's hardcoded `RCON_PASSWORD=rconer` env var was inert under the override-entrypoint pattern.
+
+This decision lands the **outcome** of decision 014 (atm10 + monifactory running on temurin under mcontrol-managed config) via the **mechanism** of decision 023 (no-Dockerfile scaffold model). 014 is unchanged in intent; 023's scaffold layout is the migration target shape; 024's RCON posture forces the `.env` cleanup that goes alongside.
+
+Rejected:
+- **Dual-shape support — keep "legacy mode" as a parallel code path.** A feature flag or `if not scaffolded_at` branch through every lifecycle/regenerate/variables surface multiplies code by 2× for an operator stance that is "convert all three rows once and never look back" (decision 014's framing). The convergence is the point.
+- **Auto-run migration on app startup or discovery.** Decision 014 originally framed it as a "first import pass"; that framing predates 023's destructive (file-deleting) mechanism. Auto-run for a destructive op without an explicit click is the wrong default.
+- **Bulk migrate from the home page.** Two clicks on two rows is not a felt pain; bulk would mostly multiply blast radius.
+- **CLI subcommand.** The detail page is the natural workflow surface; a CLI would duplicate the same DB + file ops behind a second entry point. Add only if the panel is ever unreachable when the migration is wanted.
+- **Diff preview before clobber.** The migration is wholesale replacement, not a targeted edit; the rendered output is deterministic from the operator's form values and the legacy bytes are about to be replaced wholesale. Slice-6's Regenerate flow (decision 025) covers any post-migration edits via the diff-and-clobber checkpoint.
+- **Rollback button.** One-way. Reverting means restoring the deleted `Dockerfile` + `entrypoint.sh` + `.dockerignore` + `.env` from the operator's own backup or git history; that's outside the panel's responsibility.
+- **Migration transaction wrapping the whole flow.** File ops can't participate in a Postgres transaction. The natural ordering — render templates → atomic-write target files → unlink legacy → DB stamp — makes each step idempotent on retry, and the final `mark_scaffolded` call is the canonical "this row is migrated" signal.
+
+Trade-off: a row whose file ops succeeded but whose `mark_scaffolded` call failed sits in a temporarily-mixed state on disk (legacy files gone, scaffold files written) but is still flagged legacy in the DB. The card stays visible; the operator re-clicks Migrate and the idempotent flow re-converges on the same end state. Accepted because the alternative — an automatic rollback that recreates `Dockerfile` + `entrypoint.sh` from the panel — is impossible without source bytes the panel never stored.
+
+This entry forecloses the dual-shape exit ramp once and for all: future slices that touch lifecycle, scaffolding, regenerate, or files do **not** branch on `scaffolded_at`. After this slice lands, every row in the fleet is either pre-migration (no-op until clicked) or post-migration (slice-6-shape, period).

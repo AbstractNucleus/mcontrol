@@ -14,6 +14,7 @@ from mcontrol.routes import (
     home,
     lifecycle,
     logs,
+    migrate,
     new_server,
     players,
     regenerate,
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(bindings.router)
     app.include_router(variables.router)
     app.include_router(regenerate.router)
+    app.include_router(migrate.router)
     app.include_router(delete_server.router)
     app.include_router(files.router)
     app.include_router(server_players.router)
