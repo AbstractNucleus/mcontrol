@@ -1,0 +1,37 @@
+<section class="resources-card"
+         id="server-resources"
+         hx-get="/servers/{{ server.name }}/resources"
+         hx-trigger="load, every 5s"
+         hx-swap="outerHTML">
+  <header class="resources-card__head">
+    <p class="t-eyebrow">Resources</p>
+  </header>
+  <dl class="resources-card__body">
+    <dt class="t-caption">CPU</dt>
+    <dd>
+      {% if ok %}
+        {{ "%.1f"|format(cpu_percent) }} %
+      {% else %}
+        <span class="t-muted">—</span>
+      {% endif %}
+    </dd>
+    <dt class="t-caption">Memory</dt>
+    <dd>
+      {% if ok %}
+        {{ format_bytes(mem_used) }} / {{ format_bytes(mem_limit) }}
+        <span class="t-muted">({{ "%.0f"|format(mem_percent) }} %)</span>
+      {% else %}
+        <span class="t-muted">—</span>
+      {% endif %}
+    </dd>
+    <dt class="t-caption">Disk</dt>
+    <dd>{{ disk_human }}</dd>
+  </dl>
+  <p class="resources-card__caption t-caption">
+    {% if ok %}
+      updated {{ updated_at }} (every 5 s)
+    {% else %}
+      {{ caption }}
+    {% endif %}
+  </p>
+</section>
