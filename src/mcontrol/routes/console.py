@@ -23,7 +23,7 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 
-from mcontrol import db, docker_client, rcon
+from mcontrol import db, docker_client, rcon, server_props
 
 router = APIRouter()
 
@@ -46,21 +46,9 @@ def _read_rcon_properties(props_path: Path) -> tuple[bool, str]:
     `enabled` is True iff `enable-rcon=true`. `password` is the
     `rcon.password=` value, or "" if absent. Missing file → (False, "").
     """
-    if not props_path.exists():
-        return False, ""
-    enabled = False
-    password = ""
-    for raw_line in props_path.read_text().splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip()
-        if key == "enable-rcon":
-            enabled = value.lower() == "true"
-        elif key == "rcon.password":
-            password = value
+    props = server_props.read_properties(props_path)
+    enabled = props.get("enable-rcon", "").lower() == "true"
+    password = props.get("rcon.password", "")
     return enabled, password
 
 
