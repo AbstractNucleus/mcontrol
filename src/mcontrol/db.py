@@ -43,6 +43,13 @@ def list_servers() -> list[dict[str, Any]]:
     return response.data
 
 
+def ping() -> None:
+    """Cheapest read that proves PostgREST is up and the schema is
+    reachable: a head-only count against ``servers``. Raises on failure;
+    returns ``None`` on success. Used by /healthz (slice 11)."""
+    _table().select("name", count="exact", head=True).limit(1).execute()
+
+
 def get_server(name: str) -> dict[str, Any] | None:
     response = _table().select("*").eq("name", name).limit(1).execute()
     return response.data[0] if response.data else None

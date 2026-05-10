@@ -3,9 +3,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from mcontrol import discovery
+from mcontrol import discovery, healthz
 from mcontrol.routes import (
     bindings,
     console,
@@ -70,8 +71,9 @@ def create_app() -> FastAPI:
     app.include_router(players.router)
 
     @app.get("/healthz")
-    async def healthz() -> dict[str, str]:
-        return {"status": "ok"}
+    async def healthz_endpoint() -> JSONResponse:
+        status_code, payload = await healthz.build_report()
+        return JSONResponse(status_code=status_code, content=payload)
 
     return app
 
