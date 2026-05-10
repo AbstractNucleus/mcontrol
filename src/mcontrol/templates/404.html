@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Not found — mcontrol{% endblock %}
+
+{% block main %}
+<section class="error-page">
+  <p class="error-page__code">404</p>
+  <h1 class="error-page__title">Not found</h1>
+  <p class="error-page__body">
+    {% if detail %}
+      {{ detail }}
+    {% else %}
+      The page you're looking for doesn't exist on this panel.
+    {% endif %}
+  </p>
+  <div class="error-page__actions">
+    <a class="btn btn--primary" href="/">Back to servers</a>
+  </div>
+</section>
+{% endblock %}

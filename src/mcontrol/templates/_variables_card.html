@@ -12,23 +12,23 @@
   {% endif %}
   {% set vars = server.variables or {} %}
   <dl class="variables-card__body">
-    <dt class="t-caption">memory budget (GB)</dt>
-    <dd>{% if 'memory_budget_gb' in vars %}<code>{{ vars.memory_budget_gb }}</code>{% else %}<span class="t-muted">—</span>{% endif %}</dd>
+    <dt>Memory budget (GB)</dt>
+    <dd>{% if 'memory_budget_gb' in vars %}{{ vars.memory_budget_gb }}{% else %}<span class="t-muted">—</span>{% endif %}</dd>
 
-    <dt class="t-caption">port</dt>
-    <dd>{% if 'port' in vars %}<code>{{ vars.port }}</code>{% else %}<span class="t-muted">—</span>{% endif %}</dd>
+    <dt>Port</dt>
+    <dd>{% if 'port' in vars %}{{ vars.port }}{% else %}<span class="t-muted">—</span>{% endif %}</dd>
 
-    <dt class="t-caption">server jar</dt>
-    <dd>{% if 'server_jar' in vars %}<code>{{ vars.server_jar }}</code>{% else %}<span class="t-muted">—</span>{% endif %}</dd>
+    <dt>Server jar</dt>
+    <dd>{% if 'server_jar' in vars %}{{ vars.server_jar }}{% else %}<span class="t-muted">—</span>{% endif %}</dd>
 
-    <dt class="t-caption">jvm extra args</dt>
-    <dd>{% if vars.jvm_extra_args %}<code>{{ vars.jvm_extra_args }}</code>{% else %}<span class="t-muted">—</span>{% endif %}</dd>
+    <dt>JVM extra args</dt>
+    <dd>{% if vars.jvm_extra_args %}{{ vars.jvm_extra_args }}{% else %}<span class="t-muted">—</span>{% endif %}</dd>
   </dl>
   {% if scripts_stale %}
-    <p class="variables-card__stale t-caption">
+    <p class="variables-card__stale">
       Scripts on disk differ from current variables.
     </p>
-    <a class="variables-card__edit"
+    <a class="btn btn--sm btn--ghost"
        hx-get="/servers/{{ server.name }}/regenerate"
        hx-target="#variables"
        hx-swap="outerHTML"

@@ -4,7 +4,7 @@ Extracted from `admin_management`.
 
 See [`research/2026-04-26-minecraft-and-docker-control-panels/`](research/2026-04-26-minecraft-and-docker-control-panels/README.md) for the panel-landscape research that informs the build direction, and [`docs/decisions.md`](docs/decisions.md) for the decisions register that follows from it.
 
-UI uses [`AbstractNucleus/design`](https://github.com/AbstractNucleus/design) as the design palette — warm paper, rust accent, monospaced throughout.
+UI is a Claude-flavoured theme (decision 032) with full dark + light mode support — warm cream `#FAF9F5` page in light mode, near-black `#141413` in dark mode, terracotta `#D97757` accent, Inter-Tight body type with mono kept for code/log/RCON. Tokens live in `src/mcontrol/static/tokens.css`. The reference notes that informed the palette are at [`docs/research/2026-05-10-claude-theme/`](docs/research/2026-05-10-claude-theme/).
 
 ## Local development
 
@@ -28,12 +28,6 @@ Lint:
 
 ```bash
 uv run ruff check .
-```
-
-Re-pull the AbstractNucleus design tokens:
-
-```bash
-./scripts/sync_design.sh
 ```
 
 ## Deployment

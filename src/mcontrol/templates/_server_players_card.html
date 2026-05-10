@@ -2,9 +2,9 @@
   <header class="players-card__head">
     <p class="t-eyebrow">Players</p>
     {% if running %}
-      <span class="t-caption">live (RCON)</span>
+      <span class="state-pill state-pill--running">live (RCON)</span>
     {% else %}
-      <span class="t-caption">offline (file edit)</span>
+      <span class="state-pill state-pill--unknown">offline (file edit)</span>
     {% endif %}
   </header>
 
@@ -48,7 +48,8 @@
                 <input type="hidden" name="enabled" value="{{ '0' if m.in_whitelist else '1' }}">
                 <input type="checkbox"
                        {% if m.in_whitelist %}checked{% endif %}
-                       onchange="this.form.requestSubmit()">
+                       onchange="this.form.requestSubmit()"
+                       aria-label="Whitelist {{ m.name }}">
               </form>
             </td>
             <td>
@@ -59,7 +60,8 @@
                 <input type="hidden" name="enabled" value="{{ '0' if m.in_op else '1' }}">
                 <input type="checkbox"
                        {% if m.in_op %}checked{% endif %}
-                       onchange="this.form.requestSubmit()">
+                       onchange="this.form.requestSubmit()"
+                       aria-label="Op {{ m.name }}">
               </form>
             </td>
           </tr>
@@ -74,7 +76,7 @@
         hx-post="/servers/{{ server.name }}/players"
         hx-target="#server-players"
         hx-swap="outerHTML">
-    <label class="t-caption" for="players-card-roster-{{ server.name }}">
+    <label for="players-card-roster-{{ server.name }}">
       Add from roster (whitelist)
     </label>
     <select id="players-card-roster-{{ server.name }}" name="roster_uuid" required>
@@ -83,6 +85,6 @@
         <option value="{{ p.uuid }}">{{ p.name }}</option>
       {% endfor %}
     </select>
-    <button class="players-card__add-btn" type="submit">Add</button>
+    <button type="submit" class="btn btn--primary">Add</button>
   </form>
 </section>

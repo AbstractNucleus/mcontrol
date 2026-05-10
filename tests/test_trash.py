@@ -42,7 +42,11 @@ async def test_get_trash_renders_empty_state_when_no_tombstones(trash_client):
     assert response.status_code == 200
     body = response.text
     assert "Trash" in body
-    assert "No tombstones" in body
+    # Slice 12 reshaped the empty copy: "Trash is empty" / "Deleted
+    # servers land here automatically." The "Deleted servers"
+    # phrase is the stable signal — present in both old and new copy.
+    assert "Trash is empty" in body
+    assert "Deleted servers land here" in body
 
 
 async def test_get_trash_lists_tombstones_with_age_and_bytes(trash_client):

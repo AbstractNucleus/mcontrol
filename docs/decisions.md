@@ -50,6 +50,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 029 | Drop dormant `rcon_password` + `image_base` columns          | Accepted | 2026-05-10 |
 | 030 | Deep `/healthz`: per-subsystem probe with 503-on-degraded    | Accepted | 2026-05-10 |
 | 031 | Empty-trash affordance: tombstone purge with 7-day default   | Accepted | 2026-05-10 |
+| 032 | Claude-flavoured theme; semantic tokens; tri-state dark/light | Accepted | 2026-05-10 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -63,7 +64,7 @@ Trade-off: we give up itzg's auto-install, modloader detection, and modpack `TYP
 
 ## 002. UI palette: `AbstractNucleus/design`
 
-**Status:** Accepted · 2026-04-26
+**Status:** Superseded by 032 · 2026-04-26
 
 The panel UI consumes design tokens and components from [`AbstractNucleus/design`](https://github.com/AbstractNucleus/design): warm paper background, rust accent, monospaced typography throughout.
 
@@ -538,3 +539,39 @@ Rejected:
 - **Folding the logic into `main.py`.** `main.py` is the wiring shell; logic lives in modules so it's testable in isolation without `httpx.ASGITransport` ceremony.
 
 Trade-off: every `/healthz` hit costs three concurrent probes against three subsystems. At nginx's typical health-check interval (~5–30 s) this is irrelevant; if a future monitoring tool ever scrapes at 1 s cadence, the deferred-cache exit ramp above is the answer. The 250 ms timeout is a single human-perceptible blink; under normal conditions the endpoint returns in well under 100 ms. The endpoint's correctness contract — "200 iff the panel can actually serve" — is what justifies paying that cost on every request.
+
+## 032. Claude-flavoured theme; semantic tokens; tri-state dark/light
+
+**Status:** Accepted · 2026-05-10
+
+The panel adopts a Claude-flavoured theme: warm-cream `#FAF9F5` page surface in light mode, near-black `#141413` page surface in dark mode, terracotta `#D97757` accent used sparingly, Inter Tight humanist sans for body/UI, mono kept for code/log/RCON. The CSS contract is a two-layer token system: a primitive layer and a semantic layer (`--bg-page`, `--bg-surface`, `--bg-sunken`, `--fg-primary`, `--fg-secondary`, `--fg-muted`, `--accent`, `--success`, `--warning`, `--danger`, `--border-soft`, `--border-medium`, `--border-strong`, `--ring`, etc.). Components consume the semantic layer only; every hex sits in `tokens.css`. Theme switching is a tri-state operator pref (system / light / dark) persisted to `localStorage` and applied via a `data-theme` attribute on `<html>`. A small inline `<head>` script bootstraps the attribute before stylesheets evaluate to prevent flash-of-wrong-theme; an `@media (prefers-color-scheme: dark)` block is the JS-off fallback. The toggle is a segmented sun/moon/monitor control in the page-chrome top-right.
+
+This supersedes **decision 002**. 002 pinned the panel to `AbstractNucleus/design`'s shared tokens — warm paper, rust accent, monospaced throughout — for sibling-tool consistency. The trade-off was real: visual changes ripple from one place across `mcontrol` and any sibling tools that adopt the palette. The supersession is a deliberate stance reversal: cohesion-with-siblings was a hypothetical benefit (no other tool has actually adopted the AbstractNucleus tokens), and the cost — a uniformly-mono panel reading as "ops-tool-from-2008" rather than "panel from someone who builds on Claude" — became the felt cost. The new goal is a polished, identifiably-Anthropic single-app surface; sibling-tool consistency is no longer a constraint.
+
+`scripts/sync_design.sh` and the AbstractNucleus token-source pointer are removed. The new `tokens.css` is a hand-authored file in this repo, owned here, bumped by PRs against this repo. If a sibling tool ever wants to consume the new tokens, the right mechanism is to copy the relevant subset into that tool — not to point both at a third-party source. Single source of truth per app; theming is a per-app concern.
+
+Type stack: `Inter Tight` for body and UI with a humanist-sans system fallback chain (`-apple-system`, `BlinkMacSystemFont`, `"Segoe UI"`, `system-ui`, `sans-serif`); `ui-monospace` family for code, RCON output, log streams, tabular numerals, and identifier-shaped values like server names + container IDs. No serif accent — claude.ai's chat surface is sans throughout; a serif headline would feel marketing-flavoured against a control panel. Self-host or CDN are both acceptable; the stack falls through to the OS font cleanly when neither is present, so first paint is correct without a network round-trip.
+
+Surface coverage contract: every rendered element has a deliberate token assignment. The audit identified two pages (`/players`, `/trash`) and several partials (`_players_main.html`, `_player_remove_modal.html`, `_server_players_card.html`, `_trash_*.html`) where CSS classes existed in markup but had no matching rules in `app.css` — those pages rendered as bare unstyled HTML. Slice 12 closes the gap: every class referenced by a template has a rule. New empty-state designs land for home / players / trash / per-server-detail panes that previously fell back to a `<p>` of plain prose. Custom 404 and 500 templates land alongside.
+
+Tri-state toggle UX rationale: binary toggle is simpler (~10 fewer LOC) but loses the operator who switches between light-OS-by-day and dark-OS-by-night, who would have to manually flip the panel each time. Tri-state default = "system" matches `prefers-color-scheme`; the operator only ever has to interact with the control if they want to override. Persistence is per-browser via `localStorage`, not per-account; the operator-as-implicit-user contract from decision 011 means there is no user account to attach a server-side preference to. Per-device override is the right granularity.
+
+Focus-ring posture: rings are a near-black-or-near-white at 70% opacity, two-pixel solid outline with two-pixel offset. The brand orange is identity, not structure — focus rings stay neutral and pick up surface tint via translucency. This matches Anthropic's published pattern in the MCP-apps design guidelines.
+
+Rejected:
+
+- **Layer a Claude theme on top of the existing AbstractNucleus tokens via overrides.** Considered for one round. The primitives below the semantic layer would carry two parallel realities — the AbstractNucleus rust + paper, and the Claude clay + cream — with no consumer of the originals. The double-bookkeeping cost is real, and a future reader has to know which is the live reality. Replace cleanly.
+- **Keep `scripts/sync_design.sh` pointed at a different source.** No upstream now exists for the new theme; pointing it at a stub would be ceremony with no value. Removed.
+- **Single binary light/dark toggle.** Fewer lines of code; loses the system-default UX. The third state is one extra icon and one extra branch.
+- **`prefers-color-scheme` only (no operator override).** Forces the operator to flip the OS theme to flip the panel. Wrong for a power tool.
+- **Cookie-based theme persistence.** Couples the per-browser theme choice to the request lifecycle; conflates operator preference with session state. `localStorage` + inline `<head>` script is the modern static-site pattern (used by MDN, Tailwind docs, GitHub docs, every Astro/Next theme template) and is what the panel uses.
+- **Server-rendered theme attribute (no client-side script).** Would require a cookie or header round-trip on first visit and re-render on every toggle. The inline script is one IIFE in the head, runs before stylesheets, and the toggle handler is a tiny client-only file.
+- **A serif-accented marketing flavour (Tiempos / Source Serif).** Reads as anthropic.com, not as claude.ai. The panel is closer in spirit to the chat surface than to the marketing site; sans throughout is more honest.
+- **A bundler / Tailwind / shadcn-ui to manage the token system.** Decision 016 forecloses bundlers. A handwritten `tokens.css` + handwritten `app.css` is the existing posture; the slice's job is to swap the contents, not the build shape.
+- **Adding a build step to compile `tokens.css` from a JSON token source.** Same shape as the bundler rejection above. The CSS file is the source.
+- **Brand orange as the focus-ring colour.** Visually appealing but not the Anthropic pattern; rings need to work on every surface (including buttons that already use orange as their fill), and a translucent neutral works there cleanly while a saturated orange ring on an orange button is a contrast disaster. Reserved orange for identity / CTA only.
+- **An "auto-dismiss every flash after 4s via setTimeout."** Modern CSS animation with `forwards` does the same with one rule and no JS lifecycle. Adopted the CSS form.
+
+Trade-off: the panel's visual language drifts from any future sibling tool's. If a `bcontrol` or `cservices` ever appears in this fleet and wants visual coherence with `mcontrol`, the path is "copy the relevant subset of `mcontrol/static/tokens.css` into that tool" rather than "point both at a third-party design repo." The cost is "a token bump in one tool doesn't auto-propagate"; the benefit is "neither tool's visual identity is hostage to a repo neither owns." At single-operator scale and one-app horizon, this is the right side of the trade.
+
+The contract this entry pins for future slices: any new component / partial gets a deliberate styling pass (no class-without-rule). New tokens, if needed, get added to the semantic layer in `tokens.css` — components consume the semantic name, never the primitive. The two-mode contract (light + dark with explicit override) is invariant; new colour decisions land in both modes simultaneously.
