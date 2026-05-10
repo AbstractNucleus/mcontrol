@@ -21,6 +21,7 @@ from mcontrol.routes import (
     server,
     server_players,
     server_resources,
+    trash,
     variables,
 )
 from mcontrol.settings import Settings
@@ -68,6 +69,7 @@ def create_app() -> FastAPI:
     app.include_router(server_players.router)
     app.include_router(server_resources.router)
     app.include_router(players.router)
+    app.include_router(trash.router)
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Trash — mcontrol{% endblock %}
+
+{% block main %}
+{% include "_topnav.html" %}
+
+<section class="trash-page">
+  <h2 class="t-h3">Trash</h2>
+
+  {% if tombstones %}
+    <p class="t-caption trash-page__hint">
+      Tombstones are deleted server directories renamed to
+      <code>.deleted-&lt;name&gt;-&lt;unix-ts&gt;/</code>. Recover by renaming
+      one back from a shell, or purge here.
+    </p>
+
+    <form class="trash-page__empty"
+          hx-get="/trash/empty/confirm"
+          hx-target="#trash-modal"
+          hx-swap="innerHTML">
+      {% if sweep_count > 0 %}
+        <button type="submit" class="trash-page__empty-btn">
+          Empty trash — {{ sweep_count }} tombstone{% if sweep_count != 1 %}s{% endif %}
+          older than {{ purge_age_days }} days, {{ sweep_bytes_human }}
+        </button>
+      {% else %}
+        <button type="submit" class="trash-page__empty-btn" disabled>
+          Empty trash — nothing older than {{ purge_age_days }} days
+        </button>
+      {% endif %}
+    </form>
+
+    <ul class="trash-list">
+      {% for t in tombstones %}
+        <li class="trash-row">
+          <span class="trash-row__name"><code>{{ t.original_name }}</code></span>
+          <span class="trash-row__age t-muted">{{ t.age_human }} ago</span>
+          <span class="trash-row__bytes t-muted">{{ t.bytes_human }}</span>
+          <a class="trash-row__delete"
+             href="#"
+             hx-get="/trash/{{ t.dir_name }}/confirm"
+             hx-target="#trash-modal"
+             hx-swap="innerHTML">Delete now</a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="card">
+      <p class="t-body">
+        No tombstones. Deleted servers land here automatically.
+      </p>
+    </div>
+  {% endif %}
+
+  <div id="trash-modal"></div>
+</section>
+{% endblock %}
