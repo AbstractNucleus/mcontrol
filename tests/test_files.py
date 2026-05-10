@@ -1690,10 +1690,8 @@ async def test_server_detail_renders_files_pane(client, monkeypatch) -> None:
         "name": "atm10",
         "container_name": None,
         "dir": "/srv/atm10",
-        "image_base": None,
         "state": "running",
         "variables": {},
-        "rcon_password": None,
         "created_at": "2026-04-29T10:00:00Z",
         "updated_at": "2026-04-29T10:00:00Z",
     })
