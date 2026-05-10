@@ -134,7 +134,7 @@ src/mcontrol/templates/_players_main.html   # EDIT — include _topnav.html
 
 | # | Ships | Notes |
 |---|---|---|
-| 0 | Single PR — module + routes + page + nav + tests + plan + decision 030 | One vertical: `tombstones.py` (pure, tmp_path-tested), `routes/trash.py` wired into `main.py`, the four templates, tests, plan doc, decision 030. `uv run pytest -v` and `uv run ruff check .` both green. |
+| 0 | Single PR — module + routes + page + nav + tests + plan + decision 031 | One vertical: `tombstones.py` (pure, tmp_path-tested), `routes/trash.py` wired into `main.py`, the four templates, tests, plan doc, decision 031. `uv run pytest -v` and `uv run ruff check .` both green. |
 
 Single PR because the module surface is small and the tombstone format is
 already an established artefact — there's no separate "land the parse, then
@@ -179,8 +179,10 @@ loop continues.
 
 ## Decisions register impact
 
-This slice **adds decision 030**: "Empty-trash affordance: tombstone purge
+This slice **adds decision 031**: "Empty-trash affordance: tombstone purge
 with 7-day default." Closes out decision 026's deferred trade-off note.
+(Decision 030 is the deep-healthz probe from the parallel slice-11 PR
+that landed first.)
 
 No prior decision is superseded. Decision 026 remains the source of truth
 for the tombstone-on-delete contract; this slice is the closing-bracket on
@@ -229,7 +231,7 @@ Decisions referenced by the implementation:
   `_topnav.html`.** Off-limits this slice — PR #39 edits home.html. The
   swap is a one-line follow-up after #39 lands.
 - **Tombstone retention policy in CLAUDE.md / README.** The plan doc and
-  decision 030 are the durable record; the README doesn't need to learn
+  decision 031 are the durable record; the README doesn't need to learn
   about tombstones until the operator-facing setup story does.
 
 ## Resolved during grilling

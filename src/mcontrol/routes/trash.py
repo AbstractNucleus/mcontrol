@@ -1,4 +1,4 @@
-"""Trash listing + purge (slice 11, decision 030).
+"""Trash listing + purge (slice 11, decision 031).
 
   GET  /trash                       → list every .deleted-<name>-<ts>/
                                        directory under <base> with parsed

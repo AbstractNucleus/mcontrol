@@ -16,7 +16,7 @@ cp .env.example .env  # then edit .env with real values
 uv run uvicorn mcontrol.main:app --reload --port 8000
 ```
 
-Visit `http://localhost:8000/` for the home page and `http://localhost:8000/healthz` for a status check.
+Visit `http://localhost:8000/` for the home page. `http://localhost:8000/healthz` returns 200 with per-subsystem JSON when DB, Docker socket, and base path are all reachable; 503 otherwise.
 
 Run tests:
 

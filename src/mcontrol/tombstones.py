@@ -1,4 +1,4 @@
-"""Tombstone listing + purge (slice 11, decision 030).
+"""Tombstone listing + purge (slice 11, decision 031).
 
 Closes the "Empty trash" affordance that decision 026 named in its
 trade-off line. The producer side is ``routes/delete_server.py``: a
