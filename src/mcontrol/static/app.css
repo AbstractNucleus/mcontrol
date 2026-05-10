@@ -58,6 +58,17 @@ body {
   color: var(--main-color);
 }
 
+.server-card__status {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.server-card__memory {
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
 .server-card__state {
   font-size: var(--fs-xs);
   color: var(--sub-color);

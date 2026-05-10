@@ -16,7 +16,10 @@
       {% for server in servers %}
         <li class="server-card">
           <a class="server-card__name" href="/servers/{{ server.name }}">{{ server.name }}</a>
-          <span class="server-card__state server-card__state--{{ server.state }}">{{ server.state }}</span>
+          <div class="server-card__status">
+            <span class="server-card__memory t-muted">{{ server.memory or "—" }}</span>
+            <span class="server-card__state server-card__state--{{ server.state }}">{{ server.state }}</span>
+          </div>
         </li>
       {% endfor %}
     </ul>
