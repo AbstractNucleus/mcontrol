@@ -175,9 +175,7 @@ async def test_detail_page_mounts_resources_card_above_metadata(
     server = _row(tmp_path)
     server.update(
         {
-            "image_base": "eclipse-temurin:21-jre",
             "variables": {},
-            "rcon_password": None,
             "scaffolded_at": None,
             "created_at": "2026-05-09T10:00:00Z",
             "updated_at": "2026-05-09T10:00:00Z",

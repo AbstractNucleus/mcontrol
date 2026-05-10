@@ -13,17 +13,14 @@ def fake_get_server(monkeypatch):
 def _row(
     name: str,
     *,
-    image_base: str | None = "eclipse-temurin:21-jre",
     state: str = "running",
 ) -> dict:
     return {
         "name": name,
         "container_name": None,
         "dir": f"/srv/{name}",
-        "image_base": image_base,
         "state": state,
         "variables": {},
-        "rcon_password": None,
         "created_at": "2026-04-29T10:00:00Z",
         "updated_at": "2026-04-29T10:00:00Z",
     }
@@ -40,10 +37,8 @@ async def test_server_detail_renders_known_server(client, fake_get_server):
         "name": "atm10",
         "container_name": None,
         "dir": "/home/abstract/servers/minecraft/atm10",
-        "image_base": "eclipse-temurin:21-jre",
         "state": "running",
         "variables": {"memory_budget_gb": 12, "port": 25565},
-        "rcon_password": "set",
         "created_at": "2026-04-29T10:00:00Z",
         "updated_at": "2026-04-29T10:00:00Z",
     }
@@ -54,7 +49,6 @@ async def test_server_detail_renders_known_server(client, fake_get_server):
     body = response.text
     assert "atm10" in body
     assert "/home/abstract/servers/minecraft/atm10" in body
-    assert "eclipse-temurin:21-jre" in body
     assert "running" in body
     assert "memory_budget_gb" in body
     assert "25565" in body
@@ -91,18 +85,6 @@ async def test_server_detail_renders_bindings_card(client, fake_get_server):
     assert 'hx-get="/servers/atm10/bindings?edit=1"' in body
 
 
-async def test_server_detail_handles_null_image_base(client, fake_get_server):
-    fake_get_server["fresh"] = _row("fresh", image_base=None, state="unknown")
-
-    response = await client.get("/servers/fresh")
-
-    assert response.status_code == 200
-    # Null image_base renders as the em-dash placeholder, not the literal "None".
-    assert "—" in response.text
-    assert ">None<" not in response.text
-    assert "fresh" in response.text
-
-
 async def test_server_detail_links_back_to_home(client, fake_get_server):
     fake_get_server["atm10"] = _row("atm10")
     response = await client.get("/servers/atm10")
@@ -136,8 +118,8 @@ async def test_server_detail_scaffolded_row_renders_variables_card(
 
     row = {
         "name": "newshire", "container_name": None, "dir": str(server_dir),
-        "image_base": "eclipse-temurin:21-jre", "state": "created",
-        "variables": variables, "rcon_password": None,
+        "state": "created",
+        "variables": variables,
         "scaffolded_at": "2026-05-06T12:00:00+00:00",
         "created_at": "2026-05-06T11:00:00Z",
         "updated_at": "2026-05-06T12:00:00Z",
@@ -162,9 +144,8 @@ async def test_server_detail_renders_health_banner_for_stuck_scaffolding(
 ):
     row = {
         "name": "newshire", "container_name": None, "dir": str(tmp_path / "newshire"),
-        "image_base": None, "state": "scaffolding",
+        "state": "scaffolding",
         "variables": {"memory_budget_gb": 8, "port": 25575, "server_jar": "paper.jar"},
-        "rcon_password": None,
         "scaffolded_at": "2026-05-06T12:00:00+00:00",
         "created_at": "2026-05-06T11:00:00Z",
         "updated_at": "2026-05-06T12:00:00Z",

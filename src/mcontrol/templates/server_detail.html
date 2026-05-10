@@ -38,9 +38,6 @@
     <dt class="t-caption">directory</dt>
     <dd><code>{{ server.dir }}</code></dd>
 
-    <dt class="t-caption">base image</dt>
-    <dd>{% if server.image_base %}<code>{{ server.image_base }}</code>{% else %}<span class="t-muted">—</span>{% endif %}</dd>
-
     {% if not server.scaffolded_at %}
       <dt class="t-caption">variables</dt>
       <dd>
