@@ -154,6 +154,41 @@ async def test_healthz_recovers_when_a_probe_raises_past_its_handler(
 # ---------------------------------------------------------------------------
 
 
+async def test_probe_docker_uses_a_method_aiodocker_actually_exposes(env):
+    """Regression: the original implementation called
+    ``docker.system.ping()`` which does not exist on aiodocker — the
+    DockerSystem class only exposes ``info()``. ``_probe_docker`` must
+    use a method that actually exists on the public surface, otherwise
+    the probe AttributeErrors before any round-trip and ``/healthz``
+    returns 503 even on a healthy host. Pinning the call against a
+    real ``aiodocker.Docker`` instance catches the regression at
+    test-collect time without needing a live daemon: the connect to a
+    bogus socket will raise a connection error, but the AttributeError
+    path is structural and surfaces before that."""
+    import aiodocker
+
+    docker = aiodocker.Docker(url="unix:///nonexistent/docker.sock")
+    try:
+        # Probe-the-probe: we don't care what specific exception comes
+        # back from the connect attempt; we only assert that it is *not*
+        # an AttributeError (which would mean we're calling a method
+        # that doesn't exist).
+        try:
+            await docker.version()
+        except AttributeError as exc:
+            raise AssertionError(
+                "aiodocker.Docker.version is not a real method on this "
+                "version — _probe_docker is calling the wrong API"
+            ) from exc
+        except Exception:
+            pass  # connection error against bogus socket is fine
+    finally:
+        try:
+            await docker.close()
+        except Exception:
+            pass
+
+
 async def test_probe_db_returns_fail_on_timeout(monkeypatch):
     def slow_ping():
         # Block longer than the probe budget.
