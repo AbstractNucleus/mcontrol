@@ -47,6 +47,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 026 | Delete tombstones; discovery skips `.`-prefixed dirs | Accepted | 2026-05-05 |
 | 027 | DB-backed player roster; disk-only per-server membership | Accepted | 2026-05-08 |
 | 028 | One-shot legacy-to-scaffold migration; no dual-shape framework | Accepted | 2026-05-09 |
+| 029 | Drop dormant `rcon_password` + `image_base` columns          | Accepted | 2026-05-10 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -452,3 +453,26 @@ Rejected:
 Trade-off: a row whose file ops succeeded but whose `mark_scaffolded` call failed sits in a temporarily-mixed state on disk (legacy files gone, scaffold files written) but is still flagged legacy in the DB. The card stays visible; the operator re-clicks Migrate and the idempotent flow re-converges on the same end state. Accepted because the alternative — an automatic rollback that recreates `Dockerfile` + `entrypoint.sh` from the panel — is impossible without source bytes the panel never stored.
 
 This entry forecloses the dual-shape exit ramp once and for all: future slices that touch lifecycle, scaffolding, regenerate, or files do **not** branch on `scaffolded_at`. After this slice lands, every row in the fleet is either pre-migration (no-op until clicked) or post-migration (slice-6-shape, period).
+
+## 029. Drop dormant `rcon_password` + `image_base` columns
+
+**Status:** Accepted · 2026-05-10
+
+`app_mcontrol.servers.rcon_password` and `app_mcontrol.servers.image_base` are dropped from the schema. Both columns are dormant in the running app: nothing in `src/mcontrol/` reads or writes either one after this slice lands. The cleanup is the closing-bracket on two earlier "future migration" notes — decision 024's "the column becomes dormant; a future migration can drop it once we're confident nothing reads it" for `rcon_password`, and slice 8's plan-doc deferral for `image_base` ("Lives alongside the `rcon_password` column-drop … one future migration cleans up both dormant columns").
+
+The cleanup ships as two coordinated changes in the slice-10 PR sequence:
+
+1. **mcontrol PR (this repo, slice 10).** Removes the one remaining read site (`<dt>base image</dt>` block in `server_detail.html`), drops both keys from every test fixture, deletes the now-meaningless `test_server_detail_handles_null_image_base` test, and drops the `eclipse-temurin:21-jre` body assertion in the happy-path detail test that the template line was producing. `db.py` is untouched — slice-6 PR 0 already removed every writer, and `select("*")` stops returning the keys the moment Postgres drops the columns.
+2. **supabase-server migration (separate repo, decision 015).** Operator hand-creates a migration file with `alter table app_mcontrol.servers drop column if exists rcon_password, drop column if exists image_base;` and applies it via `make migrate` on bserver. Decision 015 keeps schema migrations out of this repo; this entry records the SQL spec but the file lives in `bserver:~/repos/supabase-server/supabase/migrations/`.
+
+**Ordering precondition.** mcontrol PR is merged and the bserver `app` container is rebuilt + restarted **before** the supabase-server migration runs. The template was null-safe (`{% if server.image_base %}` falls through to em-dash placeholder when the key is missing), so running the SQL first wouldn't 500 the panel — but the discipline "code change first, schema change second" keeps the DB shape always at least as wide as what the running app reads, which is the right invariant for the convention regardless of any single column's null-safety.
+
+Rejected:
+- **Drop the columns in this repo's code as a one-shot.** Decision 015 is unambiguous: schema lives in `supabase-server`, not here. Encoding the DROP in mcontrol would split the source of truth.
+- **Leave the columns in place indefinitely.** They would accumulate ambiguity for every future reader of the schema — "is this column wired up or not?" — which is exactly the cost the dormant-flagging in 024 / slice 8 was paying down. Closing the bracket now keeps that debt small.
+- **Drop more columns at the same time.** Surveyed `app_mcontrol.servers` for other dormant columns; every other column carries live behaviour (`scaffolded_at` gates the slice-6 vs slice-8 paths, `container_name` is decision 021's override, `variables` JSONB is decision 013, etc.). Single-purpose slice; surveying for further dormants is a future cleanup if the felt need ever arises.
+- **Add a `TypedDict` for the row shape now that it's smaller.** Pre-existing absence of typed row dicts is unrelated to this cleanup; bundling the change would expand the diff for no immediate benefit.
+
+Trade-off: drop is destructive — re-adding the columns later would leave NULLs in every row (no data preserved). Acceptable: nothing currently uses either column, so there is no data to preserve. If a future slice ever wants RCON password storage in the DB again, that slice introduces its own decision; the mechanism would not be "restore from backup," it would be "design the column from scratch."
+
+Historical slice plan docs (slices 1, 2, 3, 4) still reference the dropped columns. Plans are append-only history per the project's convention; rewriting them to match the post-migration schema would obscure the decision trail. The decisions register and slice 10's plan-doc carry the corrected forward-looking shape.
