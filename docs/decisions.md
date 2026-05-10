@@ -48,6 +48,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 027 | DB-backed player roster; disk-only per-server membership | Accepted | 2026-05-08 |
 | 028 | One-shot legacy-to-scaffold migration; no dual-shape framework | Accepted | 2026-05-09 |
 | 029 | Drop dormant `rcon_password` + `image_base` columns          | Accepted | 2026-05-10 |
+| 030 | Deep `/healthz`: per-subsystem probe with 503-on-degraded    | Accepted | 2026-05-10 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -476,3 +477,31 @@ Rejected:
 Trade-off: drop is destructive — re-adding the columns later would leave NULLs in every row (no data preserved). Acceptable: nothing currently uses either column, so there is no data to preserve. If a future slice ever wants RCON password storage in the DB again, that slice introduces its own decision; the mechanism would not be "restore from backup," it would be "design the column from scratch."
 
 Historical slice plan docs (slices 1, 2, 3, 4) still reference the dropped columns. Plans are append-only history per the project's convention; rewriting them to match the post-migration schema would obscure the decision trail. The decisions register and slice 10's plan-doc carry the corrected forward-looking shape.
+
+## 030. Deep `/healthz`: per-subsystem probe with 503-on-degraded
+
+**Status:** Accepted · 2026-05-10
+
+`GET /healthz` is the panel's readiness URL — a single endpoint that exercises every subsystem the panel needs to function: Supabase reachability (a head-only `select` against `app_mcontrol.servers`), Docker socket reachability (`aiodocker.system.ping()`), and the bind-mount base path being a writable directory (`is_dir()` plus a `.healthz-<pid>-<rand>` touch + unlink). The three probes run concurrently via `asyncio.gather(..., return_exceptions=True)` behind a 250 ms per-probe `asyncio.wait_for`. Response is JSON in a single envelope shape — `{ "status": "ok" | "degraded", "checks": {...}, "elapsed_ms": int }` — with HTTP **200** when every probe is `"ok"` and HTTP **503** when any one is `"fail"`.
+
+The status-code split is the contract that matters. Decision 019 puts an upstream nginx terminator on aserver in front of the panel; nginx's `proxy_next_upstream` / `health_check` directives decide upstream-up vs upstream-down based on HTTP status. A 200-with-`status: degraded` body would force nginx (and any future monitoring) to parse JSON to know if the panel is up — defeating the point of the readiness URL. Returning real 503 keeps the consumer-side check trivial: `if status == 200: route to upstream; else: don't`. Wiring the nginx config is operator's hand on aserver, not in this repo.
+
+No auth gate — decision 003's tailnet-only access is the gate, and an HTTP gate would block nginx's probe without buying anything the network layer doesn't already give. No caching — staleness defeats the readiness purpose; if 250 ms × 1 probe (concurrent) ever becomes felt latency, that's a future deferred-cache slice with a query-param escape hatch, not a today problem. The endpoint always returns JSON in the same envelope shape regardless of status code, so `nginx`'s probe and the operator's `curl` see identical structure.
+
+The `detail` field in each subsystem's record is `f"{type(exc).__name__}: {exc}"[:200]` — class name plus the exception's message, length-capped, never `repr(exc)`. The `Settings` object holds `SUPABASE_SERVICE_ROLE_KEY`, and a third-party library exception's `repr` could inline arbitrary attribute values; using `str(exc)` (the message slot) keeps secret-leak surface minimal. Tests pin this contract by raising an exception whose `repr` would include the key and asserting the detail string is built from `str(exc)` not `repr(exc)`. The pin documents the contract: callers must keep secrets out of the message itself; healthz's job is the no-traceback / capped-length defence-in-depth, not scrubbing arbitrary message contents.
+
+Module split: `src/mcontrol/healthz.py` owns the probes and the envelope; `src/mcontrol/main.py`'s route is a one-liner that calls `healthz.build_report()` and returns a `JSONResponse(status_code=...)`. Distinct from `src/mcontrol/health.py` (per-server scaffold-integrity for the detail-page banner) — different question, different consumer, different module. Future contributors reading the import list shouldn't have to guess which `health*` is which.
+
+Rejected:
+- **Single-line liveness endpoint (the previous shape).** A 200-always endpoint that doesn't actually probe anything will report up while the Docker socket is unreachable or the bind-mount is read-only — exactly the failure modes nginx and the operator need to detect. Worse than useless once a real reverse proxy depends on it.
+- **Split into `/livez` + `/readyz` (Kubernetes-style probe pair).** Useful when a load-balancer can yank an instance from rotation independently of restarting it; not the deployment shape here. Single-host, single-operator, one URL with a per-subsystem breakdown is enough for both nginx and `curl`. If the panel ever runs behind a k8s-style probe pair, that's a future decision.
+- **200-with-`status: degraded` instead of 503.** Forces every consumer to parse the body to know if the panel is up. Real 503 keeps nginx's check trivial.
+- **Sequential probes.** Three independent reads; serial would be ~750 ms worst-case for no reason. `asyncio.gather` keeps worst-case endpoint latency at ~250 ms (one probe).
+- **Per-subsystem caching with a short TTL.** Staleness in a readiness signal is exactly the bug. If the 250 ms × 1 cost ever becomes felt, the right surface is a query-param escape hatch (`/healthz?cache=5s`) on a future slice, not making today's caller eat staleness by default.
+- **Configurable per-probe timeouts.** 250 ms is hard-coded across all three. If one subsystem ever needs a longer cap, refactor then; the current shape is the simplest thing that's correct.
+- **HTTP auth gate.** Decision 003 — network layer is the gate; an auth gate would block nginx's probe.
+- **Prometheus exposition format.** Out-of-scope; if metrics scraping is wanted, a separate `/metrics` route is the right surface. Overloading `/healthz` mixes two concerns.
+- **Probing every server's container in addition to the daemon.** The endpoint answers "is the panel itself up?" — per-server health is `mcontrol.health`'s job (detail-page banner) and the home-page memory column (slice 10). Conflating them would make `/healthz` 503 whenever any single server's container is unreachable, which is the wrong granularity for a panel-readiness URL.
+- **Folding the logic into `main.py`.** `main.py` is the wiring shell; logic lives in modules so it's testable in isolation without `httpx.ASGITransport` ceremony.
+
+Trade-off: every `/healthz` hit costs three concurrent probes against three subsystems. At nginx's typical health-check interval (~5–30 s) this is irrelevant; if a future monitoring tool ever scrapes at 1 s cadence, the deferred-cache exit ramp above is the answer. The 250 ms timeout is a single human-perceptible blink; under normal conditions the endpoint returns in well under 100 ms. The endpoint's correctness contract — "200 iff the panel can actually serve" — is what justifies paying that cost on every request.
