@@ -1,0 +1,29 @@
+<div class="trash-modal" role="dialog" aria-modal="true">
+  <p class="t-eyebrow trash-modal__title">Delete tombstone</p>
+  <p class="t-caption trash-modal__hint">
+    Permanently removes <code>{{ dir_name }}</code> from disk. This is the
+    purge step — files are deleted; recovery is not possible from the panel
+    after this.
+  </p>
+
+  <form class="trash-modal__form"
+        hx-post="/trash/{{ dir_name }}/delete"
+        hx-target="#trash-modal"
+        hx-swap="innerHTML">
+    <label>
+      <span class="t-caption">Type <code>{{ original_name }}</code> to confirm:</span>
+      <input type="text"
+             name="confirm_name"
+             autocomplete="off"
+             autofocus
+             required>
+    </label>
+    <div class="trash-modal__actions">
+      <button type="submit" class="trash-modal__btn--danger">Delete now</button>
+      <a href="#"
+         hx-get="/trash"
+         hx-target="body"
+         hx-swap="outerHTML">Cancel</a>
+    </div>
+  </form>
+</div>

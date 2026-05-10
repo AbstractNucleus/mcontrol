@@ -49,6 +49,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 028 | One-shot legacy-to-scaffold migration; no dual-shape framework | Accepted | 2026-05-09 |
 | 029 | Drop dormant `rcon_password` + `image_base` columns          | Accepted | 2026-05-10 |
 | 030 | Deep `/healthz`: per-subsystem probe with 503-on-degraded    | Accepted | 2026-05-10 |
+| 031 | Empty-trash affordance: tombstone purge with 7-day default   | Accepted | 2026-05-10 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -477,6 +478,38 @@ Rejected:
 Trade-off: drop is destructive — re-adding the columns later would leave NULLs in every row (no data preserved). Acceptable: nothing currently uses either column, so there is no data to preserve. If a future slice ever wants RCON password storage in the DB again, that slice introduces its own decision; the mechanism would not be "restore from backup," it would be "design the column from scratch."
 
 Historical slice plan docs (slices 1, 2, 3, 4) still reference the dropped columns. Plans are append-only history per the project's convention; rewriting them to match the post-migration schema would obscure the decision trail. The decisions register and slice 10's plan-doc carry the corrected forward-looking shape.
+
+## 031. Empty-trash affordance: tombstone purge with 7-day default
+
+**Status:** Accepted · 2026-05-10
+
+mcontrol gains a `/trash` page that lists every `<base>/.deleted-<name>-<unix-ts>/` tombstone with parsed original-name, age, and bytes-on-disk; surfaces an **Empty trash** button that purges every tombstone older than 7 days; and surfaces a per-row **Delete now** button that purges a single tombstone immediately. Both actions go through type-name confirm modals — `EMPTY` (uppercase literal) for the bulk action, the parsed original server name for the per-row action. Closes the deferred trade-off line in decision 026 ("tombstoned directories accumulate on disk indefinitely until the operator manually purges … a future 'Empty trash' affordance can sweep tombstones older than N days when the cost stops being theoretical").
+
+Threshold = **7 days**, hard-coded in `src/mcontrol/tombstones.py` as `_DEFAULT_PURGE_AGE_DAYS = 7`. Not exposed in the UI this slice. Decision 026's trade-off names "older than N days" but doesn't pick N; 7 is short enough that an operator who deletes by mistake notices within the recovery window (a typical week's working pattern), long enough that an Empty-trash run after a planned cleanup actually frees the bytes. A configurable threshold (per-environment ENV var, settings field) is a follow-up if the felt need ever arises.
+
+Path-safety lives in `tombstones.purge_one(base, dir_name)`:
+1. `dir_name` must `re.fullmatch` the regex `^\.deleted-[a-z][a-z0-9-]{2,31}-\d+$`. URL-decoded payloads like `..` / `../foo` / `foo/bar` / `foo%00bar` fail the regex (hyphen + dot + slash + null are outside `[a-z0-9-]`) and never reach the filesystem.
+2. `target.parent` must equal `base.resolve()`. Defends against the theoretical "regex passed but `Path` resolution still landed us elsewhere" case.
+3. `target` must be a real directory, not a symlink — guards against an operator who dropped a symlink with a tombstone-shaped name into `<base>`.
+
+Discovery's dot-prefix filter from decision 026 keeps doing its job — `/trash` bypasses discovery and reads `<base>` directly with `os.scandir`. The two read sides never overlap: discovery skips dot-prefixed entries; `/trash` only sees them.
+
+Bytes-on-disk reuses `resources.read_disk_usage` (slice 9) — the recursive `os.scandir` walk with `follow_symlinks=False` is exactly the right primitive, already tested. Forking a near-identical walk in `tombstones.py` would be the "200 lines that could be 50" anti-pattern.
+
+Top-nav: a new partial `templates/_topnav.html` carries Servers / Players / Trash links, included from `templates/trash.html` and `templates/_players_main.html`. `templates/home.html` is intentionally left alone this slice — PR #39 was concurrently editing it; the swap of `home-header__actions` for the topnav partial is a one-line follow-up after #39 lands. Single-operator panel; the asymmetry (home keeps its inline nav block until then) is acceptable.
+
+Rejected:
+- **Configurable threshold UI.** The `7` lives in code only. If the felt need is "different defaults per environment," that's a future decision (ENV var or settings field). The build-and-deploy cost of bumping `_DEFAULT_PURGE_AGE_DAYS = 7` to a different number is one line + a test bump.
+- **Restore button.** Slice-6 delete copy says "recover by renaming the tombstone back from a shell"; that recovery path stays. A panel-side Restore would import a new flow (DB row re-creation, dir-name collision, `container_name` override repointing) for a rare case the shell already handles.
+- **Automatic purge on a schedule.** No cron, no startup-time sweep. Decision 026's trade-off is explicit: tombstones are deliberately recoverable by default; auto-purge would silently destroy that reversibility. The Empty-trash button is the operator's deliberate moment.
+- **Bulk select / multi-row delete.** Empty-trash is the bulk affordance (sweeps all ≥ 7 d), Delete-now is the single-row affordance. A free-form multi-select adds modal complexity for the felt-need-of-zero case.
+- **HTMX inline-delete vs full-page redirect.** Plain redirect (`HX-Redirect: /trash` on POST) is the simplest pattern that's correct: one DOM tree, one source of truth (the GET handler), no partial-state assertions in tests. The cost is a flicker on each delete; for a page that gets visited a few times a year, it's free.
+- **Tombstone count badge on the home page.** "(3)" next to the Trash link would be nice but punted to a follow-up. Single-operator scale, the Trash link itself is the affordance.
+- **Replacing `home.html`'s inline nav with the new partial.** Off-limits this slice — PR #39 was editing home.html.
+
+Trade-off: a tombstone whose name fails the regex (an operator manually renamed something to a `.deleted-…` shape that doesn't validate) is invisible to `/trash` and survives Empty-trash sweeps indefinitely. Acceptable: operator-renamed dirs are operator territory; the shell is the right tool for cleaning them up. A best-effort failure during `purge_older_than` (e.g. `rmtree` raises mid-walk because of an open file handle) is recorded as the loop moving past it; the remaining sweep continues, and the next page load surfaces what's still there. The 7-day cutoff means a same-day mistaken-delete is always recoverable from the tombstone; a long-tail of stale tombstones from an unattended panel is what the bulk button cleans up.
+
+This entry forecloses 026's "future affordance" line. Future slices that surface deleted-server-related affordances (e.g. a tombstone-count badge, a per-tombstone Restore button, a configurable threshold) would be additive on top of this contract, not a re-litigation.
 
 ## 030. Deep `/healthz`: per-subsystem probe with 503-on-degraded
 
