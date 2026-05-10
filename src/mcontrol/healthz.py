@@ -53,7 +53,13 @@ async def _probe_docker() -> dict[str, str]:
     async def _ping() -> None:
         docker = aiodocker.Docker(url=settings.docker_host)
         try:
-            await docker.system.ping()
+            # `docker.version()` is the lightest public round-trip in
+            # aiodocker — `system.ping()` does not exist on this client
+            # version (the `DockerSystem` class only exposes `info()`),
+            # and `_query("_ping")` uses the underscore-prefixed private
+            # API. `version()` hits `/version`, returns a small dict, and
+            # confirms the daemon answers HTTP — exactly what we want.
+            await docker.version()
         finally:
             try:
                 await docker.close()
