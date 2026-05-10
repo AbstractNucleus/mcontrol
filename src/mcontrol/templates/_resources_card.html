@@ -1,3 +1,6 @@
+{# Memory bar first (slice 12): OOM is the primary failure operators
+   watch. CPU + Disk follow underneath.
+#}
 <section class="resources-card"
          id="server-resources"
          hx-get="/servers/{{ server.name }}/resources"
@@ -5,33 +8,49 @@
          hx-swap="outerHTML">
   <header class="resources-card__head">
     <p class="t-eyebrow">Resources</p>
+    <p class="resources-card__caption">
+      {% if ok %}
+        updated {{ updated_at }} · every 5 s
+      {% else %}
+        {{ caption }}
+      {% endif %}
+    </p>
   </header>
-  <dl class="resources-card__body">
-    <dt class="t-caption">CPU</dt>
-    <dd>
+
+  <div class="resources-card__memory">
+    <div class="resources-card__memory-label">
+      <span class="t-eyebrow">Memory</span>
       {% if ok %}
-        {{ "%.1f"|format(cpu_percent) }} %
+        <span class="resources-card__memory-text">
+          {{ format_bytes(mem_used) }} / {{ format_bytes(mem_limit) }}
+          <span class="resources-card__memory-pct">({{ "%.0f"|format(mem_percent) }} %)</span>
+        </span>
       {% else %}
-        <span class="t-muted">—</span>
+        <span class="resources-card__memory-text resources-card__memory-text--empty">—</span>
       {% endif %}
-    </dd>
-    <dt class="t-caption">Memory</dt>
-    <dd>
+    </div>
+    <div class="resources-card__bar">
       {% if ok %}
-        {{ format_bytes(mem_used) }} / {{ format_bytes(mem_limit) }}
-        <span class="t-muted">({{ "%.0f"|format(mem_percent) }} %)</span>
-      {% else %}
-        <span class="t-muted">—</span>
+        {% set _bar_class = 'resources-card__bar-fill--danger' if mem_percent >= 90 else ('resources-card__bar-fill--warning' if mem_percent >= 75 else '') %}
+        <div class="resources-card__bar-fill {{ _bar_class }}" style="width: {{ mem_percent|round(1) }}%"></div>
       {% endif %}
-    </dd>
-    <dt class="t-caption">Disk</dt>
-    <dd>{{ disk_human }}</dd>
+    </div>
+  </div>
+
+  <dl class="resources-card__grid">
+    <div class="resources-card__row">
+      <dt>CPU</dt>
+      <dd>
+        {% if ok %}
+          {{ "%.1f"|format(cpu_percent) }} %
+        {% else %}
+          <span class="t-muted">—</span>
+        {% endif %}
+      </dd>
+    </div>
+    <div class="resources-card__row">
+      <dt>Disk</dt>
+      <dd>{{ disk_human }}</dd>
+    </div>
   </dl>
-  <p class="resources-card__caption t-caption">
-    {% if ok %}
-      updated {{ updated_at }} (every 5 s)
-    {% else %}
-      {{ caption }}
-    {% endif %}
-  </p>
 </section>

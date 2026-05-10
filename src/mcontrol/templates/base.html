@@ -3,11 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  {#
+    Theme bootstrap (slice 12, decision 032). Synchronous so it runs
+    before stylesheets evaluate, eliminating flash-of-wrong-theme on
+    first paint. Reads "theme" from localStorage; resolves "system" /
+    null via prefers-color-scheme. Sets data-theme on <html>. The CSS
+    @media (prefers-color-scheme: dark) block is the JS-off fallback.
+  #}
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem("theme");
+        var resolved = stored;
+        if (!stored || stored === "system") {
+          resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", resolved);
+      } catch (_) { /* localStorage blocked → CSS @media kicks in */ }
+    })();
+  </script>
   <title>{% block title %}mcontrol{% endblock %}</title>
-  <link rel="stylesheet" href="/static/tokens.css">
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/tokens.css?v={{ version }}">
+  <link rel="stylesheet" href="/static/app.css?v={{ version }}">
   <script src="/static/htmx.min.js" defer></script>
   <script src="/static/htmx-ext-sse.js" defer></script>
+  <script src="/static/theme.js?v={{ version }}" defer></script>
   {#
     CodeMirror 6 loaded via CDN ESM (decision 016 — no bundler).
     Versions pinned per decision 020. The `?deps=` queries force every
@@ -45,8 +66,14 @@
 </head>
 <body>
   <header class="page-header">
-    <h1 class="t-h2">mcontrol</h1>
-    <span class="t-caption">v{{ version }}</span>
+    <a class="page-header__brand" href="/">
+      <span class="page-header__logo">
+        <span class="page-header__logo-mark" aria-hidden="true"></span>
+        mcontrol
+      </span>
+      <span class="page-header__version">v{{ version }}</span>
+    </a>
+    {% include "_theme_toggle.html" %}
   </header>
   <main class="page-main">
     {% block main %}{% endblock %}

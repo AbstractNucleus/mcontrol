@@ -1,6 +1,10 @@
 <section class="players-page" id="players-main">
   {% include "_topnav.html" %}
-  <h2 class="t-h3">Players</h2>
+
+  <div class="players-page__title">
+    <p class="t-eyebrow">Roster</p>
+    <h2 class="t-h1">Players</h2>
+  </div>
 
   {% if flash %}
     <p class="players-page__flash players-page__flash--{{ flash.kind }}">
@@ -23,7 +27,7 @@
         hx-post="/players"
         hx-target="#players-main"
         hx-swap="outerHTML">
-    <label class="t-caption" for="players-page-name">Add by Minecraft name</label>
+    <label for="players-page-name">Add by Minecraft name</label>
     <input id="players-page-name"
            name="name"
            type="text"
@@ -31,7 +35,7 @@
            autocomplete="off"
            placeholder="e.g. Notch"
            value="{{ form.name }}">
-    <button type="submit">Look up + add</button>
+    <button type="submit" class="btn btn--primary">Look up + add</button>
     {% if errors.name %}
       <p class="players-page__error">{{ errors.name }}</p>
     {% endif %}
@@ -77,8 +81,17 @@
       </tbody>
     </table>
   {% else %}
-    <div class="card">
-      <p class="t-body">Roster is empty. Add a player by Minecraft name above, or — if any servers already have whitelist/ops entries on disk — use Import.</p>
+    <div class="empty-state">
+      <svg class="empty-state__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+        <circle cx="9" cy="7" r="4"></circle>
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path>
+      </svg>
+      <h3 class="empty-state__title">Roster is empty</h3>
+      <p class="empty-state__body">
+        Add a player by Minecraft name above, or — if any servers already have
+        whitelist/ops entries on disk — use Import.
+      </p>
     </div>
   {% endif %}
 

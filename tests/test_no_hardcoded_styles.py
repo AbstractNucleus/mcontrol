@@ -16,9 +16,23 @@ def test_app_css_has_no_hardcoded_hex_colors():
     )
 
 
-def test_app_css_has_no_font_family():
-    """Font stacks are owned by tokens.css. app.css is layout-only."""
+def test_app_css_font_family_uses_tokens_only():
+    """Font stacks are owned by tokens.css. Components in app.css may
+    set `font-family` only to `var(--font-*)` or `inherit` — never a
+    literal font name. Slice 12 swap relaxed slice 1's
+    "no font-family in app.css at all" invariant once mono surfaces
+    (logs, code, file tree) needed an explicit deviation from the
+    sans body default; the tokens-only rule preserves the original
+    intent (token layer is the single source of truth for type)."""
     content = APP_CSS.read_text(encoding="utf-8")
-    assert "font-family" not in content, (
-        "app.css must not declare font-family; the body declaration in tokens.css is canonical."
+    # Capture every `font-family: <value>;` declaration.
+    decls = re.findall(r"font-family\s*:\s*([^;]+);", content)
+    bad = [
+        d.strip()
+        for d in decls
+        if not (d.strip() == "inherit" or d.strip().startswith("var(--font-"))
+    ]
+    assert bad == [], (
+        f"app.css has literal font-family value(s) {bad!r}. "
+        "Use var(--font-sans) / var(--font-mono) from tokens.css instead."
     )

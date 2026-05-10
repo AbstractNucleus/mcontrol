@@ -2,7 +2,11 @@ async def test_tokens_css_is_served(client):
     response = await client.get("/static/tokens.css")
 
     assert response.status_code == 200
-    assert "--main-color: #b5533a" in response.text
+    # Slice 12 / decision 032: Claude-flavoured tokens. The accent
+    # `#D97757` is the brand-orange anchor and gates the file having
+    # gone through the slice-12 swap.
+    assert "--accent:" in response.text
+    assert "#D97757" in response.text
     assert response.headers["content-type"].startswith("text/css")
 
 

@@ -8,15 +8,15 @@
        href="#">Edit</a>
   </header>
   <dl class="bindings-card__body">
-    <dt class="t-caption">container name</dt>
+    <dt>Container name</dt>
     <dd>
       {% if server.container_name %}
-        <code>{{ server.container_name }}</code>
+        {{ server.container_name }}
       {% else %}
-        <span class="t-muted">(falls back to <code>{{ server.name }}</code>)</span>
+        <span class="t-muted">falls back to {{ server.name }}</span>
       {% endif %}
     </dd>
-    <dt class="t-caption">directory</dt>
-    <dd><code>{{ server.dir }}</code></dd>
+    <dt>Directory</dt>
+    <dd>{{ server.dir }}</dd>
   </dl>
 </section>

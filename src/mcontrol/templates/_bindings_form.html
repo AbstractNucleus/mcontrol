@@ -1,25 +1,28 @@
 <section class="bindings-card" id="bindings">
-  <p class="t-eyebrow">Bindings</p>
+  <header class="bindings-card__head">
+    <p class="t-eyebrow">Bindings</p>
+  </header>
   <form class="bindings-form"
         hx-post="/servers/{{ server.name }}/bindings"
         hx-target="#bindings"
         hx-swap="outerHTML">
     <label>
-      <span class="t-caption">container name</span>
+      <span class="t-eyebrow">Container name</span>
       <input type="text"
              name="container_name"
              value="{{ server.container_name or '' }}"
              placeholder="{{ server.name }}">
     </label>
     <label>
-      <span class="t-caption">directory</span>
+      <span class="t-eyebrow">Directory</span>
       <input type="text"
              name="dir"
              value="{{ server.dir }}">
     </label>
     <div class="bindings-form__actions">
-      <button type="submit">Save</button>
-      <a hx-get="/servers/{{ server.name }}/bindings"
+      <button type="submit" class="btn btn--primary">Save</button>
+      <a class="btn btn--ghost"
+         hx-get="/servers/{{ server.name }}/bindings"
          hx-target="#bindings"
          hx-swap="outerHTML"
          href="#">Cancel</a>

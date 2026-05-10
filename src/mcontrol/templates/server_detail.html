@@ -3,26 +3,36 @@
 {% block title %}{{ server.name }} — mcontrol{% endblock %}
 
 {% block main %}
+{% include "_topnav.html" %}
+
 <section class="server-detail-layout">
-  <p class="t-eyebrow"><a href="/">← all servers</a></p>
-  <h2 class="t-h3">{{ server.name }}</h2>
+  <a class="detail-back" href="/">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"></path>
+    </svg>
+    All servers
+  </a>
+  <h1 class="detail-title">
+    <span class="detail-title__name">{{ server.name }}</span>
+    {% include "_state_pill.html" %}
+  </h1>
 
   {% if health_issues %}
     {% include "_health_banner.html" %}
   {% endif %}
 
   <div class="lifecycle-row">
-    {% include "_state_pill.html" %}
+    <p class="t-eyebrow">Lifecycle</p>
     <div class="lifecycle-row__buttons">
-      <button class="lifecycle-button"
+      <button class="btn btn--sm"
               hx-post="/servers/{{ server.name }}/lifecycle/start"
               hx-target="#state-pill"
               hx-swap="outerHTML">Start</button>
-      <button class="lifecycle-button"
+      <button class="btn btn--sm"
               hx-post="/servers/{{ server.name }}/lifecycle/stop"
               hx-target="#state-pill"
               hx-swap="outerHTML">Stop</button>
-      <button class="lifecycle-button"
+      <button class="btn btn--sm"
               hx-post="/servers/{{ server.name }}/lifecycle/restart"
               hx-target="#state-pill"
               hx-swap="outerHTML">Restart</button>
@@ -35,16 +45,16 @@
            hx-swap="outerHTML"></section>
 
   <dl class="server-detail">
-    <dt class="t-caption">directory</dt>
-    <dd><code>{{ server.dir }}</code></dd>
+    <dt>Directory</dt>
+    <dd>{{ server.dir }}</dd>
 
     {% if not server.scaffolded_at %}
-      <dt class="t-caption">variables</dt>
+      <dt>Variables</dt>
       <dd>
         {% if server.variables %}
           <ul class="kv-list">
             {% for key, value in server.variables.items() %}
-              <li><code>{{ key }}</code> = <code>{{ value }}</code></li>
+              <li>{{ key }} = {{ value }}</li>
             {% endfor %}
           </ul>
         {% else %}
@@ -53,7 +63,7 @@
       </dd>
     {% endif %}
 
-    <dt class="t-caption">last seen</dt>
+    <dt>Last seen</dt>
     <dd>{{ server.updated_at }}</dd>
   </dl>
 
@@ -74,22 +84,24 @@
            hx-swap="outerHTML"></section>
 
   <section class="files-pane" data-server-name="{{ server.name }}">
-    <p class="t-eyebrow files-pane__eyebrow">
-      Files
-      <details class="file-tree__menu">
-        <summary class="file-tree__menu-trigger" title="Actions for server root">⋯</summary>
-        <div class="file-tree__menu-panel">
-          <button class="file-tree__menu-item"
-                  type="button"
-                  data-upload-trigger
-                  data-upload-path="">Upload to root</button>
-          <button class="file-tree__menu-item"
-                  type="button"
-                  data-action-mkdir
-                  data-action-path="">New folder in root</button>
-        </div>
-      </details>
-    </p>
+    <header class="files-pane__head">
+      <p class="t-eyebrow files-pane__eyebrow">
+        Files
+        <details class="file-tree__menu">
+          <summary class="file-tree__menu-trigger" title="Actions for server root">⋯</summary>
+          <div class="file-tree__menu-panel">
+            <button class="file-tree__menu-item"
+                    type="button"
+                    data-upload-trigger
+                    data-upload-path="">Upload to root</button>
+            <button class="file-tree__menu-item"
+                    type="button"
+                    data-action-mkdir
+                    data-action-path="">New folder in root</button>
+          </div>
+        </details>
+      </p>
+    </header>
     <input type="search"
            id="file-search-input"
            class="file-search-input"
@@ -103,9 +115,9 @@
     <div id="file-search-results"></div>
     <div id="file-bulk-toolbar" class="file-bulk-toolbar" hidden>
       <span class="t-caption" data-bulk-count>0 selected</span>
-      <button type="button" class="file-action-form__btn" data-bulk-action="move">Move selected</button>
-      <button type="button" class="file-action-form__btn file-delete-confirm__btn--danger" data-bulk-action="delete">Delete selected</button>
-      <button type="button" class="file-action-form__btn" data-bulk-action="clear">Clear</button>
+      <button type="button" class="btn btn--sm" data-bulk-action="move">Move selected</button>
+      <button type="button" class="btn btn--sm btn--danger" data-bulk-action="delete">Delete selected</button>
+      <button type="button" class="btn btn--sm btn--ghost" data-bulk-action="clear">Clear</button>
     </div>
     <div id="file-action-status" class="file-action-status"></div>
     <div class="files-pane__split">

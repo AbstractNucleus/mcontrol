@@ -2,11 +2,12 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from mcontrol import discovery, healthz
+from mcontrol import __version__, discovery, healthz
 from mcontrol.routes import (
     bindings,
     console,
@@ -26,6 +27,7 @@ from mcontrol.routes import (
     variables,
 )
 from mcontrol.settings import Settings
+from mcontrol.templates import templates
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -76,6 +78,46 @@ def create_app() -> FastAPI:
     async def healthz_endpoint() -> JSONResponse:
         status_code, payload = await healthz.build_report()
         return JSONResponse(status_code=status_code, content=payload)
+
+    # Custom error pages (slice 12, decision 032). HTMX requests still
+    # surface error JSON so swap targets behave; full-page navigations
+    # render the chrome-shaped error template.
+    def _wants_html(request: Request) -> bool:
+        if request.headers.get("hx-request"):
+            return False
+        accept = request.headers.get("accept", "")
+        return "text/html" in accept or accept == ""
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        if exc.status_code == 404 and _wants_html(request):
+            return templates.TemplateResponse(
+                request=request,
+                name="404.html",
+                context={"version": __version__, "detail": exc.detail},
+                status_code=404,
+            )
+        # Default: forward to FastAPI's normal JSON shape so HTMX
+        # consumers and 4xx/5xx forms keep working.
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers=getattr(exc, "headers", None) or {},
+        )
+
+    @app.exception_handler(500)
+    async def internal_error_handler(request: Request, exc: Exception):
+        logger.exception("internal error: %s", exc)
+        if _wants_html(request):
+            return templates.TemplateResponse(
+                request=request,
+                name="500.html",
+                context={"version": __version__},
+                status_code=500,
+            )
+        return JSONResponse(
+            status_code=500, content={"detail": "Internal server error"}
+        )
 
     return app
 

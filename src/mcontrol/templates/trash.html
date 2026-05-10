@@ -6,11 +6,14 @@
 {% include "_topnav.html" %}
 
 <section class="trash-page">
-  <h2 class="t-h3">Trash</h2>
+  <div class="trash-page__title">
+    <p class="t-eyebrow">Tombstones</p>
+    <h2 class="t-h1">Trash</h2>
+  </div>
 
   {% if tombstones %}
-    <p class="t-caption trash-page__hint">
-      Tombstones are deleted server directories renamed to
+    <p class="trash-page__hint">
+      Deleted server directories renamed to
       <code>.deleted-&lt;name&gt;-&lt;unix-ts&gt;/</code>. Recover by renaming
       one back from a shell, or purge here.
     </p>
@@ -35,8 +38,8 @@
       {% for t in tombstones %}
         <li class="trash-row">
           <span class="trash-row__name"><code>{{ t.original_name }}</code></span>
-          <span class="trash-row__age t-muted">{{ t.age_human }} ago</span>
-          <span class="trash-row__bytes t-muted">{{ t.bytes_human }}</span>
+          <span class="trash-row__age">{{ t.age_human }} ago</span>
+          <span class="trash-row__bytes">{{ t.bytes_human }}</span>
           <a class="trash-row__delete"
              href="#"
              hx-get="/trash/{{ t.dir_name }}/confirm"
@@ -46,9 +49,16 @@
       {% endfor %}
     </ul>
   {% else %}
-    <div class="card">
-      <p class="t-body">
-        No tombstones. Deleted servers land here automatically.
+    <div class="empty-state">
+      <svg class="empty-state__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+        <path d="M10 11v6M14 11v6"></path>
+      </svg>
+      <h3 class="empty-state__title">Trash is empty</h3>
+      <p class="empty-state__body">
+        Deleted servers land here automatically. Tombstones older than
+        {{ purge_age_days }} days can be swept with Empty&nbsp;trash.
       </p>
     </div>
   {% endif %}

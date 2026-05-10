@@ -1,42 +1,48 @@
-<div class="trash-modal" role="dialog" aria-modal="true">
-  <p class="t-eyebrow trash-modal__title">Empty trash</p>
+<div class="trash-modal" role="dialog" aria-modal="true" aria-labelledby="trash-empty-title">
+  <div class="trash-modal__panel">
+    <p id="trash-empty-title" class="trash-modal__title">Empty trash</p>
 
-  {% if sweepable %}
-    <p class="t-caption trash-modal__hint">
-      Permanently removes the following {{ sweepable|length }} tombstone{% if sweepable|length != 1 %}s{% endif %}
-      (older than {{ purge_age_days }} days). Files are deleted from disk.
-    </p>
-    <ul class="trash-modal__list">
-      {% for t in sweepable %}
-        <li><code>{{ t.original_name }}</code> · {{ t.age_human }} · {{ t.bytes_human }}</li>
-      {% endfor %}
-    </ul>
+    {% if sweepable %}
+      <p class="trash-modal__hint">
+        Permanently removes the following {{ sweepable|length }} tombstone{% if sweepable|length != 1 %}s{% endif %}
+        (older than {{ purge_age_days }} days). Files are deleted from disk.
+      </p>
+      <ul class="trash-modal__list">
+        {% for t in sweepable %}
+          <li><code>{{ t.original_name }}</code> · {{ t.age_human }} · {{ t.bytes_human }}</li>
+        {% endfor %}
+      </ul>
 
-    <form class="trash-modal__form"
-          hx-post="/trash/empty"
-          hx-target="#trash-modal"
-          hx-swap="innerHTML">
-      <label>
-        <span class="t-caption">Type <code>EMPTY</code> to confirm:</span>
-        <input type="text"
-               name="confirm"
-               autocomplete="off"
-               autofocus
-               required>
-      </label>
+      <form class="trash-modal__form"
+            hx-post="/trash/empty"
+            hx-target="#trash-modal"
+            hx-swap="innerHTML">
+        <label>
+          <span class="t-eyebrow">Type <code>EMPTY</code> to confirm</span>
+          <input type="text"
+                 name="confirm"
+                 autocomplete="off"
+                 autofocus
+                 required>
+        </label>
+        <div class="trash-modal__actions">
+          <button type="submit" class="trash-modal__btn--danger">Empty trash</button>
+          <a class="btn btn--ghost"
+             href="#"
+             hx-get="/trash"
+             hx-target="body"
+             hx-swap="outerHTML">Cancel</a>
+        </div>
+      </form>
+    {% else %}
+      <p class="t-body">Nothing to sweep — no tombstones older than {{ purge_age_days }} days.</p>
       <div class="trash-modal__actions">
-        <button type="submit" class="trash-modal__btn--danger">Empty trash</button>
-        <a href="#"
+        <a class="btn btn--ghost"
+           href="#"
            hx-get="/trash"
            hx-target="body"
-           hx-swap="outerHTML">Cancel</a>
+           hx-swap="outerHTML">Close</a>
       </div>
-    </form>
-  {% else %}
-    <p class="t-body">Nothing to sweep — no tombstones older than {{ purge_age_days }} days.</p>
-    <a href="#"
-       hx-get="/trash"
-       hx-target="body"
-       hx-swap="outerHTML">Close</a>
-  {% endif %}
+    {% endif %}
+  </div>
 </div>
