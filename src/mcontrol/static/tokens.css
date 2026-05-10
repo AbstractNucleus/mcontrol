@@ -28,6 +28,7 @@
   --hex-near-black:   #141413;
   --hex-coal:         #30302E;
   --hex-coal-deep:    #262624;
+  --hex-coal-pit:     #1F1E1C;
 
   --hex-bone:         #FAF9F5;
   --hex-bone-soft:    #C2C0B6;
@@ -107,7 +108,7 @@
 
 /* ---- Semantic tokens — dark (explicit) --------------------------------- */
 [data-theme="dark"] {
-  --bg-page:        var(--hex-near-black);
+  --bg-page:        var(--hex-coal-pit);
   --bg-surface:     var(--hex-coal);
   --bg-sunken:      var(--hex-coal-deep);
   --bg-inverse:     var(--hex-bone);
@@ -156,7 +157,7 @@
    OS-level dark preference. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg-page:        var(--hex-near-black);
+    --bg-page:        var(--hex-coal-pit);
     --bg-surface:     var(--hex-coal);
     --bg-sunken:      var(--hex-coal-deep);
     --bg-inverse:     var(--hex-bone);
