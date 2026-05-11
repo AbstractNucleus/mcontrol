@@ -1,0 +1,28 @@
+{#
+  Lifecycle buttons (slice 13, decision 033).
+
+  Context:
+  - `server`: the server row (uses `server.name`).
+  - `lifecycle`: dict from `mcontrol.lifecycle_state.view(state)` —
+    `start_disabled`, `stop_disabled`, `restart_disabled`, `accent`.
+  - `oob` (optional bool, default false): when true, the wrapper carries
+    `hx-swap-oob="true"` so a lifecycle-action response can swap it
+    alongside the primary state-pill swap.
+#}
+<div id="lifecycle-buttons" class="lifecycle-row__buttons"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <button class="btn btn--sm{% if lifecycle.accent == 'start' %} btn--primary{% endif %}"
+          hx-post="/servers/{{ server.name }}/lifecycle/start"
+          hx-target="#state-pill"
+          hx-swap="outerHTML"
+          {% if lifecycle.start_disabled %}disabled{% endif %}>Start</button>
+  <button class="btn btn--sm{% if lifecycle.accent == 'stop' %} btn--primary{% endif %}"
+          hx-post="/servers/{{ server.name }}/lifecycle/stop"
+          hx-target="#state-pill"
+          hx-swap="outerHTML"
+          {% if lifecycle.stop_disabled %}disabled{% endif %}>Stop</button>
+  <button class="btn btn--sm"
+          hx-post="/servers/{{ server.name }}/lifecycle/restart"
+          hx-target="#state-pill"
+          hx-swap="outerHTML"
+          {% if lifecycle.restart_disabled %}disabled{% endif %}>Restart</button>
+</div>

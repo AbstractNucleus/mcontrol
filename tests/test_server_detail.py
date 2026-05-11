@@ -63,6 +63,72 @@ async def test_server_detail_renders_lifecycle_buttons(client, fake_get_server):
     assert 'hx-post="/servers/atm10/lifecycle/restart"' in body
 
 
+def _button_chunk(body: str, verb: str) -> str:
+    """Return the `<button ...>...</button>` substring for the lifecycle
+    button targeting `/lifecycle/{verb}`. Class lives before `hx-post`,
+    so walk back to the opening tag."""
+    needle = f"lifecycle/{verb}"
+    idx = body.index(needle)
+    open_tag = body.rfind("<button", 0, idx)
+    close_tag = body.index("</button>", idx)
+    return body[open_tag:close_tag]
+
+
+async def test_server_detail_running_state_accents_stop_disables_start(
+    client, fake_get_server
+):
+    fake_get_server["atm10"] = _row("atm10", state="running")
+    response = await client.get("/servers/atm10")
+    body = response.text
+
+    # The initial render wraps the buttons in the partial, no OOB attribute.
+    assert 'id="lifecycle-buttons"' in body
+    wrapper_open = body.split('id="lifecycle-buttons"', 1)[1].split('>', 1)[0]
+    assert 'hx-swap-oob' not in wrapper_open
+
+    start = _button_chunk(body, "start")
+    assert 'disabled' in start
+    assert 'btn--primary' not in start
+
+    stop = _button_chunk(body, "stop")
+    assert 'btn--primary' in stop
+    assert 'disabled' not in stop
+
+    restart = _button_chunk(body, "restart")
+    assert 'disabled' not in restart
+
+
+async def test_server_detail_exited_state_accents_start_disables_others(
+    client, fake_get_server
+):
+    fake_get_server["atm10"] = _row("atm10", state="exited")
+    response = await client.get("/servers/atm10")
+    body = response.text
+
+    start = _button_chunk(body, "start")
+    assert 'btn--primary' in start
+    assert 'disabled' not in start
+
+    stop = _button_chunk(body, "stop")
+    assert 'disabled' in stop
+
+    restart = _button_chunk(body, "restart")
+    assert 'disabled' in restart
+
+
+async def test_server_detail_restarting_state_disables_all_no_accent(
+    client, fake_get_server
+):
+    fake_get_server["atm10"] = _row("atm10", state="restarting")
+    response = await client.get("/servers/atm10")
+    body = response.text
+
+    for verb in ("start", "stop", "restart"):
+        chunk = _button_chunk(body, verb)
+        assert 'disabled' in chunk, f"{verb} should be disabled in restarting state"
+        assert 'btn--primary' not in chunk, f"{verb} should not carry accent in restarting state"
+
+
 async def test_server_detail_renders_log_pane(client, fake_get_server):
     fake_get_server["atm10"] = _row("atm10")
     response = await client.get("/servers/atm10")
