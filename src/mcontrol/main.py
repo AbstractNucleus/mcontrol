@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from mcontrol import __version__, discovery, healthz
+from mcontrol import __version__, discovery, healthz, tombstones
 from mcontrol.routes import (
     bindings,
     console,
@@ -53,6 +53,18 @@ def create_app() -> FastAPI:
     settings = Settings()
     app = FastAPI(title="mcontrol", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
+
+    # Jinja global for the topnav badge (decision 035). Called from
+    # _topnav.html on every page; uses tombstones.count() which is a
+    # single scandir, so cheap to invoke per render.
+    def _tombstone_count(request: Request) -> int:
+        try:
+            base = Path(request.app.state.settings.server_base_path)
+            return tombstones.count(base)
+        except Exception:
+            return 0
+
+    templates.env.globals["tombstone_count"] = _tombstone_count
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(home.router)

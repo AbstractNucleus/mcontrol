@@ -53,6 +53,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 032 | Claude-flavoured theme; semantic tokens; tri-state dark/light | Accepted | 2026-05-10 |
 | 033 | Lifecycle buttons: state-aware disable + accent on next-action  | Accepted | 2026-05-11 |
 | 034 | Operator-triggered discovery via `POST /rescan`              | Accepted | 2026-05-11 |
+| 035 | Topnav tombstone count badge via Jinja global                | Accepted | 2026-05-11 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -623,3 +624,21 @@ Rejected:
 - **Stream progress for slow rescans.** Single-host scope, twelve dirs maximum, sub-second walks. Streaming would be solving a problem that doesn't exist.
 
 Trade-off: if an operator hammers Rescan during a long-running discovery (e.g. SUPABASE_URL hangs), concurrent calls all touch the DB. `db.insert_server` is idempotent on `name`-unique conflict; `db.update_server_state` is a single update. Worst case is wasted writes, not corruption. A lock would be defensive code for a posture that doesn't exist on a single-operator panel.
+
+## 035. Topnav tombstone count badge via Jinja global
+
+**Status:** Accepted · 2026-05-11
+
+Decision 031's trade-off line punted "tombstone count badge on the home page" as a follow-up. This entry adopts it, and lifts the placement from "home page" to the topnav `Trash` link — so the badge is visible from every page (Servers, Players, Server detail, New server, Trash itself), not just home. A bubble like `Trash 3` next to the link tells the operator at a glance whether trash is non-empty.
+
+Mechanism: a Jinja global `tombstone_count(request)` registered at app-creation time in `main.py` calls a new cheap helper `tombstones.count(base)` — a single `os.scandir` over `SERVER_BASE_PATH`, no recursion into each tombstone, no disk-usage walk. `_topnav.html` calls it once per render and only emits the badge `<span>` when the count is non-zero. The Jinja-global approach avoids the alternative of threading `tombstone_count` through every route handler's context dict (six routes that include the topnav: home, players, trash, server detail, new server, plus the topnav's existing callers).
+
+Rejected:
+
+- **HTMX-load the badge via a second request (`<span hx-get="/topnav/tombstone-badge" hx-trigger="load">`).** Two HTTP roundtrips per page load to populate one number, plus a brief flash-of-no-badge between paint and the swap. The synchronous Jinja approach reads the same data and renders correctly on first paint. The scandir cost is single-digit milliseconds even for a directory with dozens of tombstones.
+- **Pass `tombstone_count` through every route handler's context dict.** Mechanical; six routes today, plus any new top-level page would have to remember. The Jinja global is the single registration point.
+- **Use `list_tombstones` for the count.** Available, but walks every file inside every tombstone for the bytes column. Wasteful for a count. The new `tombstones.count()` helper is `scandir`-only and intended for hot paths like this one.
+- **Render the badge inside the Trash page's own content (a "you have N tombstones" line).** Trash already shows the full list; a count inside that page is redundant. The badge's value is for operators NOT on the trash page.
+- **Threshold the badge (only show when count > 5).** Premature; single-operator scale, the operator wants to know if anything is in there. The "0 → no badge" case already handles the "nothing to see" surface.
+
+Trade-off: every page render does a `scandir(SERVER_BASE_PATH)`. At single-host scale with a handful of server dirs and tombstones, this is sub-millisecond and well below the noise floor of the rest of the request (DB call, Docker daemon call). If a future deployment ever hosts hundreds of tombstones, the scandir is still O(N) in directory entries (no per-entry stat), so the floor stays low.
