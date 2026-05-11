@@ -1,13 +1,17 @@
 {# Top-nav partial. The active link picks up aria-current="page" so the
    CSS can render it as the segmented "selected" tab. We compare against
    request.url.path which Jinja2Templates makes available via the request
-   context. Slice 12 brings home.html under this same partial. #}
+   context. Slice 12 brings home.html under this same partial. Slice 15
+   (decision 035) adds the tombstone count badge next to Trash. #}
 {% set _path = request.url.path %}
+{% set _tomb_n = tombstone_count(request) %}
 <nav class="topnav" aria-label="Primary">
   <a class="topnav__link" href="/"
      {% if _path == "/" %}aria-current="page"{% endif %}>Servers</a>
   <a class="topnav__link" href="/players"
      {% if _path == "/players" %}aria-current="page"{% endif %}>Players</a>
   <a class="topnav__link" href="/trash"
-     {% if _path == "/trash" %}aria-current="page"{% endif %}>Trash</a>
+     {% if _path == "/trash" %}aria-current="page"{% endif %}>
+    Trash{% if _tomb_n %} <span class="topnav__badge" aria-label="{{ _tomb_n }} tombstone{{ 's' if _tomb_n != 1 else '' }}">{{ _tomb_n }}</span>{% endif %}
+  </a>
 </nav>

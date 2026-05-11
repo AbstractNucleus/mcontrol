@@ -53,6 +53,32 @@ def _parse(dir_name: str) -> tuple[str, int] | None:
     return m.group("name"), int(m.group("ts"))
 
 
+def count(base: Path) -> int:
+    """Cheap count of tombstones under ``base``. Single ``os.scandir`` pass,
+    no recursion into each tombstone (and so no disk-usage walk).
+
+    Intended for the topnav badge (decision 035), which is rendered on
+    every page and needs to be cheap. Callers that need bytes / age use
+    ``list_tombstones`` instead.
+
+    Returns 0 when ``base`` doesn't exist — same posture as
+    ``list_tombstones``.
+    """
+    base = Path(base).resolve()
+    if not base.exists():
+        return 0
+    n = 0
+    with os.scandir(base) as it:
+        for entry in it:
+            if entry.is_symlink():
+                continue
+            if not entry.is_dir(follow_symlinks=False):
+                continue
+            if _parse(entry.name) is not None:
+                n += 1
+    return n
+
+
 def list_tombstones(base: Path) -> list[Tombstone]:
     """Scan ``base`` for ``.deleted-<name>-<ts>/`` directories and return
     a list of ``Tombstone`` records, oldest first.
