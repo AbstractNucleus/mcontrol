@@ -23,20 +23,7 @@
 
   <div class="lifecycle-row">
     <p class="t-eyebrow">Lifecycle</p>
-    <div class="lifecycle-row__buttons">
-      <button class="btn btn--sm"
-              hx-post="/servers/{{ server.name }}/lifecycle/start"
-              hx-target="#state-pill"
-              hx-swap="outerHTML">Start</button>
-      <button class="btn btn--sm"
-              hx-post="/servers/{{ server.name }}/lifecycle/stop"
-              hx-target="#state-pill"
-              hx-swap="outerHTML">Stop</button>
-      <button class="btn btn--sm"
-              hx-post="/servers/{{ server.name }}/lifecycle/restart"
-              hx-target="#state-pill"
-              hx-swap="outerHTML">Restart</button>
-    </div>
+    {% include "_lifecycle_buttons.html" %}
   </div>
 
   <section id="server-resources"

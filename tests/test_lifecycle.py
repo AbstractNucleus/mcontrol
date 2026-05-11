@@ -113,3 +113,78 @@ async def test_lifecycle_uses_container_name_override(
     await client.post("/servers/atm10/lifecycle/stop")
 
     assert stub_docker["stopped"] == ["atm10-prod"]
+
+
+def _button_chunk(body: str, verb: str) -> str:
+    """Return the substring from `<button ...` through `</button>` for the
+    lifecycle button whose `hx-post` targets `/lifecycle/{verb}`. The
+    class attribute (where `btn--primary` lives) sits before `hx-post`,
+    so we have to walk back to the opening `<button` tag, not just split
+    on the URL.
+    """
+    needle = f"lifecycle/{verb}"
+    idx = body.index(needle)
+    open_tag = body.rfind("<button", 0, idx)
+    close_tag = body.index("</button>", idx)
+    return body[open_tag:close_tag]
+
+
+async def test_stop_response_carries_oob_buttons_for_stopped_state(
+    client, fake_server_row, stub_db_writes, stub_docker
+):
+    """After Stop, the response carries both the state pill AND an OOB
+    swap of the lifecycle-buttons wrapper rebuilt for state=exited:
+    Start enabled + accent, Stop + Restart disabled."""
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "running",
+    }
+
+    response = await client.post("/servers/atm10/lifecycle/stop")
+    body = response.text
+
+    assert 'id="state-pill"' in body
+    assert 'state-pill--exited' in body
+
+    # OOB swap wrapper for the buttons block.
+    assert 'id="lifecycle-buttons"' in body
+    assert 'hx-swap-oob="true"' in body
+
+    start = _button_chunk(body, "start")
+    assert 'btn--primary' in start
+    assert 'disabled' not in start
+
+    stop = _button_chunk(body, "stop")
+    assert 'disabled' in stop
+    assert 'btn--primary' not in stop
+
+    restart = _button_chunk(body, "restart")
+    assert 'disabled' in restart
+    assert 'btn--primary' not in restart
+
+
+async def test_start_response_carries_oob_buttons_for_running_state(
+    client, fake_server_row, stub_db_writes, stub_docker
+):
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "exited",
+    }
+
+    response = await client.post("/servers/atm10/lifecycle/start")
+    body = response.text
+
+    assert 'state-pill--running' in body
+    assert 'id="lifecycle-buttons"' in body
+    assert 'hx-swap-oob="true"' in body
+
+    start = _button_chunk(body, "start")
+    assert 'disabled' in start
+    assert 'btn--primary' not in start
+
+    stop = _button_chunk(body, "stop")
+    assert 'btn--primary' in stop
+    assert 'disabled' not in stop
+
+    restart = _button_chunk(body, "restart")
+    assert 'disabled' not in restart

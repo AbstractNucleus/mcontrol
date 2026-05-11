@@ -51,6 +51,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 030 | Deep `/healthz`: per-subsystem probe with 503-on-degraded    | Accepted | 2026-05-10 |
 | 031 | Empty-trash affordance: tombstone purge with 7-day default   | Accepted | 2026-05-10 |
 | 032 | Claude-flavoured theme; semantic tokens; tri-state dark/light | Accepted | 2026-05-10 |
+| 033 | Lifecycle buttons: state-aware disable + accent on next-action  | Accepted | 2026-05-11 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -575,3 +576,32 @@ Rejected:
 Trade-off: the panel's visual language drifts from any future sibling tool's. If a `bcontrol` or `cservices` ever appears in this fleet and wants visual coherence with `mcontrol`, the path is "copy the relevant subset of `mcontrol/static/tokens.css` into that tool" rather than "point both at a third-party design repo." The cost is "a token bump in one tool doesn't auto-propagate"; the benefit is "neither tool's visual identity is hostage to a repo neither owns." At single-operator scale and one-app horizon, this is the right side of the trade.
 
 The contract this entry pins for future slices: any new component / partial gets a deliberate styling pass (no class-without-rule). New tokens, if needed, get added to the semantic layer in `tokens.css` — components consume the semantic name, never the primitive. The two-mode contract (light + dark with explicit override) is invariant; new colour decisions land in both modes simultaneously.
+
+## 033. Lifecycle buttons: state-aware disable + accent on next-action
+
+**Status:** Accepted · 2026-05-11
+
+The three lifecycle buttons on `/servers/<name>` (Start / Stop / Restart) render with `disabled` and `--accent` (`.btn--primary`) reflecting the server's current state. The mapping is a pure function in `mcontrol/lifecycle_state.py`:
+
+| State (`server.state`) | Start | Stop | Restart | Accent |
+|---|---|---|---|---|
+| `created`, `exited`, `dead` | enabled | disabled | disabled | Start |
+| `running`, `paused` | disabled | enabled | enabled | Stop |
+| `restarting`, `scaffolding` | disabled | disabled | disabled | — |
+| unrecognised / `unknown` / `None` | enabled | enabled | enabled | — |
+
+After a lifecycle action (Start / Stop / Restart) lands, the route handler returns a single HTML body carrying two HTMX swap targets: the state pill (primary swap to `#state-pill` via `outerHTML`, unchanged shape from earlier slices) and the lifecycle-buttons wrapper marked `hx-swap-oob="true"`. HTMX swaps both, so the three buttons re-render in lock-step with the freshly-updated state without a page reload. The partial is `templates/_lifecycle_buttons.html`; the initial render comes from `server.py` passing `lifecycle=lifecycle_state.view(state)` into context, and the OOB renders come from `lifecycle.py`'s `_pill_and_buttons` helper rendering both partials and concatenating their HTML.
+
+This closes the deferred follow-up from slice 12 / decision 032. The slice 12 plan kept all three buttons unconditionally enabled and applied no accent, with a deliberate "lifecycle-aware accent is a follow-up" note. Decision 033 is that follow-up.
+
+Rejected:
+
+- **Disable on the client via a `state`-attribute selector.** Would mean shipping a small JS file that mutates `disabled` on the buttons whenever the state pill changes. The OOB swap is one HTTP response, no extra script, and stays consistent with the rest of the panel's HTMX-driven posture (decision 016).
+- **Re-render the entire `server_detail.html` after every lifecycle action.** Would clobber transient client state (open `<details>`, scroll position, in-flight resources/players polls). The two-target swap is the minimum surface that needs updating.
+- **A dedicated `unpause` route for paused containers.** `paused` is rare; the operator's recovery path is Restart (which kill+restarts the container) or Stop. Adding a fourth route would be its own slice. Treat `paused` like `running` for now.
+- **Accent on Restart when running.** Considered. Stop is the only button whose action is uniquely meaningful for a running server — Restart is "stop then start," a strict superset. Pinning the accent on the smallest unambiguous action is the consistent rule.
+- **Disable in `scaffolding` quietly without a banner.** The health banner already explains "stuck scaffolding" when relevant (decision 030); disabling the lifecycle buttons in `scaffolding` is the matching no-mixed-signals posture.
+- **Polling the buttons on a timer like the resources card.** The state pill is also not polled — it updates only on operator action. Same posture for the buttons: post-action OOB swap is the only update channel.
+
+Trade-off: if the actual container state diverges from `server.state` in the DB (e.g. the container was started or stopped via `docker` CLI outside mcontrol), the buttons reflect the stale DB state until discovery re-runs at next app boot. Same trade-off the state pill already accepts (decision 021 / discovery-at-startup). A "rescan" affordance is parked in the slice 3 follow-up; if it ever lands, the buttons pick up the fresh state for free via the same partial.
+
