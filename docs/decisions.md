@@ -52,6 +52,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 031 | Empty-trash affordance: tombstone purge with 7-day default   | Accepted | 2026-05-10 |
 | 032 | Claude-flavoured theme; semantic tokens; tri-state dark/light | Accepted | 2026-05-10 |
 | 033 | Lifecycle buttons: state-aware disable + accent on next-action  | Accepted | 2026-05-11 |
+| 034 | Operator-triggered discovery via `POST /rescan`              | Accepted | 2026-05-11 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -605,3 +606,20 @@ Rejected:
 
 Trade-off: if the actual container state diverges from `server.state` in the DB (e.g. the container was started or stopped via `docker` CLI outside mcontrol), the buttons reflect the stale DB state until discovery re-runs at next app boot. Same trade-off the state pill already accepts (decision 021 / discovery-at-startup). A "rescan" affordance is parked in the slice 3 follow-up; if it ever lands, the buttons pick up the fresh state for free via the same partial.
 
+## 034. Operator-triggered discovery via `POST /rescan`
+
+**Status:** Accepted · 2026-05-11
+
+Discovery (walking `SERVER_BASE_PATH` and refreshing `state` from Docker) is exposed as `POST /rescan`, in addition to the once-at-startup invocation from the FastAPI lifespan handler (decision 021). The home page header carries a `Rescan` button (`hx-post="/rescan"`, `hx-swap="none"`) and the empty-state inside the home page does the same. On an HTMX request the handler returns `204 No Content` with `HX-Refresh: true`, so the client reloads `/` and re-fetches the freshly-discovered rows. On a plain HTTP request the handler returns `303 → /` for the same effect without HTMX. A missing `server_base_path` surfaces as `503` (operator signal that the deployment-level bind mount has dropped out); the startup lifespan handler logs-and-continues for the same condition, but at request time the operator is interactively asking for a result and deserves the failure to be visible.
+
+The slice 3 plan parked "Rescan button" as a follow-up; decision 033 (slice 13, state-aware lifecycle buttons) re-flagged the gap when it noted that DB state drifts from real container state until next app restart. This entry closes the loop: the freshly-refreshed `server.state` values feed the lifecycle buttons and the home-page state pills via the same partials, so a single rescan brings the whole panel back into sync.
+
+Rejected:
+
+- **Auto-rescan on a polling timer.** Decision 021 picked operator-triggered over polling at startup for the same reasons that hold here: discovery touches the DB, and a single-operator panel doesn't need a background job that mutates state without anyone asking. The post-load polls on `/resources` are read-only and per-server-scoped; discovery is fleet-wide and writes to `servers`.
+- **Add a rescan affordance to every server detail page.** The home page is the single fleet-wide surface; a per-server rescan would either duplicate the affordance or open a question about whether it refreshes just that one row. Punt to a follow-up if the felt cost ever surfaces.
+- **Render an HTMX-replacing flash on success.** Page reload IS the feedback — the new rows appear, or the state pills move. Adding a "Rescan complete: 12 dirs seen" toast would be ceremony with no operator value at single-host scale. The home empty-state's body copy ("Drop a directory into `{SERVER_BASE_PATH}` and click Rescan") tells the operator what the button does before they click.
+- **Surface discovery-error counts in the response.** `discovery.run_discovery` already returns a count and logs the path; the operator can `docker logs mcontrol` if a rescan looks suspicious. Surfacing per-row failures would mean changing the discovery contract (currently catches Docker-unreachable as `state="unknown"`); out of scope.
+- **Stream progress for slow rescans.** Single-host scope, twelve dirs maximum, sub-second walks. Streaming would be solving a problem that doesn't exist.
+
+Trade-off: if an operator hammers Rescan during a long-running discovery (e.g. SUPABASE_URL hangs), concurrent calls all touch the DB. `db.insert_server` is idempotent on `name`-unique conflict; `db.update_server_state` is a single update. Worst case is wasted writes, not corruption. A lock would be defensive code for a posture that doesn't exist on a single-operator panel.

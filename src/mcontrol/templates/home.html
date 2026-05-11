@@ -12,6 +12,11 @@
       <h2 class="t-h1">Servers</h2>
     </div>
     <div class="home-header__actions">
+      <button class="btn btn--ghost btn--sm"
+              type="button"
+              hx-post="/rescan"
+              hx-swap="none"
+              title="Re-walk SERVER_BASE_PATH and refresh container state from Docker">Rescan</button>
       <a class="btn btn--primary" href="/servers/new">New server</a>
     </div>
   </div>
@@ -35,10 +40,16 @@
       </svg>
       <h3 class="empty-state__title">No servers yet</h3>
       <p class="empty-state__body">
-        Drop a directory into <code>{{ "{SERVER_BASE_PATH}" }}</code> and restart the panel,
+        Drop a directory into <code>{{ "{SERVER_BASE_PATH}" }}</code> and click Rescan,
         or scaffold a fresh one.
       </p>
-      <a class="btn btn--primary" href="/servers/new">Create a server</a>
+      <div class="empty-state__actions">
+        <button class="btn btn--ghost"
+                type="button"
+                hx-post="/rescan"
+                hx-swap="none">Rescan</button>
+        <a class="btn btn--primary" href="/servers/new">Create a server</a>
+      </div>
     </div>
   {% endif %}
 </section>

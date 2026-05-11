@@ -1,10 +1,15 @@
 import asyncio
+import logging
+from pathlib import Path
 
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 
-from mcontrol import __version__, db, resources
+from mcontrol import __version__, db, discovery, resources
+from mcontrol.settings import Settings
 from mcontrol.templates import templates
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -49,3 +54,35 @@ async def home(request: Request) -> HTMLResponse:
         name="home.html",
         context={"version": __version__, "servers": rows},
     )
+
+
+@router.post("/rescan")
+async def rescan(request: Request) -> Response:
+    """Operator-triggered discovery (decision 034).
+
+    Re-runs the same idempotent `discovery.run_discovery` routine the
+    lifespan kicks off at startup (decision 021). On HTMX requests
+    returns 204 + `HX-Refresh: true` so the client reloads `/` and
+    picks up the freshly-discovered rows. On plain-HTTP requests
+    (curl, no-JS), returns 303 → `/`.
+
+    A missing `SERVER_BASE_PATH` directory surfaces as 503; this is the
+    operator's signal that the deployment-level bind mount has dropped
+    out (the lifespan handler logs and continues at startup — same
+    surface from the operator-trigger side would silently hide the
+    problem).
+    """
+    settings: Settings = request.app.state.settings
+    base_path = Path(settings.server_base_path)
+    if not base_path.exists():
+        raise HTTPException(
+            status_code=503,
+            detail=f"server_base_path does not exist: {base_path}",
+        )
+
+    count = await discovery.run_discovery(base_path)
+    logger.info("rescan: %d server dir(s) seen under %s", count, base_path)
+
+    if request.headers.get("hx-request"):
+        return Response(status_code=204, headers={"HX-Refresh": "true"})
+    return RedirectResponse(url="/", status_code=303)

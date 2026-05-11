@@ -415,6 +415,12 @@ small {
   margin: 0;
 }
 
+.empty-state__actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
 
 /* ---- Home page --------------------------------------------------------- */
 .home-header {
