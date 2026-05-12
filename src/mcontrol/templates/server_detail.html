@@ -116,16 +116,23 @@
         </details>
       </p>
     </header>
-    <input type="search"
-           id="file-search-input"
-           class="file-search-input"
-           name="q"
-           placeholder="search filename (≥ 2 chars)…"
-           autocomplete="off"
-           hx-get="/servers/{{ server.name }}/files/search"
-           hx-trigger="input changed delay:200ms, search"
-           hx-target="#file-search-results"
-           hx-swap="innerHTML">
+    <div class="file-search">
+      <input type="search"
+             id="file-search-input"
+             class="file-search-input"
+             name="q"
+             placeholder="search filename (≥ 2 chars)…"
+             autocomplete="off"
+             hx-get="/servers/{{ server.name }}/files/search"
+             hx-trigger="input changed delay:200ms, search"
+             hx-target="#file-search-results"
+             hx-swap="innerHTML">
+      <button type="button"
+              id="file-search-clear"
+              class="file-search__clear"
+              aria-label="Clear search"
+              hidden>×</button>
+    </div>
     <div id="file-search-results"></div>
     <div id="file-bulk-toolbar" class="file-bulk-toolbar" hidden>
       <span class="t-caption" data-bulk-count>0 selected</span>
