@@ -148,6 +148,8 @@
     <div class="files-pane__split">
       <ul class="file-tree"
           id="file-tree"
+          role="tree"
+          aria-label="Server files"
           data-upload-target
           data-upload-path=""
           hx-get="/servers/{{ server.name }}/files/tree?path="

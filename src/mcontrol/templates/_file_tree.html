@@ -7,6 +7,11 @@
 {% for entry in entries %}
   {% if entry.kind == 'dir' %}
     <li class="file-tree__entry file-tree__entry--dir"
+        role="treeitem"
+        aria-expanded="false"
+        tabindex="-1"
+        data-tree-path="{{ entry.path }}"
+        data-tree-kind="dir"
         data-upload-target
         data-upload-path="{{ entry.path }}">
       <input type="checkbox"
@@ -49,10 +54,14 @@
                   data-action-kind="dir">Delete</button>
         </div>
       </details>
-      <ul class="file-tree__children"></ul>
+      <ul class="file-tree__children" role="group"></ul>
     </li>
   {% elif entry.kind == 'symlink' %}
-    <li class="file-tree__entry file-tree__entry--symlink">
+    <li class="file-tree__entry file-tree__entry--symlink"
+        role="treeitem"
+        tabindex="-1"
+        data-tree-path="{{ entry.path }}"
+        data-tree-kind="symlink">
       <input type="checkbox"
              class="file-tree__checkbox"
              data-select-path="{{ entry.path }}"
@@ -85,7 +94,11 @@
       </details>
     </li>
   {% else %}
-    <li class="file-tree__entry file-tree__entry--file">
+    <li class="file-tree__entry file-tree__entry--file"
+        role="treeitem"
+        tabindex="-1"
+        data-tree-path="{{ entry.path }}"
+        data-tree-kind="file">
       <input type="checkbox"
              class="file-tree__checkbox"
              data-select-path="{{ entry.path }}"
