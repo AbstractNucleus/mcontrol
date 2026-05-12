@@ -14,4 +14,4 @@ Canonical defaults (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-
 
 ### Domain docs
 
-Single-context. Decisions register at `docs/decisions.md` (single-file, not per-ADR). No `CONTEXT.md` yet. See `docs/agents/domain.md`.
+Single-context. Decisions register at `docs/decisions.md` (single-file, not per-ADR). Domain glossary at `docs/CONTEXT.md`. See `docs/agents/domain.md`.
