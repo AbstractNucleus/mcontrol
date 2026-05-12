@@ -677,9 +677,11 @@ async function performBulkDelete(paths) {
     return;
   }
 
-  const html = await resp.text();
-  // Multi-parent batches are flattened into a root-listing refresh.
-  swapTreeAt("", html);
+  // Refresh only the unique parent subtrees of the deleted paths;
+  // refreshTreeAt is a no-op for parents that aren't currently expanded,
+  // so unrelated expanded subtrees keep their state.
+  const parents = new Set(paths.map(parentOf));
+  await Promise.all([...parents].map(refreshTreeAt));
   SELECTION.clear();
   syncBulkUi();
   const s = status();
@@ -763,8 +765,12 @@ async function performBulkMove(sources, destDir) {
     return;
   }
 
-  const html = await resp.text();
-  swapTreeAt("", html);
+  // Refresh each source parent and the destination; refreshTreeAt skips
+  // any subtree that isn't currently expanded, so unrelated expansions
+  // are preserved.
+  const targets = new Set(sources.map(parentOf));
+  targets.add(destDir);
+  await Promise.all([...targets].map(refreshTreeAt));
   SELECTION.clear();
   syncBulkUi();
   const s = status();
