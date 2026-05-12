@@ -1262,8 +1262,39 @@ small {
   font-style: italic;
 }
 
+.file-search {
+  position: relative;
+}
+
 .file-search-input {
   font-family: var(--font-sans);
+  width: 100%;
+  padding-right: 2rem;
+}
+
+.file-search__clear {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-size: var(--fs-md);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.file-search__clear:hover {
+  background: var(--bg-sunken);
+  color: var(--fg-primary);
 }
 
 #file-search-results:empty {

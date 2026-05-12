@@ -776,3 +776,34 @@ async function performBulkMove(sources, destDir) {
   const t = tree();
   if (t && window.htmx && window.htmx.process) window.htmx.process(t);
 }
+
+// ---- file search clear button (issue #67) ----------------------------
+
+// Explicit × button beside the search input. Browsers render a native
+// clear for type="search" inconsistently (Firefox doesn't), and even
+// where it exists it skips firing `input` so the htmx-bound results
+// pane stays stale. Dispatching `input` on click drives the existing
+// `hx-trigger="input changed"` to re-query with an empty value, which
+// clears #file-search-results.
+(function () {
+  const input = document.getElementById("file-search-input");
+  const clearBtn = document.getElementById("file-search-clear");
+  if (!input || !clearBtn) return;
+
+  function sync() { clearBtn.hidden = !input.value; }
+
+  input.addEventListener("input", sync);
+  clearBtn.addEventListener("click", () => {
+    input.value = "";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    clearBtn.hidden = true;
+    input.focus();
+  });
+  input.addEventListener("keydown", (evt) => {
+    if (evt.key === "Escape" && input.value) {
+      evt.preventDefault();
+      clearBtn.click();
+    }
+  });
+  sync();
+})();
