@@ -14,15 +14,15 @@
           hx-post="/servers/{{ server.name }}/lifecycle/start"
           hx-target="#state-pill"
           hx-swap="outerHTML"
-          {% if lifecycle.start_disabled %}disabled{% endif %}>Start</button>
+          {% if lifecycle.start_disabled %}disabled{% endif %}>Start{% include "_spinner.html" %}</button>
   <button class="btn btn--sm{% if lifecycle.accent == 'stop' %} btn--primary{% endif %}"
           hx-post="/servers/{{ server.name }}/lifecycle/stop"
           hx-target="#state-pill"
           hx-swap="outerHTML"
-          {% if lifecycle.stop_disabled %}disabled{% endif %}>Stop</button>
+          {% if lifecycle.stop_disabled %}disabled{% endif %}>Stop{% include "_spinner.html" %}</button>
   <button class="btn btn--sm"
           hx-post="/servers/{{ server.name }}/lifecycle/restart"
           hx-target="#state-pill"
           hx-swap="outerHTML"
-          {% if lifecycle.restart_disabled %}disabled{% endif %}>Restart</button>
+          {% if lifecycle.restart_disabled %}disabled{% endif %}>Restart{% include "_spinner.html" %}</button>
 </div>

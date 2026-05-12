@@ -754,7 +754,7 @@ function showBulkDeleteConfirm() {
        <p class="t-caption">Type <code>DELETE</code> to confirm:</p>
        <div class="file-delete-confirm__actions">
          <input type="text" autocomplete="off" data-bulk-confirm-input>
-         <button type="button" class="file-delete-confirm__btn file-delete-confirm__btn--danger" data-bulk-confirm-submit disabled>Delete all</button>
+         <button type="button" class="file-delete-confirm__btn file-delete-confirm__btn--danger" data-bulk-confirm-submit disabled>Delete all <span class="htmx-indicator btn-spinner" aria-hidden="true"></span></button>
          <button type="button" class="file-delete-confirm__btn" data-bulk-confirm-cancel>Cancel</button>
        </div>
      </div>`;
@@ -771,6 +771,7 @@ function showBulkDeleteConfirm() {
   }
   submit.addEventListener("click", async () => {
     if (submit.disabled) return;
+    submit.classList.add("htmx-request");
     await performBulkDelete(paths);
   });
   cancel.addEventListener("click", () => { s.innerHTML = ""; });
@@ -832,7 +833,7 @@ function showBulkMoveModal() {
          Selected destination: <code data-move-selection>(none)</code>
        </p>
        <div class="file-move-modal__actions">
-         <button type="button" class="file-action-form__btn" data-bulk-move-submit disabled>Move here</button>
+         <button type="button" class="file-action-form__btn" data-bulk-move-submit disabled>Move here <span class="htmx-indicator btn-spinner" aria-hidden="true"></span></button>
          <button type="button" class="file-action-form__btn" data-bulk-move-cancel>Cancel</button>
        </div>
      </div>`;
@@ -859,6 +860,7 @@ function showBulkMoveModal() {
   });
   submit.addEventListener("click", async () => {
     if (submit.disabled || selectedDest === null) return;
+    submit.classList.add("htmx-request");
     await performBulkMove(sources, selectedDest);
   });
   cancel.addEventListener("click", () => { s.innerHTML = ""; });
