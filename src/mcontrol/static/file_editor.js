@@ -6,7 +6,8 @@
 // the textarea, and keep the textarea's value in sync with the editor
 // document so the form submits the current contents.
 //
-// Custom modes: .properties (legacy-modes), .snbt (tiny inline parser).
+// Custom modes: .properties + .toml (legacy-modes), .snbt (tiny inline
+// parser), .json / .xml / .yaml (lezer-based lang-* packages).
 // Everything else is plain text.
 
 import { EditorView, basicSetup } from "codemirror";
@@ -15,6 +16,10 @@ import { keymap } from "@codemirror/view";
 import { indentWithTab } from "@codemirror/commands";
 import { StreamLanguage } from "@codemirror/language";
 import { properties as propertiesMode } from "@codemirror/legacy-modes/mode/properties";
+import { toml as tomlMode } from "@codemirror/legacy-modes/mode/toml";
+import { json } from "@codemirror/lang-json";
+import { xml } from "@codemirror/lang-xml";
+import { yaml } from "@codemirror/lang-yaml";
 
 // Minimal SNBT (stringified-NBT) tokenizer — JSON-like with type
 // suffixes on numbers and unquoted keys/values. Good enough for syntax
@@ -43,6 +48,18 @@ function languageFor(filename) {
   }
   if (lower.endsWith(".snbt")) {
     return StreamLanguage.define(snbtParser);
+  }
+  if (lower.endsWith(".json")) {
+    return json();
+  }
+  if (lower.endsWith(".yaml") || lower.endsWith(".yml")) {
+    return yaml();
+  }
+  if (lower.endsWith(".toml")) {
+    return StreamLanguage.define(tomlMode);
+  }
+  if (lower.endsWith(".xml")) {
+    return xml();
   }
   return null;
 }
