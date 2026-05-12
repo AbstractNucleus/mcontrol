@@ -232,7 +232,7 @@ async def test_add_from_roster_running_surfaces_rcon_unavailable_as_error_flash(
 
     assert response.status_code == 200
     assert "RCON is not enabled" in response.text
-    assert "players-card__flash--error" in response.text
+    assert "flash-msg--error" in response.text
 
 
 # ---------------------------------------------------------------------------

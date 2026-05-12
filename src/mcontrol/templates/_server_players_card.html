@@ -9,9 +9,9 @@
   </header>
 
   {% if flash %}
-    <p class="players-card__flash players-card__flash--{{ flash.kind }}">
-      {{ flash.message }}
-    </p>
+  <div hx-swap-oob="beforeend:#flash-stack">
+    {% include "_flash.html" %}
+  </div>
   {% endif %}
 
   {% if 'whitelist' in malformed %}

@@ -23,3 +23,10 @@ async def test_htmx_sse_extension_is_served(client):
     assert response.status_code == 200
     content_type = response.headers["content-type"]
     assert content_type.startswith(("application/javascript", "text/javascript"))
+
+
+async def test_flash_js_is_served(client):
+    response = await client.get("/static/flash.js")
+    assert response.status_code == 200
+    content_type = response.headers["content-type"]
+    assert content_type.startswith(("application/javascript", "text/javascript"))
