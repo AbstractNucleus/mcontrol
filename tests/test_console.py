@@ -214,6 +214,36 @@ async def test_rcon_post_returns_409_when_no_open_session(
     assert response.status_code == 409
 
 
+async def test_stream_rejects_concurrent_connection(
+    fake_docker_network, fake_rcon, tmp_path
+):
+    """A second SSE connect for the same server while one is already open must
+    yield an error immediately and touch no network resources."""
+    from mcontrol.routes import console
+
+    _write_props(tmp_path, enable_rcon=True, password="hunter2")
+
+    lock = console._connection_locks["concurrent_test"]
+    await lock.acquire()
+    try:
+        class _MockRequest:
+            async def is_disconnected(self):
+                return False
+
+        chunks: list[bytes] = []
+        async for chunk in console._stream(
+            _MockRequest(), "concurrent_test", "concurrent_test", tmp_path
+        ):
+            chunks.append(chunk)
+    finally:
+        lock.release()
+
+    body = b"".join(chunks)
+    assert b"already open" in body
+    assert fake_docker_network["attaches"] == []
+    assert "conn" not in fake_rcon
+
+
 def test_read_rcon_properties_parses_enabled_and_password(tmp_path):
     from mcontrol.routes import console
 
