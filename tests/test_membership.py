@@ -345,6 +345,48 @@ def test_scan_memberships_skips_malformed_files_silently(tmp_path):
     ]
 
 
+# ---------------------------------------------------------------------------
+# _read cache (whitelist.json / ops.json)
+# ---------------------------------------------------------------------------
+
+
+def test_read_whitelist_serves_cached_result_without_rereading(tmp_path, monkeypatch):
+    from pathlib import Path as _Path
+
+    server_dir = _server_dir(tmp_path)
+    path = membership.whitelist_path(server_dir)
+    path.write_text(json.dumps([{"uuid": _NOTCH_UUID, "name": "Notch"}]))
+
+    membership.read_whitelist(server_dir)  # populate cache
+
+    read_count = [0]
+    _orig = _Path.read_text
+
+    def counting_read_text(self, *a, **kw):
+        read_count[0] += 1
+        return _orig(self, *a, **kw)
+
+    monkeypatch.setattr(_Path, "read_text", counting_read_text)
+
+    entries, _ = membership.read_whitelist(server_dir)
+
+    assert entries == [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    assert read_count[0] == 0  # served from cache
+
+
+def test_read_whitelist_cache_miss_on_mtime_change(tmp_path):
+    server_dir = _server_dir(tmp_path)
+    path = membership.whitelist_path(server_dir)
+    path.write_text(json.dumps([{"uuid": _NOTCH_UUID, "name": "Notch"}]))
+
+    membership.read_whitelist(server_dir)  # populate cache
+
+    path.write_text(json.dumps([{"uuid": _HEROBRINE_UUID, "name": "Herobrine"}]))
+
+    entries, _ = membership.read_whitelist(server_dir)
+    assert entries == [{"uuid": _HEROBRINE_UUID, "name": "Herobrine"}]
+
+
 def test_scan_memberships_skips_entries_missing_uuid_or_name(tmp_path):
     atm = _server_dir(tmp_path, "atm10")
     membership.whitelist_path(atm).write_text(

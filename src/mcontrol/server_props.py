@@ -18,10 +18,17 @@ Missing file → ``{}``. Read errors propagate.
 
 from pathlib import Path
 
+_props_cache: dict[tuple[str, int], dict[str, str]] = {}
+
 
 def read_properties(path: Path) -> dict[str, str]:
-    if not path.exists():
+    try:
+        st = path.stat()
+    except FileNotFoundError:
         return {}
+    cache_key = (str(path), st.st_mtime_ns)
+    if cache_key in _props_cache:
+        return _props_cache[cache_key]
     out: dict[str, str] = {}
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
@@ -29,4 +36,5 @@ def read_properties(path: Path) -> dict[str, str]:
             continue
         key, _, value = line.partition("=")
         out[key.strip()] = value.strip()
+    _props_cache[cache_key] = out
     return out

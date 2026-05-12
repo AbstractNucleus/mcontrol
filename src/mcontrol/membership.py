@@ -31,6 +31,8 @@ from mcontrol.file_writer import atomic_write_text
 _OP_DEFAULT_LEVEL = 4
 _OP_DEFAULT_BYPASSES = False
 
+_file_cache: dict[tuple[str, int], list[dict[str, Any]]] = {}
+
 
 class MembershipError(Exception):
     """Base class for membership.py failures."""
@@ -58,6 +60,9 @@ def _read(path: Path) -> tuple[list[dict[str, Any]], int]:
         st = path.stat()
     except FileNotFoundError:
         return [], 0
+    cache_key = (str(path), st.st_mtime_ns)
+    if cache_key in _file_cache:
+        return _file_cache[cache_key], st.st_mtime_ns
     raw = path.read_text(encoding="utf-8")
     try:
         data = json.loads(raw) if raw.strip() else []
@@ -65,6 +70,7 @@ def _read(path: Path) -> tuple[list[dict[str, Any]], int]:
         raise MalformedFileError(f"{path} is not valid JSON: {exc}") from exc
     if not isinstance(data, list) or not all(isinstance(x, dict) for x in data):
         raise MalformedFileError(f"{path} is not a list of objects")
+    _file_cache[cache_key] = data
     return data, st.st_mtime_ns
 
 
