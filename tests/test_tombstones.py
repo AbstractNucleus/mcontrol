@@ -22,7 +22,7 @@ from mcontrol import tombstones
     ],
 )
 def test_parse_extracts_name_and_unix_ts(name: str, expected: tuple[str, int]):
-    assert tombstones._parse(name) == expected
+    assert tombstones.parse(name) == expected
 
 
 @pytest.mark.parametrize(
@@ -42,7 +42,7 @@ def test_parse_extracts_name_and_unix_ts(name: str, expected: tuple[str, int]):
     ],
 )
 def test_parse_rejects_malformed_names(name: str):
-    assert tombstones._parse(name) is None
+    assert tombstones.parse(name) is None
 
 
 # ---------------------------------------------------------------------------
