@@ -10,11 +10,17 @@
     {# Empty input → empty slot (CSS hides the placeholder so this looks like nothing). #}
   {% elif not results %}
     <p class="t-caption t-muted">no matches for <code>{{ q }}</code></p>
+    {% if skipped %}
+      <p class="t-caption t-muted">world chunk/player dirs skipped — append <code>&amp;include_chunks=1</code> to include them.</p>
+    {% endif %}
   {% else %}
     <p class="t-caption">
       {{ results|length }} match{{ '' if results|length == 1 else 'es' }}
       {%- if truncated %} (capped — narrow the query){%- endif -%}
     </p>
+    {% if skipped %}
+      <p class="t-caption t-muted">world chunk/player dirs skipped — append <code>&amp;include_chunks=1</code> to include them.</p>
+    {% endif %}
     <ul class="file-search-list">
       {% for r in results %}
         <li class="file-search-list__entry file-search-list__entry--{{ r.kind }}">

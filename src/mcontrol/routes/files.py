@@ -605,12 +605,32 @@ async def download(
 _SEARCH_LIMIT = 200
 _SEARCH_MIN_LEN = 2
 
+# High-cardinality subdirs inside a Minecraft world whose contents are
+# addressed by machine-generated names (chunk regions, per-player data
+# files, etc.). They almost never match operator-meaningful queries but
+# saturate the result cap with noise. The skip only fires when the dir
+# sits directly under a `world`-named or `DIM*`-prefixed parent so a
+# top-level dir that happens to share a name is searched normally.
+_SEARCH_DEFAULT_SKIP_DIRS = frozenset({
+    "region",
+    "entities",
+    "poi",
+    "playerdata",
+    "stats",
+    "advancements",
+})
+
+
+def _is_world_like_parent(parent_name: str) -> bool:
+    return parent_name == "world" or parent_name.startswith("DIM")
+
 
 @router.get("/servers/{name}/files/search", response_class=HTMLResponse)
 async def search(
     request: Request,
     name: str,
     q: str = Query(""),
+    include_chunks: bool = Query(False),
 ) -> HTMLResponse:
     """Recursive case-insensitive basename search (slice 5 PR 7).
 
@@ -619,6 +639,11 @@ async def search(
     link entries can still match by name. Special files are skipped.
     Capped at `_SEARCH_LIMIT` hits to keep both walk and render bounded
     on large `world/region/` style trees.
+
+    By default the walk prunes well-known high-cardinality Minecraft
+    world subdirs (chunk regions, per-player data, etc. — see
+    `_SEARCH_DEFAULT_SKIP_DIRS`) when they sit under a `world` or `DIM*`
+    parent. Pass `include_chunks=1` to disable the prune.
     """
     server = _server_or_404(name)
     needle = q.strip().lower()
@@ -632,15 +657,22 @@ async def search(
                 "results": [],
                 "truncated": False,
                 "too_short": bool(needle),
+                "skipped": False,
             },
         )
 
     base = Path(server["dir"]).resolve()
     results: list[dict] = []
     truncated = False
+    skipped = False
     for root, dirs, files in os.walk(base, followlinks=False):
         dirs.sort()
         files.sort()
+        if not include_chunks and _is_world_like_parent(Path(root).name):
+            keep = [d for d in dirs if d not in _SEARCH_DEFAULT_SKIP_DIRS]
+            if len(keep) != len(dirs):
+                skipped = True
+                dirs[:] = keep
         for entry_name in dirs + files:
             if needle not in entry_name.lower():
                 continue
@@ -672,6 +704,7 @@ async def search(
             "results": results,
             "truncated": truncated,
             "too_short": False,
+            "skipped": skipped,
         },
     )
 
