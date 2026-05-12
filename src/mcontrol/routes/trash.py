@@ -14,6 +14,7 @@ Path-safety lives in tombstones.purge_one; routes only validate the
 type-name confirm string before delegating.
 """
 
+import asyncio
 from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException, Request
@@ -113,7 +114,7 @@ async def empty(request: Request, confirm: str = Form("")) -> HTMLResponse:
             status_code=422,
             detail="Type EMPTY (uppercase) to confirm.",
         )
-    tombstones.purge_older_than(_base(request))
+    await asyncio.to_thread(tombstones.purge_older_than, _base(request))
     response = HTMLResponse("", status_code=200)
     response.headers["HX-Redirect"] = "/trash"
     return response
@@ -147,7 +148,7 @@ async def delete(
             detail=f"Type the server name ({original_name!r}) to confirm.",
         )
     try:
-        tombstones.purge_one(_base(request), dir_name)
+        await asyncio.to_thread(tombstones.purge_one, _base(request), dir_name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     response = HTMLResponse("", status_code=200)
