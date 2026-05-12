@@ -24,16 +24,13 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db, migration
+from mcontrol import db, migration, server_variables_form
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
 router = APIRouter()
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,31}$")
-_PORT_MIN = 1024
-_PORT_MAX = 65535
-_MEMORY_MIN_GB = 2
 
 
 def _server_or_404(name: str) -> dict:
@@ -41,27 +38,6 @@ def _server_or_404(name: str) -> dict:
     if server is None:
         raise HTTPException(status_code=404, detail="Server not found")
     return server
-
-
-def _validate(form: dict) -> dict[str, str]:
-    errors: dict[str, str] = {}
-    if form["memory_budget_gb"] < _MEMORY_MIN_GB:
-        errors["memory_budget_gb"] = f"Minimum {_MEMORY_MIN_GB} GB."
-    if not (_PORT_MIN <= form["port"] <= _PORT_MAX):
-        errors["port"] = f"Port must be between {_PORT_MIN} and {_PORT_MAX}."
-    if not form["server_jar"].strip():
-        errors["server_jar"] = "Required."
-    return errors
-
-
-def _check_port_collision(name: str, port: int) -> str | None:
-    for row in db.list_servers():
-        if row["name"] == name:
-            continue
-        row_vars = row.get("variables") or {}
-        if row_vars.get("port") == port:
-            return f"Port {port} is already used by '{row['name']}'."
-    return None
 
 
 def _initial_form(server: dict) -> dict:
@@ -142,9 +118,9 @@ async def run_migration(
         "server_jar": server_jar.strip(),
         "jvm_extra_args": jvm_extra_args.strip(),
     }
-    errors = _validate(form)
+    errors = server_variables_form.validate(form)
     if not errors:
-        collision = _check_port_collision(name, port)
+        collision = server_variables_form.check_port_collision(name, port)
         if collision is not None:
             errors["port"] = collision
 
