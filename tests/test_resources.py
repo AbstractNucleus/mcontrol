@@ -265,6 +265,36 @@ def test_read_disk_usage_does_not_follow_file_symlinks(tmp_path):
     assert total == 1000 + link_size
 
 
+def test_read_disk_usage_cache_hit_avoids_walk(tmp_path, monkeypatch):
+    """Second call with unchanged root mtime returns the cached value without re-walking."""
+    (tmp_path / "f.bin").write_bytes(b"x" * 50)
+
+    assert resources.read_disk_usage(tmp_path) == 50
+
+    walk_count = {"n": 0}
+    real_scandir = resources.os.scandir
+
+    def counting_scandir(path):
+        walk_count["n"] += 1
+        return real_scandir(path)
+
+    monkeypatch.setattr(resources.os, "scandir", counting_scandir)
+
+    assert resources.read_disk_usage(tmp_path) == 50
+    assert walk_count["n"] == 0
+
+
+def test_read_disk_usage_cache_invalidated_on_root_mtime_change(tmp_path):
+    """Writing a file directly to root advances the root mtime and forces a re-walk."""
+    (tmp_path / "f.bin").write_bytes(b"x" * 50)
+
+    assert resources.read_disk_usage(tmp_path) == 50
+
+    (tmp_path / "g.bin").write_bytes(b"y" * 70)
+
+    assert resources.read_disk_usage(tmp_path) == 120
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="symlinks need privileges on Windows")
 def test_read_disk_usage_does_not_recurse_into_directory_symlinks(tmp_path):
     """A symlink-to-directory is treated as a leaf — the target's

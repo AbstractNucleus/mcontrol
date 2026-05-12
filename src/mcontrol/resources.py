@@ -106,6 +106,10 @@ def _mem_used(snapshot: dict[str, Any]) -> int:
     return usage
 
 
+# Cache: resolved path → (mtime, total_bytes). Invalidated when root mtime changes.
+_disk_cache: dict[Path, tuple[float, int]] = {}
+
+
 def read_disk_usage(server_dir: Path) -> int:
     """Recursive byte total of server_dir.
 
@@ -113,8 +117,23 @@ def read_disk_usage(server_dir: Path) -> int:
     ``stat`` — an operator-introduced symlink contributes only its own
     link-inode bytes, and a symlink to a directory is not recursed
     into. Missing root returns 0.
+
+    Result is cached by (resolved path, root mtime). A cache hit skips
+    the full-tree walk; the cache entry is replaced when the root mtime
+    advances (e.g. a file was added or removed directly under the root).
     """
     root = Path(server_dir).resolve()
+
+    try:
+        mtime = root.stat().st_mtime
+    except OSError:
+        mtime = None
+
+    if mtime is not None:
+        cached = _disk_cache.get(root)
+        if cached is not None and cached[0] == mtime:
+            return cached[1]
+
     total = 0
     stack: list[Path] = [root]
     while stack:
@@ -137,6 +156,9 @@ def read_disk_usage(server_dir: Path) -> int:
                         total += entry.stat(follow_symlinks=False).st_size
                 except OSError:
                     continue
+
+    if mtime is not None:
+        _disk_cache[root] = (mtime, total)
     return total
 
 
