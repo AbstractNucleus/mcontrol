@@ -36,7 +36,7 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from mcontrol import db
 from mcontrol.file_writer import atomic_write_stream_async, atomic_write_text_async
@@ -814,13 +814,12 @@ async def search(
     )
 
 
-@router.post("/servers/{name}/files/bulk_delete", response_class=HTMLResponse)
+@router.post("/servers/{name}/files/bulk_delete")
 async def bulk_delete(
-    request: Request,
     name: str,
     paths: list[str] = Form(...),  # noqa: B008 — FastAPI dep-injection idiom
     confirm: str = Form(""),
-) -> HTMLResponse:
+) -> Response:
     """Delete every entry in `paths` (regular files, symlinks, or recursive
     directories) after a single operator-typed `DELETE` confirmation.
 
@@ -862,22 +861,15 @@ async def bulk_delete(
             os.unlink(target)
 
     _invalidate_search_index(name)
-    base = Path(server["dir"]).resolve()
-    entries = _list_dir(base, base)
-    return templates.TemplateResponse(
-        request=request,
-        name="_file_tree.html",
-        context={"server_name": name, "entries": entries},
-    )
+    return Response(status_code=204)
 
 
-@router.post("/servers/{name}/files/bulk_move", response_class=HTMLResponse)
+@router.post("/servers/{name}/files/bulk_move")
 async def bulk_move(
-    request: Request,
     name: str,
     sources: list[str] = Form(...),  # noqa: B008 — FastAPI dep-injection idiom
     dest_dir: str = Form(""),
-) -> HTMLResponse:
+) -> Response:
     """Move every `sources` entry into `dest_dir`, keeping each basename.
 
     Refuses the entire batch (no partial moves) on any collision at the
@@ -936,10 +928,4 @@ async def bulk_move(
         os.rename(src, dest)
 
     _invalidate_search_index(name)
-    base = Path(server["dir"]).resolve()
-    entries = _list_dir(base, base)
-    return templates.TemplateResponse(
-        request=request,
-        name="_file_tree.html",
-        context={"server_name": name, "entries": entries},
-    )
+    return Response(status_code=204)
