@@ -85,6 +85,7 @@ def _form(**overrides) -> dict:
         "port": "25575",
         "server_jar": "paper-1.21.4.jar",
         "jvm_extra_args": "",
+        "accept_eula": "on",
     }
     body.update({k: str(v) for k, v in overrides.items()})
     return body
@@ -103,6 +104,7 @@ async def test_get_new_renders_form(app_client, fake_db):
     assert 'name="port"' in body
     assert 'name="server_jar"' in body
     assert 'name="jvm_extra_args"' in body
+    assert 'name="accept_eula"' in body
     # Hint about uploading the jar after scaffolding (slice 6 contract).
     assert "upload" in body.lower()
 
@@ -140,10 +142,13 @@ async def test_post_happy_path_scaffolds_and_redirects(
     # Files landed on disk via the real scaffolding module.
     compose = base_dir / "newshire" / "docker-compose.yml"
     start = base_dir / "newshire" / "server" / "start_server.sh"
+    eula = base_dir / "newshire" / "server" / "eula.txt"
     assert compose.exists()
     assert start.exists()
+    assert eula.exists()
     assert "container_name: newshire" in compose.read_text()
     assert "-Xmx6g" in start.read_text()
+    assert "eula=true" in eula.read_text()
 
 
 async def test_post_includes_jvm_extra_args_in_variables_when_present(
@@ -182,6 +187,17 @@ async def test_post_rejects_invalid_field(
     assert response.status_code == 422
     assert fragment.lower() in response.text.lower()
     assert fake_db["writes"] == []  # nothing reached the DB
+
+
+async def test_post_rejects_when_eula_not_accepted(app_client, fake_db):
+    body = _form()
+    del body["accept_eula"]  # simulate unchecked checkbox (field absent from form data)
+
+    response = await app_client.post("/servers/new", data=body)
+
+    assert response.status_code == 422
+    assert "eula" in response.text.lower()
+    assert fake_db["writes"] == []
 
 
 async def test_post_rejects_when_name_already_exists_in_db(app_client, fake_db):

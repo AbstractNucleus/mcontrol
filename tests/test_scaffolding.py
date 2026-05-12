@@ -70,10 +70,13 @@ def test_scaffold_writes_both_files_under_base_name(tmp_path):
 
     compose = tmp_path / "atm10" / "docker-compose.yml"
     start = tmp_path / "atm10" / "server" / "start_server.sh"
+    eula = tmp_path / "atm10" / "server" / "eula.txt"
     assert compose.exists()
     assert start.exists()
+    assert eula.exists()
     assert "container_name: atm10" in compose.read_text()
     assert "-Xmx6g" in start.read_text()
+    assert eula.read_text() == "eula=true\n"
 
 
 def test_scaffold_creates_intermediate_directories(tmp_path):
@@ -108,4 +111,5 @@ def test_scaffold_uses_file_writer_atomic_write_text(monkeypatch, tmp_path):
     paths = [p for p, _ in seen]
     assert any(p.endswith("docker-compose.yml") for p in paths)
     assert any(p.endswith("start_server.sh") for p in paths)
-    assert len(seen) == 2
+    assert any(p.endswith("eula.txt") for p in paths)
+    assert len(seen) == 3
