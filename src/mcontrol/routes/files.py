@@ -193,13 +193,25 @@ async def view(
         return templates.TemplateResponse(
             request=request,
             name="_file_view.html",
-            context={"mode": "binary", "filename": rel, "size": size},
+            context={
+                "mode": "binary",
+                "server_name": name,
+                "filename": rel,
+                "size": size,
+                "mtime_ns": st.st_mtime_ns,
+            },
         )
     if size > _TEXT_VIEW_BYTES_MAX:
         return templates.TemplateResponse(
             request=request,
             name="_file_view.html",
-            context={"mode": "too_large", "filename": rel, "size": size},
+            context={
+                "mode": "too_large",
+                "server_name": name,
+                "filename": rel,
+                "size": size,
+                "mtime_ns": st.st_mtime_ns,
+            },
         )
     content = await asyncio.to_thread(
         target.read_text, encoding="utf-8", errors="replace"

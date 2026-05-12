@@ -1,7 +1,27 @@
+{# Shared header: clickable breadcrumb + size/mtime caption (issues #60, #61).
+   Breadcrumb segments before the last are buttons that expand the tree to that
+   directory and scroll the row into view via file_uploader.js. The final
+   segment (the file itself) is plain text. #}
+{% set _segments = filename.split('/') %}
+{% set _last_index = _segments|length - 1 %}
+<header class="file-view__head">
+  <nav class="file-view__breadcrumb" aria-label="file path">
+    {% for seg in _segments %}
+      {% if loop.index0 == _last_index %}
+        <span class="file-view__breadcrumb-leaf">{{ seg }}</span>
+      {% else %}
+        {% set _seg_path = _segments[:loop.index]|join('/') %}
+        <button type="button"
+                class="file-view__breadcrumb-segment"
+                data-breadcrumb-path="{{ _seg_path }}">{{ seg }}</button>
+        <span class="file-view__breadcrumb-sep" aria-hidden="true">/</span>
+      {% endif %}
+    {% endfor %}
+    {% if saved %} — <span class="file-view__saved">saved</span>{% endif %}
+  </nav>
+  <p class="t-caption file-view__meta">{{ size|humansize }} · modified {{ mtime_ns|humantime }}</p>
+</header>
 {% if mode == 'text' %}
-  <p class="t-caption">
-    {{ filename }}{% if saved %} — <span class="file-view__saved">saved</span>{% endif %}
-  </p>
   {% if conflict %}{% include "_file_conflict.html" %}{% endif %}
   <form class="file-editor"
         hx-post="/servers/{{ server_name }}/files/save"
@@ -19,10 +39,37 @@
       <button type="submit">Save</button>
     </div>
   </form>
-{% elif mode == 'binary' %}
-  <p class="t-caption">{{ filename }}</p>
-  <p class="t-muted">binary file — operations land in later PRs</p>
-{% elif mode == 'too_large' %}
-  <p class="t-caption">{{ filename }}</p>
-  <p class="t-muted">file too large to view inline</p>
+{% elif mode == 'binary' or mode == 'too_large' %}
+  {# Info card replaces the dead-end placeholder (issue #54). Action buttons
+     reuse the tree popover's data-action-* selectors so the existing
+     file_uploader.js handlers wire up without duplication. #}
+  {% set _basename = _segments[_last_index] %}
+  <div class="file-view__info-card">
+    {% if mode == 'too_large' %}
+      <p class="t-muted">file too large to view inline</p>
+    {% else %}
+      <p class="t-muted">binary file</p>
+    {% endif %}
+    <div class="file-view__actions">
+      <a class="file-view__action"
+         href="/servers/{{ server_name }}/files/download?path={{ filename|urlencode }}"
+         download>Download</a>
+      <button class="file-view__action"
+              type="button"
+              data-action-rename
+              data-action-path="{{ filename }}"
+              data-action-name="{{ _basename }}">Rename</button>
+      <button class="file-view__action"
+              type="button"
+              data-action-move
+              data-action-path="{{ filename }}"
+              data-action-name="{{ _basename }}">Move</button>
+      <button class="file-view__action file-view__action--danger"
+              type="button"
+              data-action-delete
+              data-action-path="{{ filename }}"
+              data-action-name="{{ _basename }}"
+              data-action-kind="file">Delete</button>
+    </div>
+  </div>
 {% endif %}
