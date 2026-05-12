@@ -1492,6 +1492,78 @@ async def test_search_does_not_descend_into_symlinked_dir(
     assert "matchABC.txt" not in response.text
 
 
+async def test_search_skips_world_region_by_default(
+    client, fake_server, server_dir: Path
+) -> None:
+    """Chunk-region files under `world/region/` are pruned from the default walk."""
+    region = server_dir / "world" / "region"
+    region.mkdir(parents=True)
+    (region / "r.0.0.mca").write_text("x", encoding="utf-8")
+
+    response = await client.get(
+        "/servers/atm10/files/search", params={"q": "mca"}
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "r.0.0.mca" not in body
+    # Caption surfaces the skip so the operator knows results are filtered.
+    assert "skipped" in body
+
+
+async def test_search_include_chunks_disables_skip(
+    client, fake_server, server_dir: Path
+) -> None:
+    """`include_chunks=1` walks into the noisy world subdirs again."""
+    region = server_dir / "world" / "region"
+    region.mkdir(parents=True)
+    (region / "r.0.0.mca").write_text("x", encoding="utf-8")
+
+    response = await client.get(
+        "/servers/atm10/files/search",
+        params={"q": "mca", "include_chunks": "1"},
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "r.0.0.mca" in body
+
+
+async def test_search_top_level_region_is_not_skipped(
+    client, fake_server, server_dir: Path
+) -> None:
+    """A `region/` directory NOT under `world/` or `DIM*/` is searched normally."""
+    region = server_dir / "region"
+    region.mkdir()
+    (region / "r.0.0.mca").write_text("x", encoding="utf-8")
+
+    response = await client.get(
+        "/servers/atm10/files/search", params={"q": "mca"}
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "r.0.0.mca" in body
+    # No skip happened, so no caption.
+    assert "skipped" not in body
+
+
+async def test_search_skips_dim_region_by_default(
+    client, fake_server, server_dir: Path
+) -> None:
+    """`DIM*` parents (e.g. `DIM-1/region/`) also trigger the skip."""
+    region = server_dir / "DIM-1" / "region"
+    region.mkdir(parents=True)
+    (region / "r.0.0.mca").write_text("x", encoding="utf-8")
+
+    response = await client.get(
+        "/servers/atm10/files/search", params={"q": "mca"}
+    )
+
+    assert response.status_code == 200
+    assert "r.0.0.mca" not in response.text
+
+
 # ---- /files/bulk_delete -----------------------------------------------
 
 async def test_bulk_delete_removes_multiple_files(
