@@ -10,6 +10,7 @@
 - self_container_id() — used by the attach/detach calls.
 """
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import suppress
@@ -68,11 +69,14 @@ async def container_states_by_name() -> dict[str, str]:
             await docker.close()
 
 
+_LIFECYCLE_TIMEOUT_S = 30
+
+
 async def start(container_name: str) -> None:
     docker = aiodocker.Docker(url=_settings().docker_host)
     try:
         c = await docker.containers.get(container_name)
-        await c.start()
+        await asyncio.wait_for(c.start(), timeout=_LIFECYCLE_TIMEOUT_S)
     finally:
         with suppress(Exception):
             await docker.close()
@@ -82,7 +86,7 @@ async def stop(container_name: str) -> None:
     docker = aiodocker.Docker(url=_settings().docker_host)
     try:
         c = await docker.containers.get(container_name)
-        await c.stop()
+        await asyncio.wait_for(c.stop(), timeout=_LIFECYCLE_TIMEOUT_S)
     finally:
         with suppress(Exception):
             await docker.close()
@@ -92,7 +96,7 @@ async def restart(container_name: str) -> None:
     docker = aiodocker.Docker(url=_settings().docker_host)
     try:
         c = await docker.containers.get(container_name)
-        await c.restart()
+        await asyncio.wait_for(c.restart(), timeout=_LIFECYCLE_TIMEOUT_S)
     finally:
         with suppress(Exception):
             await docker.close()

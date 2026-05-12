@@ -102,6 +102,69 @@ async def test_lifecycle_returns_404_for_unknown_server(
     assert response.status_code == 404
 
 
+async def test_start_timeout_returns_flash_and_does_not_update_state(
+    client, fake_server_row, stub_db_writes, monkeypatch
+):
+
+    from mcontrol import docker_client
+
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "exited",
+    }
+
+    async def _timeout(name): raise TimeoutError()
+    monkeypatch.setattr(docker_client, "start", _timeout)
+
+    response = await client.post("/servers/atm10/lifecycle/start")
+
+    assert response.status_code == 200
+    assert "lifecycle-flash--error" in response.text
+    assert stub_db_writes == []
+
+
+async def test_stop_timeout_returns_flash_and_does_not_update_state(
+    client, fake_server_row, stub_db_writes, monkeypatch
+):
+
+    from mcontrol import docker_client
+
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "running",
+    }
+
+    async def _timeout(name): raise TimeoutError()
+    monkeypatch.setattr(docker_client, "stop", _timeout)
+
+    response = await client.post("/servers/atm10/lifecycle/stop")
+
+    assert response.status_code == 200
+    assert "lifecycle-flash--error" in response.text
+    assert stub_db_writes == []
+
+
+async def test_restart_timeout_returns_flash_and_does_not_update_state(
+    client, fake_server_row, stub_db_writes, monkeypatch
+):
+
+    from mcontrol import docker_client
+
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "running",
+    }
+
+    async def _timeout(name): raise TimeoutError()
+    monkeypatch.setattr(docker_client, "restart", _timeout)
+
+    response = await client.post("/servers/atm10/lifecycle/restart")
+
+    assert response.status_code == 200
+    assert "lifecycle-flash--error" in response.text
+    assert stub_db_writes == []
+
+
 async def test_lifecycle_uses_container_name_override(
     client, fake_server_row, stub_db_writes, stub_docker
 ):
