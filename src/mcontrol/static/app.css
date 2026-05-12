@@ -1380,6 +1380,19 @@ small {
 .file-view__saved {
   color: var(--success-fg);
   font-weight: 500;
+  animation: file-view-saved-fade 3s var(--ease) forwards;
+}
+
+@keyframes file-view-saved-fade {
+  0%, 33%  { opacity: 1; }
+  100%     { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-view__saved {
+    animation: none;
+    opacity: 0;
+  }
 }
 
 .file-view__head {
