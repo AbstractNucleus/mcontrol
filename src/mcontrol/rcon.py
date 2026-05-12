@@ -14,11 +14,11 @@ Auth: send AUTH (type=3) with the password as the body. Server replies
 with AUTH_RESPONSE (type=2). id=-1 means auth failed; otherwise it
 echoes the request id.
 
-Exec: send EXECCOMMAND (type=2). Server replies with one or more
-RESPONSE_VALUE (type=0) packets. Slice 4 assumes single-packet
-responses (max 4096 body bytes); this is sufficient for `list`,
-`whitelist`, `op`, and the other commands the console uses. If a
-response is fragmented, callers see only the first chunk.
+Exec: send EXECCOMMAND (type=2), then an empty SERVERDATA_RESPONSE_VALUE
+sentinel packet with a distinct id. Collect all RESPONSE_VALUE packets
+matching the command id until the sentinel echo arrives; concatenate their
+bodies. This handles Minecraft's multi-packet responses (e.g. `whitelist
+list` on a populated server).
 
 Reference: https://wiki.vg/RCON
 """
@@ -57,12 +57,19 @@ class _RconConnection:
             raise RconClosedError("connection has been closed")
         packet_id = next(self._ids)
         await self._send(packet_id, _EXECCOMMAND, command.encode("utf-8"))
-        response_id, response_type, body = await self._read()
-        if response_type != _RESPONSE_VALUE:
-            raise RconError(f"unexpected response type {response_type}")
-        if response_id != packet_id:
-            raise RconError(f"id mismatch: sent {packet_id}, got {response_id}")
-        return body.decode("utf-8", errors="replace")
+        sentinel_id = next(self._ids)
+        await self._send(sentinel_id, _RESPONSE_VALUE, b"")
+        parts: list[bytes] = []
+        while True:
+            response_id, response_type, body = await self._read()
+            if response_type != _RESPONSE_VALUE:
+                raise RconError(f"unexpected response type {response_type}")
+            if response_id == sentinel_id:
+                break
+            if response_id != packet_id:
+                raise RconError(f"id mismatch: sent {packet_id}, got {response_id}")
+            parts.append(body)
+        return b"".join(parts).decode("utf-8", errors="replace")
 
     async def close(self) -> None:
         if self._closed:

@@ -34,6 +34,7 @@ class _FakeRconServer:
         self.received_commands: list[bytes] = []
         self.fail_auth = False
         self.exec_response = b"There are 3 of a max of 20 players online: alice, bob, carol"
+        self.exec_response_parts: list[bytes] | None = None  # overrides exec_response when set
         self._server: asyncio.base_events.Server | None = None
         self.host = "127.0.0.1"
         self.port = 0  # populated after start
@@ -60,7 +61,7 @@ class _FakeRconServer:
                 writer.close()
                 return
 
-            # One or more EXEC packets
+            # One or more EXEC packets, each followed by a sentinel packet
             while not reader.at_eof():
                 try:
                     pid, ptype, body = await _read_packet(reader)
@@ -68,7 +69,16 @@ class _FakeRconServer:
                     break
                 if ptype == 2:  # EXECCOMMAND
                     self.received_commands.append(body.rstrip(b"\x00"))
-                    writer.write(_pack(pid, 0, self.exec_response))
+                    parts = (
+                        self.exec_response_parts
+                        if self.exec_response_parts is not None
+                        else [self.exec_response]
+                    )
+                    for part in parts:
+                        writer.write(_pack(pid, 0, part))
+                    await writer.drain()
+                elif ptype == 0:  # sentinel SERVERDATA_RESPONSE_VALUE — echo it back
+                    writer.write(_pack(pid, 0, b""))
                     await writer.drain()
         finally:
             writer.close()
@@ -114,5 +124,16 @@ async def test_run_handles_empty_response():
         try:
             response = await client.run("op alice")
             assert response == ""
+        finally:
+            await client.close()
+
+
+async def test_run_reassembles_multi_packet_response():
+    async with _FakeRconServer() as server:
+        server.exec_response_parts = [b"chunk-one ", b"chunk-two"]
+        client = await rcon.connect(server.host, server.port, "hunter2")
+        try:
+            response = await client.run("whitelist list")
+            assert response == "chunk-one chunk-two"
         finally:
             await client.close()
