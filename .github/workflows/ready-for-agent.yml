@@ -48,7 +48,13 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: "--max-turns 50"
+          # bypassPermissions is the right mode for ephemeral CI runners —
+          # the runner has no persistent secrets beyond CLAUDE_CODE_OAUTH_TOKEN
+          # (which is masked from subprocess env), and prompt-on-every-tool
+          # auto-denies in non-interactive mode. 80 turns gives headroom for
+          # branch + multi-file edit + test + commit + push + PR; the third
+          # run on #86 needed 51 turns even before its 27 denial-retries.
+          claude_args: "--max-turns 80 --permission-mode bypassPermissions"
           prompt: |
             You are implementing issue #${{ github.event.issue.number }} in
             this repo. Title: ${{ github.event.issue.title }}
