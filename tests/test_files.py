@@ -21,7 +21,12 @@ def fake_server(monkeypatch, server_dir: Path):
         "atm10": {"name": "atm10", "dir": str(server_dir)}
     }
     from mcontrol import db
+    from mcontrol.routes import files as files_routes
     monkeypatch.setattr(db, "get_server", rows.get)
+    # The search index is a module-level singleton keyed by server name;
+    # clear it between tests so cached state from a previous tmp_path
+    # doesn't bleed into this one.
+    files_routes._search_index.clear()
     return rows
 
 
@@ -1562,6 +1567,133 @@ async def test_search_skips_dim_region_by_default(
 
     assert response.status_code == 200
     assert "r.0.0.mca" not in response.text
+
+
+# ---- /files/search cache (issue #49) ----------------------------------
+
+async def test_search_cache_reflects_mutation(
+    client, fake_server, server_dir: Path
+) -> None:
+    """A mutating handler must invalidate the cache so the next search
+    sees the new file. Without invalidation the cached index would still
+    report the pre-mutation tree."""
+    (server_dir / "alpha.txt").write_text("x", encoding="utf-8")
+
+    first = await client.get(
+        "/servers/atm10/files/search", params={"q": "beta"}
+    )
+    assert first.status_code == 200
+    assert "beta.txt" not in first.text
+
+    # Mutate via the upload endpoint (one of the invalidating handlers).
+    upload = await client.post(
+        "/servers/atm10/files/upload",
+        data={"path": ""},
+        files=[("files", ("beta.txt", b"y"))],
+    )
+    assert upload.status_code == 200
+
+    second = await client.get(
+        "/servers/atm10/files/search", params={"q": "beta"}
+    )
+    assert second.status_code == 200
+    assert "beta.txt" in second.text
+
+
+async def test_search_cache_ttl_expires(
+    client, fake_server, server_dir: Path, monkeypatch
+) -> None:
+    """An out-of-band edit doesn't invalidate the cache, but the TTL
+    safety net rebuilds the index after `_INDEX_TTL_SECONDS`."""
+    from mcontrol.routes import files as files_routes
+
+    (server_dir / "old.txt").write_text("x", encoding="utf-8")
+
+    clock = [1000.0]
+    monkeypatch.setattr(files_routes, "_now", lambda: clock[0])
+
+    first = await client.get(
+        "/servers/atm10/files/search", params={"q": "newfile"}
+    )
+    assert "newfile.txt" not in first.text
+
+    # Direct filesystem mutation — bypasses every invalidating handler.
+    (server_dir / "newfile.txt").write_text("y", encoding="utf-8")
+
+    # Still within TTL → cached, stale result.
+    stale = await client.get(
+        "/servers/atm10/files/search", params={"q": "newfile"}
+    )
+    assert "newfile.txt" not in stale.text
+
+    # Advance past the TTL → cache is treated as expired and rebuilt.
+    clock[0] += files_routes._INDEX_TTL_SECONDS + 1
+
+    fresh = await client.get(
+        "/servers/atm10/files/search", params={"q": "newfile"}
+    )
+    assert "newfile.txt" in fresh.text
+
+
+async def test_search_cache_two_servers_isolated(
+    client, monkeypatch, tmp_path: Path
+) -> None:
+    """Indexes are keyed by server name — a mutation on one server
+    must not pollute or invalidate the other server's cache."""
+    a_dir = tmp_path / "a"
+    a_dir.mkdir()
+    b_dir = tmp_path / "b"
+    b_dir.mkdir()
+    (a_dir / "alpha.txt").write_text("x", encoding="utf-8")
+    (b_dir / "beta.txt").write_text("y", encoding="utf-8")
+
+    rows = {
+        "srvA": {"name": "srvA", "dir": str(a_dir)},
+        "srvB": {"name": "srvB", "dir": str(b_dir)},
+    }
+    from mcontrol import db
+    from mcontrol.routes import files as files_routes
+    monkeypatch.setattr(db, "get_server", rows.get)
+    files_routes._search_index.clear()
+
+    # Warm both caches.
+    ra = await client.get("/servers/srvA/files/search", params={"q": "alpha"})
+    assert "alpha.txt" in ra.text
+    rb = await client.get("/servers/srvB/files/search", params={"q": "beta"})
+    assert "beta.txt" in rb.text
+
+    # Mutate srvA via mkdir — must invalidate srvA only.
+    mk = await client.post(
+        "/servers/srvA/files/mkdir", data={"path": "", "dirname": "fresh"}
+    )
+    assert mk.status_code == 200
+
+    assert "srvA" not in files_routes._search_index
+    assert "srvB" in files_routes._search_index
+
+
+async def test_search_cache_skip_rules_apply_at_build(
+    client, fake_server, server_dir: Path
+) -> None:
+    """Skip-set rules must be enforced at index-build time, not at
+    query time — chunk-region files are absent from the default index
+    and present in the `include_chunks=1` index."""
+    region = server_dir / "world" / "region"
+    region.mkdir(parents=True)
+    (region / "r.0.0.mca").write_text("x", encoding="utf-8")
+
+    default = await client.get(
+        "/servers/atm10/files/search", params={"q": "mca"}
+    )
+    assert default.status_code == 200
+    assert "r.0.0.mca" not in default.text
+
+    with_chunks = await client.get(
+        "/servers/atm10/files/search",
+        params={"q": "mca", "include_chunks": "1"},
+    )
+    assert with_chunks.status_code == 200
+    assert "r.0.0.mca" in with_chunks.text
 
 
 # ---- /files/bulk_delete -----------------------------------------------

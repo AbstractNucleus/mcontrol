@@ -32,6 +32,7 @@ import asyncio
 import os
 import shutil
 import stat
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
@@ -365,6 +366,7 @@ async def upload(
         target = target_dir / f.filename
         await atomic_write_stream_async(target, f.file)
 
+    _invalidate_search_index(name)
     base = Path(server["dir"]).resolve()
     entries = _list_dir(target_dir, base)
     return templates.TemplateResponse(
@@ -430,6 +432,7 @@ async def delete(
     else:
         os.unlink(target)
 
+    _invalidate_search_index(name)
     _, entries = _parent_listing(server["dir"], target)
     return templates.TemplateResponse(
         request=request,
@@ -464,6 +467,7 @@ async def mkdir(
     else:
         raise HTTPException(status_code=409, detail=f"already exists: {dirname}")
 
+    _invalidate_search_index(name)
     base = Path(server["dir"]).resolve()
     entries = _list_dir(parent, base)
     return templates.TemplateResponse(
@@ -517,6 +521,7 @@ async def rename(
 
     os.rename(target, dest)
 
+    _invalidate_search_index(name)
     _, entries = _parent_listing(server["dir"], target)
     return templates.TemplateResponse(
         request=request,
@@ -577,6 +582,7 @@ async def move(
 
     os.rename(src, dest)
 
+    _invalidate_search_index(name)
     _, entries = _parent_listing(server["dir"], src)
     return templates.TemplateResponse(
         request=request,
@@ -631,6 +637,101 @@ def _is_world_like_parent(parent_name: str) -> bool:
     return parent_name == "world" or parent_name.startswith("DIM")
 
 
+# --- search index cache ---------------------------------------------------
+#
+# Per-server in-memory index of (name_lower, relpath, kind) tuples plus a
+# boolean recording whether the default skip-set actually pruned anything
+# during the walk. The endpoint is fired on every debounced keystroke, so
+# memoising the walk is the win — see issue #49.
+#
+# The cache lives in the process; we assume single-process operation
+# (panel runs as one uvicorn worker). Multi-worker invalidation is
+# explicitly out of scope.
+#
+# Each server has two slots: the default `index` (skip-set applied at
+# build time, per issue #50) and a separate `index_with_chunks` populated
+# lazily when an operator passes `include_chunks=1`. Keeping them
+# separate avoids re-walking on every toggle and avoids storing a
+# superset that would then need re-filtering at query time.
+
+_INDEX_TTL_SECONDS = 60.0
+
+# Module-level cache. Each value is a dict with optional `default` and
+# `with_chunks` slots; each slot is `(built_at, entries, skipped_flag)`.
+_search_index: dict[str, dict[str, tuple[float, list[tuple[str, str, str]], bool]]] = {}
+
+
+def _now() -> float:
+    """Monotonic clock used for TTL checks. Indirected so tests can
+    monkeypatch it without touching the global `time` module."""
+    return time.monotonic()
+
+
+def _invalidate_search_index(server_name: str) -> None:
+    """Drop both cache slots for `server_name`. Called from every
+    mutating handler. A no-op if the server has no cached index."""
+    _search_index.pop(server_name, None)
+
+
+def _build_index(
+    base: Path, include_chunks: bool
+) -> tuple[list[tuple[str, str, str]], bool]:
+    """Walk `base` once and return (entries, skipped).
+
+    `entries` is a list of `(name_lower, relpath, kind)` tuples; special
+    files are filtered out at this stage. Symlinked directories are not
+    descended (followlinks=False). When `include_chunks` is False the
+    default skip-set (see `_SEARCH_DEFAULT_SKIP_DIRS`) is applied during
+    the walk so chunk/region noise never enters the index.
+    """
+    entries: list[tuple[str, str, str]] = []
+    skipped = False
+    for root, dirs, files in os.walk(base, followlinks=False):
+        dirs.sort()
+        files.sort()
+        if not include_chunks and _is_world_like_parent(Path(root).name):
+            keep = [d for d in dirs if d not in _SEARCH_DEFAULT_SKIP_DIRS]
+            if len(keep) != len(dirs):
+                skipped = True
+                dirs[:] = keep
+        for entry_name in dirs + files:
+            full = Path(root) / entry_name
+            try:
+                st = full.lstat()
+            except OSError:
+                continue
+            if _is_special(st.st_mode):
+                continue
+            kind = (
+                "symlink" if stat.S_ISLNK(st.st_mode)
+                else ("dir" if stat.S_ISDIR(st.st_mode) else "file")
+            )
+            rel = full.relative_to(base).as_posix()
+            entries.append((entry_name.lower(), rel, kind))
+    return entries, skipped
+
+
+def _get_search_index(
+    server_name: str, base: Path, include_chunks: bool
+) -> tuple[list[tuple[str, str, str]], bool]:
+    """Return the cached index for the (server, include_chunks) pair,
+    rebuilding on miss or after TTL expiry."""
+    slot_key = "with_chunks" if include_chunks else "default"
+    server_slots = _search_index.get(server_name)
+    if server_slots is not None:
+        slot = server_slots.get(slot_key)
+        if slot is not None:
+            built_at, entries, skipped = slot
+            if _now() - built_at < _INDEX_TTL_SECONDS:
+                return entries, skipped
+
+    entries, skipped = _build_index(base, include_chunks)
+    _search_index.setdefault(server_name, {})[slot_key] = (
+        _now(), entries, skipped,
+    )
+    return entries, skipped
+
+
 @router.get("/servers/{name}/files/search", response_class=HTMLResponse)
 async def search(
     request: Request,
@@ -640,16 +741,18 @@ async def search(
 ) -> HTMLResponse:
     """Recursive case-insensitive basename search (slice 5 PR 7).
 
-    Filename match only — no full-text grep, per slice contract.
-    Symlinked directories are not descended (followlinks=False); their
-    link entries can still match by name. Special files are skipped.
-    Capped at `_SEARCH_LIMIT` hits to keep both walk and render bounded
-    on large `world/region/` style trees.
+    Consults a per-server in-memory index (built lazily, invalidated on
+    mutation, TTL-refreshed) rather than re-walking on every keystroke
+    — see issue #49. Symlinked directories are not descended at index
+    build time; their link entries can still match by name. Special
+    files are filtered at build time too. Capped at `_SEARCH_LIMIT` hits
+    to keep render bounded on large trees.
 
-    By default the walk prunes well-known high-cardinality Minecraft
+    By default the index excludes well-known high-cardinality Minecraft
     world subdirs (chunk regions, per-player data, etc. — see
     `_SEARCH_DEFAULT_SKIP_DIRS`) when they sit under a `world` or `DIM*`
-    parent. Pass `include_chunks=1` to disable the prune.
+    parent. Pass `include_chunks=1` to query an alternate index that
+    includes them.
     """
     server = _server_or_404(name)
     needle = q.strip().lower()
@@ -668,37 +771,18 @@ async def search(
         )
 
     base = Path(server["dir"]).resolve()
+    entries, skipped = await asyncio.to_thread(
+        _get_search_index, name, base, include_chunks
+    )
+
     results: list[dict] = []
     truncated = False
-    skipped = False
-    for root, dirs, files in os.walk(base, followlinks=False):
-        dirs.sort()
-        files.sort()
-        if not include_chunks and _is_world_like_parent(Path(root).name):
-            keep = [d for d in dirs if d not in _SEARCH_DEFAULT_SKIP_DIRS]
-            if len(keep) != len(dirs):
-                skipped = True
-                dirs[:] = keep
-        for entry_name in dirs + files:
-            if needle not in entry_name.lower():
-                continue
-            full = Path(root) / entry_name
-            try:
-                st = full.lstat()
-            except OSError:
-                continue
-            if _is_special(st.st_mode):
-                continue
-            kind = (
-                "symlink" if stat.S_ISLNK(st.st_mode)
-                else ("dir" if stat.S_ISDIR(st.st_mode) else "file")
-            )
-            rel = full.relative_to(base).as_posix()
-            results.append({"name": entry_name, "path": rel, "kind": kind})
-            if len(results) >= _SEARCH_LIMIT:
-                truncated = True
-                break
-        if truncated:
+    for name_lower, rel, kind in entries:
+        if needle not in name_lower:
+            continue
+        results.append({"name": Path(rel).name, "path": rel, "kind": kind})
+        if len(results) >= _SEARCH_LIMIT:
+            truncated = True
             break
 
     return templates.TemplateResponse(
@@ -762,6 +846,7 @@ async def bulk_delete(
         else:
             os.unlink(target)
 
+    _invalidate_search_index(name)
     base = Path(server["dir"]).resolve()
     entries = _list_dir(base, base)
     return templates.TemplateResponse(
@@ -835,6 +920,7 @@ async def bulk_move(
     for src, dest in plan:
         os.rename(src, dest)
 
+    _invalidate_search_index(name)
     base = Path(server["dir"]).resolve()
     entries = _list_dir(base, base)
     return templates.TemplateResponse(
