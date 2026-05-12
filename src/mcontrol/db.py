@@ -10,7 +10,7 @@ from typing import Any
 
 from supabase import Client, create_client
 
-from mcontrol.settings import Settings
+from mcontrol.settings import get_settings
 
 _SCHEMA = "app_mcontrol"
 _TABLE = "servers"
@@ -22,7 +22,7 @@ _client_singleton: Client | None = None
 def _client() -> Client:
     global _client_singleton
     if _client_singleton is None:
-        settings = Settings()
+        settings = get_settings()
         _client_singleton = create_client(
             settings.supabase_url,
             settings.supabase_service_role_key,

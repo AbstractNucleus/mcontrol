@@ -26,7 +26,7 @@ from mcontrol.routes import (
     trash,
     variables,
 )
-from mcontrol.settings import Settings
+from mcontrol.settings import Settings, get_settings
 from mcontrol.templates import templates
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    settings = Settings()
+    settings = get_settings()
     app = FastAPI(title="mcontrol", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
 

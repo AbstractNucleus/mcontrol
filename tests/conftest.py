@@ -3,6 +3,13 @@ from collections.abc import AsyncIterator
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from mcontrol.settings import get_settings
+
+
+@pytest.fixture(autouse=True)
+def _clear_settings_cache():
+    get_settings.cache_clear()
+
 
 @pytest.fixture
 def env(monkeypatch):

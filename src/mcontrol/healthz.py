@@ -21,7 +21,7 @@ from typing import Any
 import aiodocker
 
 from mcontrol import db
-from mcontrol.settings import Settings
+from mcontrol.settings import get_settings
 
 _TIMEOUT_S = 0.25
 _DETAIL_MAX = 200
@@ -48,7 +48,7 @@ async def _probe_db() -> dict[str, str]:
 
 
 async def _probe_docker() -> dict[str, str]:
-    settings = Settings()
+    settings = get_settings()
 
     async def _ping() -> None:
         docker = aiodocker.Docker(url=settings.docker_host)
@@ -88,7 +88,7 @@ def _write_probe_sync(base: Path) -> None:
 
 
 async def _probe_base_path() -> dict[str, str]:
-    settings = Settings()
+    settings = get_settings()
     base = Path(settings.server_base_path)
     try:
         await asyncio.wait_for(

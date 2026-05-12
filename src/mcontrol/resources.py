@@ -30,16 +30,12 @@ from typing import Any
 
 import aiodocker
 
-from mcontrol.settings import Settings
-
-
-def _settings() -> Settings:
-    return Settings()
+from mcontrol.settings import get_settings
 
 
 async def read_container_stats(container_name: str) -> dict[str, Any]:
     try:
-        docker = aiodocker.Docker(url=_settings().docker_host)
+        docker = aiodocker.Docker(url=get_settings().docker_host)
     except Exception:
         return {"status": "unreachable"}
 
