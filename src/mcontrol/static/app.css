@@ -1196,6 +1196,38 @@ small {
   font-size: var(--fs-sm);
 }
 
+.file-upload-progress {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.file-upload-progress__caption {
+  font-variant-numeric: tabular-nums;
+}
+
+.file-upload-progress__bar {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xs);
+  height: var(--space-2);
+  overflow: hidden;
+}
+
+.file-upload-progress__fill {
+  background: var(--accent);
+  height: 100%;
+  transition: width var(--motion-fast) var(--ease);
+}
+
+.file-upload-progress__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
 .file-move-modal {
   background: var(--bg-sunken);
   border: 1px solid var(--border-medium);

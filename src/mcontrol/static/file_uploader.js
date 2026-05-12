@@ -131,33 +131,96 @@ async function uploadFiles(path, files, force) {
   if (force) fd.append("force", "true");
   for (const f of files) fd.append("files", f, f.name);
 
-  let resp;
-  try {
-    resp = await fetch(`/servers/${encodeURIComponent(name)}/files/upload`, {
-      method: "POST",
-      body: fd,
+  // XHR (not fetch) so we get upload.onprogress for the progress indicator
+  // (issue #59). Modpack assets are routinely hundreds of MB; without
+  // progress the operator sees no feedback during transit. Multi-file
+  // batches report aggregate progress across the multipart body — adequate
+  // per the issue brief.
+  const xhr = new XMLHttpRequest();
+  const progress = showUploadProgress(() => xhr.abort());
+  const result = await new Promise((resolve) => {
+    xhr.upload.addEventListener("progress", (evt) => {
+      if (evt.lengthComputable) progress.update(evt.loaded, evt.total);
     });
-  } catch (err) {
-    showError(`upload failed: ${err.message}`);
+    xhr.addEventListener("load", () => resolve({ kind: "done" }));
+    xhr.addEventListener("error", () => resolve({ kind: "error", message: "network error" }));
+    xhr.addEventListener("abort", () => resolve({ kind: "abort" }));
+    xhr.open("POST", `/servers/${encodeURIComponent(name)}/files/upload`);
+    xhr.send(fd);
+  });
+
+  if (result.kind === "abort") {
+    const s = status();
+    if (s) s.innerHTML = "";
+    return;
+  }
+  if (result.kind === "error") {
+    showError(`upload failed: ${result.message}`);
     return;
   }
 
-  if (resp.status === 409) {
-    showConflict(await resp.text(), () => uploadFiles(path, files, true));
+  if (xhr.status === 409) {
+    showConflict(xhr.responseText, () => uploadFiles(path, files, true));
     return;
   }
-  if (!resp.ok) {
-    showError(await errorMessageFor("upload", resp));
+  if (xhr.status < 200 || xhr.status >= 300) {
+    showError(errorMessageForXhr("upload", xhr));
     return;
   }
 
-  swapTreeAt(path, await resp.text());
+  swapTreeAt(path, xhr.responseText);
   const s = status();
   if (s) s.innerHTML = "";
   // Re-arm htmx for the freshly-injected tree subtree (lazy hx-get on
   // any newly-listed subfolders, click-to-view on files).
   const t = tree();
   if (t && window.htmx && window.htmx.process) window.htmx.process(t);
+}
+
+function showUploadProgress(onCancel) {
+  const s = status();
+  if (!s) return { update() {} };
+  s.innerHTML = `<div class="file-upload-progress" id="file-upload-progress">
+       <p class="t-caption file-upload-progress__caption" data-upload-caption>Uploading… 0%</p>
+       <div class="file-upload-progress__bar">
+         <div class="file-upload-progress__fill" data-upload-fill style="width: 0%"></div>
+       </div>
+       <div class="file-upload-progress__actions">
+         <button type="button" class="file-action-form__btn" data-upload-cancel>Cancel</button>
+       </div>
+     </div>`;
+  const caption = s.querySelector("[data-upload-caption]");
+  const fill = s.querySelector("[data-upload-fill]");
+  const cancel = s.querySelector("[data-upload-cancel]");
+  cancel.addEventListener("click", () => { onCancel(); });
+  return {
+    update(loaded, total) {
+      const pct = total > 0 ? Math.floor((loaded / total) * 100) : 0;
+      if (fill) fill.style.width = `${pct}%`;
+      if (caption) caption.textContent = `Uploading… ${formatBytes(loaded)} / ${formatBytes(total)} (${pct}%)`;
+    },
+  };
+}
+
+function formatBytes(n) {
+  if (!Number.isFinite(n) || n < 0) return "?";
+  const units = ["B", "KB", "MB", "GB"];
+  let v = n;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return `${i === 0 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
+}
+
+// XHR equivalent of errorMessageFor: surface backend `detail` when
+// available, falling back to the status code.
+function errorMessageForXhr(verb, xhr) {
+  try {
+    const data = JSON.parse(xhr.responseText);
+    if (data && typeof data.detail === "string" && data.detail) {
+      return `${verb} failed: ${data.detail}`;
+    }
+  } catch (_err) { /* not JSON — fall through */ }
+  return `${verb} failed: HTTP ${xhr.status}`;
 }
 
 function swapTreeAt(path, html) {
