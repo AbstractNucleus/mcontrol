@@ -142,18 +142,16 @@ async function uploadFiles(path, files, force) {
     return;
   }
 
-  const body = await resp.text();
-
   if (resp.status === 409) {
-    showConflict(body, () => uploadFiles(path, files, true));
+    showConflict(await resp.text(), () => uploadFiles(path, files, true));
     return;
   }
   if (!resp.ok) {
-    showError(`upload failed: HTTP ${resp.status}`);
+    showError(await errorMessageFor("upload", resp));
     return;
   }
 
-  swapTreeAt(path, body);
+  swapTreeAt(path, await resp.text());
   const s = status();
   if (s) s.innerHTML = "";
   // Re-arm htmx for the freshly-injected tree subtree (lazy hx-get on
@@ -190,6 +188,20 @@ function showError(msg) {
   const s = status();
   if (!s) return;
   s.innerHTML = `<div class="file-upload-error t-caption">${escapeHtml(msg)}</div>`;
+}
+
+// Surface the backend's `detail` field (FastAPI's HTTPException shape)
+// when available; fall back to the status code if the body isn't JSON
+// or has no detail. Used by every non-OK action response except the
+// upload-conflict 409 which returns an HTML partial.
+async function errorMessageFor(verb, resp) {
+  try {
+    const data = await resp.clone().json();
+    if (data && typeof data.detail === "string" && data.detail) {
+      return `${verb} failed: ${data.detail}`;
+    }
+  } catch (_err) { /* not JSON — fall through */ }
+  return `${verb} failed: HTTP ${resp.status}`;
 }
 
 // ---- delete + mkdir (slice 5 PR 4) -----------------------------------
@@ -329,7 +341,7 @@ async function performDelete(path, confirmName) {
   }
 
   if (!resp.ok) {
-    showError(`delete failed: HTTP ${resp.status}`);
+    showError(await errorMessageFor("delete", resp));
     return;
   }
 
@@ -359,12 +371,8 @@ async function performMkdir(parentPath, dirname) {
     return;
   }
 
-  if (resp.status === 409) {
-    showError(`already exists: ${dirname}`);
-    return;
-  }
   if (!resp.ok) {
-    showError(`mkdir failed: HTTP ${resp.status}`);
+    showError(await errorMessageFor("mkdir", resp));
     return;
   }
 
@@ -432,12 +440,8 @@ async function performRename(path, newName) {
     return;
   }
 
-  if (resp.status === 409) {
-    showError(`already exists: ${newName}`);
-    return;
-  }
   if (!resp.ok) {
-    showError(`rename failed: HTTP ${resp.status}`);
+    showError(await errorMessageFor("rename", resp));
     return;
   }
 
@@ -529,12 +533,8 @@ async function performMove(source, destDir) {
     return;
   }
 
-  if (resp.status === 409) {
-    showError(`already exists at destination: ${source.split("/").pop()}`);
-    return;
-  }
   if (!resp.ok) {
-    showError(`move failed: HTTP ${resp.status}`);
+    showError(await errorMessageFor("move", resp));
     return;
   }
 
@@ -673,7 +673,7 @@ async function performBulkDelete(paths) {
     return;
   }
   if (!resp.ok) {
-    showError(`bulk delete failed: HTTP ${resp.status}`);
+    showError(await errorMessageFor("bulk delete", resp));
     return;
   }
 
@@ -758,12 +758,8 @@ async function performBulkMove(sources, destDir) {
     showError(`bulk move failed: ${err.message}`);
     return;
   }
-  if (resp.status === 409) {
-    showError("name collision at destination — refused; resolve and retry");
-    return;
-  }
   if (!resp.ok) {
-    showError(`bulk move failed: HTTP ${resp.status}`);
+    showError(await errorMessageFor("bulk move", resp));
     return;
   }
 
