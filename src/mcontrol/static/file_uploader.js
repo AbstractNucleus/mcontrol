@@ -803,3 +803,38 @@ async function performBulkMove(sources, destDir) {
   });
   sync();
 })();
+
+// ---- Ctrl/Cmd+P → focus filename search (issue #62) -----------------
+//
+// Slice 5 framed the search input as "Cmd-P-style" but never wired the
+// shortcut. Bind on document so it works regardless of current focus
+// (including from inside the file editor). No-op when the search input
+// isn't on the page so this stays safe to ship in the shared JS file.
+
+let searchPreviousFocus = null;
+
+document.addEventListener("keydown", (evt) => {
+  if (evt.key !== "p" && evt.key !== "P") return;
+  if (!(evt.ctrlKey || evt.metaKey)) return;
+  if (evt.altKey || evt.shiftKey) return;
+  const input = document.getElementById("file-search-input");
+  if (!input) return;
+  evt.preventDefault();
+  searchPreviousFocus = document.activeElement;
+  input.focus();
+  input.select();
+});
+
+document.addEventListener("keydown", (evt) => {
+  if (evt.key !== "Escape") return;
+  const input = document.getElementById("file-search-input");
+  if (!input || document.activeElement !== input) return;
+  evt.preventDefault();
+  const prev = searchPreviousFocus;
+  searchPreviousFocus = null;
+  if (prev && prev !== input && typeof prev.focus === "function" && document.contains(prev)) {
+    prev.focus();
+  } else {
+    input.blur();
+  }
+});
