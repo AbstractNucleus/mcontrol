@@ -251,6 +251,10 @@ async def save(
     normalized = content.replace("\r\n", "\n").replace("\r", "\n")
 
     if not force and st.st_mtime_ns != mtime_ns:
+        # The form's hx-target is the meta slot for successful saves (issue
+        # #57). On conflict we need to swap the whole view so the editor
+        # remounts with normalized content + banner — override the form's
+        # target via htmx response headers.
         return templates.TemplateResponse(
             request=request,
             name="_file_view.html",
@@ -264,19 +268,18 @@ async def save(
                 "conflict": True,
             },
             status_code=409,
+            headers={"HX-Retarget": "#file-view", "HX-Reswap": "innerHTML"},
         )
 
     await atomic_write_text_async(target, normalized)
     new_st = target.stat()
+    # Issue #57: success returns only the meta fragment so the swap doesn't
+    # destroy the CodeMirror EditorView. The fragment carries the fresh
+    # mtime_ns for the next save and the `saved` indicator.
     return templates.TemplateResponse(
         request=request,
-        name="_file_view.html",
+        name="_file_editor_meta.html",
         context={
-            "mode": "text",
-            "server_name": name,
-            "filename": rel,
-            "content": normalized,
-            "size": new_st.st_size,
             "mtime_ns": new_st.st_mtime_ns,
             "saved": True,
         },

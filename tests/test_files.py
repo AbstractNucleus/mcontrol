@@ -288,6 +288,9 @@ async def test_view_refuses_special_file(client, fake_server, server_dir: Path) 
 async def test_save_writes_content_and_returns_fresh_mtime(
     client, fake_server, server_dir: Path
 ) -> None:
+    """Issue #57: success returns just the meta fragment (fresh mtime +
+    saved indicator) so the htmx swap doesn't tear down the CodeMirror
+    EditorView and lose cursor/scroll position."""
     target = server_dir / "server.properties"
     target.write_text("level-name=world\n", encoding="utf-8")
     mtime_ns = target.stat().st_mtime_ns
@@ -305,8 +308,14 @@ async def test_save_writes_content_and_returns_fresh_mtime(
     assert target.read_text(encoding="utf-8") == "level-name=overworld\nmotd=hi\n"
     new_mtime_ns = target.stat().st_mtime_ns
     body = response.text
+    # Meta slot carries the fresh mtime and the saved indicator.
+    assert 'id="file-editor-meta"' in body
     assert f'name="mtime_ns" value="{new_mtime_ns}"' in body
     assert "saved" in body
+    # Success path must NOT re-render the editor — that would destroy the
+    # mounted EditorView and reset the cursor (the whole point of #57).
+    assert "data-file-editor" not in body
+    assert "<textarea" not in body
 
 
 async def test_save_normalizes_crlf_to_lf(
@@ -361,6 +370,12 @@ async def test_save_returns_409_on_mtime_mismatch(
     assert f'name="mtime_ns" value="{current_mtime}"' in body
     # On-disk content is unchanged.
     assert target.read_text(encoding="utf-8") == "a\n"
+    # Issue #57: the form's hx-target points at the small meta slot for
+    # successful saves; on conflict we override it so the full view swaps
+    # back into #file-view, which re-mounts the editor with the conflict
+    # banner.
+    assert response.headers["HX-Retarget"] == "#file-view"
+    assert response.headers["HX-Reswap"] == "innerHTML"
 
 
 async def test_save_force_overwrite_after_mismatch(
