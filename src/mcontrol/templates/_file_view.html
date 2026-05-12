@@ -39,7 +39,7 @@
               data-file-name="{{ filename }}"
               spellcheck="false">{{ content }}</textarea>
     <div class="file-editor__actions">
-      <button type="submit">Save</button>
+      <button type="submit" hx-disabled-elt="this">Save</button>
     </div>
   </form>
 {% elif mode == 'binary' or mode == 'too_large' %}
