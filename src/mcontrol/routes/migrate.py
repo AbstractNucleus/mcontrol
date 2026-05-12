@@ -21,23 +21,17 @@ idempotent migration converges.
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol import db, migration, server_variables_form
+from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
 router = APIRouter()
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,31}$")
-
-
-def _server_or_404(name: str) -> dict:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
-    return server
 
 
 def _initial_form(server: dict) -> dict:
@@ -86,8 +80,9 @@ def _render_card(
 
 
 @router.get("/servers/{name}/migrate", response_class=HTMLResponse)
-async def get_card(request: Request, name: str) -> HTMLResponse:
-    server = _server_or_404(name)
+async def get_card(
+    request: Request, server: dict = Depends(get_server_or_404)
+) -> HTMLResponse:
     if server.get("scaffolded_at") is not None:
         raise HTTPException(status_code=404, detail="Server is already scaffolded.")
     return _render_card(request, server)
@@ -97,13 +92,12 @@ async def get_card(request: Request, name: str) -> HTMLResponse:
 async def run_migration(
     request: Request,
     name: str,
+    server: dict = Depends(get_server_or_404),
     memory_budget_gb: int = Form(...),
     port: int = Form(...),
     server_jar: str = Form(...),
     jvm_extra_args: str = Form(""),
 ) -> HTMLResponse:
-    server = _server_or_404(name)
-
     if server.get("scaffolded_at") is not None:
         raise HTTPException(status_code=409, detail="Server is already scaffolded.")
     if server.get("state") == "running":

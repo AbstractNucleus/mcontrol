@@ -28,12 +28,12 @@ returns the full page.
 
 import re
 from pathlib import Path
-from uuid import UUID
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol import __version__, db, membership, mojang, server_props, server_rcon
+from mcontrol.routes._dependencies import get_player_or_404
 from mcontrol.templates import templates
 
 router = APIRouter()
@@ -229,20 +229,6 @@ async def import_unknown(request: Request) -> HTMLResponse:
 # ---------------------------------------------------------------------------
 
 
-def _validate_uuid(value: str) -> str:
-    try:
-        return str(UUID(value))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="invalid uuid") from exc
-
-
-def _player_or_404(uuid: str) -> dict:
-    player = db.get_player(uuid)
-    if player is None:
-        raise HTTPException(status_code=404, detail="Player not found")
-    return player
-
-
 def _memberships_for(uuid: str) -> list[dict]:
     """Pre-scan every server for memberships matching ``uuid``."""
     server_rows = db.list_servers()
@@ -250,10 +236,10 @@ def _memberships_for(uuid: str) -> list[dict]:
 
 
 @router.get("/players/{uuid}/remove", response_class=HTMLResponse)
-async def remove_modal(request: Request, uuid: str) -> HTMLResponse:
-    uuid = _validate_uuid(uuid)
-    player = _player_or_404(uuid)
-    memberships = _memberships_for(uuid)
+async def remove_modal(
+    request: Request, player: dict = Depends(get_player_or_404)
+) -> HTMLResponse:
+    memberships = _memberships_for(player["uuid"])
     return templates.TemplateResponse(
         request=request,
         name="_player_remove_modal.html",
@@ -357,10 +343,11 @@ def _cascade_flash(player_name: str, removed: list[str], failures: list[dict]) -
 
 @router.post("/players/{uuid}/remove", response_class=HTMLResponse)
 async def remove(
-    request: Request, uuid: str, scope: str = Form(...)
+    request: Request,
+    player: dict = Depends(get_player_or_404),
+    scope: str = Form(...),
 ) -> HTMLResponse:
-    uuid = _validate_uuid(uuid)
-    player = _player_or_404(uuid)
+    uuid = player["uuid"]
 
     if scope == "roster":
         db.delete_player(uuid)

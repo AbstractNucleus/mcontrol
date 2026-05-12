@@ -1,10 +1,11 @@
 """HTMX-driven inline edit for the per-server `container_name` override
 and `dir`. Decision 021 — the operator's safety valve against drift."""
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol import db
+from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.templates import templates
 
 router = APIRouter()
@@ -27,10 +28,9 @@ def _form(request: Request, server: dict) -> HTMLResponse:
 
 
 @router.get("/servers/{name}/bindings", response_class=HTMLResponse)
-async def get(request: Request, name: str, edit: int = 0) -> HTMLResponse:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
+async def get(
+    request: Request, server: dict = Depends(get_server_or_404), edit: int = 0
+) -> HTMLResponse:
     if edit:
         return _form(request, server)
     return _card(request, server)
@@ -40,13 +40,10 @@ async def get(request: Request, name: str, edit: int = 0) -> HTMLResponse:
 async def post(
     request: Request,
     name: str,
+    server: dict = Depends(get_server_or_404),
     container_name: str = Form(""),
     dir: str = Form(...),
 ) -> HTMLResponse:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
-
     # Empty string means "clear the override and fall back to name".
     cn_value: str | None = container_name.strip() or None
     db.update_bindings(name=name, container_name=cn_value, dir=dir)

@@ -10,20 +10,14 @@ scaffolded row's edit POST would still write JSONB. The detail page
 is the only entry point in the UI.
 """
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol import db, server_variables_form
+from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.templates import render_variables_card, templates
 
 router = APIRouter()
-
-
-def _server_or_404(name: str) -> dict:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
-    return server
 
 
 def _form(
@@ -46,8 +40,9 @@ def _form(
 
 
 @router.get("/servers/{name}/variables", response_class=HTMLResponse)
-async def get(request: Request, name: str, edit: int = 0) -> HTMLResponse:
-    server = _server_or_404(name)
+async def get(
+    request: Request, server: dict = Depends(get_server_or_404), edit: int = 0
+) -> HTMLResponse:
     if edit:
         return _form(request, server)
     return render_variables_card(request, server)
@@ -57,12 +52,12 @@ async def get(request: Request, name: str, edit: int = 0) -> HTMLResponse:
 async def post(
     request: Request,
     name: str,
+    server: dict = Depends(get_server_or_404),
     memory_budget_gb: int = Form(...),
     port: int = Form(...),
     server_jar: str = Form(...),
     jvm_extra_args: str = Form(""),
 ) -> HTMLResponse:
-    server = _server_or_404(name)
     form = {
         "memory_budget_gb": memory_budget_gb,
         "port": port,
