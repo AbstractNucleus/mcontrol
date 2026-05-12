@@ -810,6 +810,77 @@ async function performBulkMove(sources, destDir) {
   sync();
 })();
 
+// ---- View-pane breadcrumb (issue #61) -------------------------------
+//
+// Each clickable breadcrumb segment carries `data-breadcrumb-path` with
+// the absolute (relative to server root) path of that directory. The
+// tree's lazy-load is `hx-trigger="click once"` on each dir's toggle
+// button, so to reveal a deep segment we walk top-down: for every
+// ancestor that isn't already rendered in the DOM, click its toggle and
+// wait for the htmx swap. Once the target row exists, scroll it in.
+
+function findTreeRow(path) {
+  if (!path) return null;
+  return document.querySelector(
+    `#file-tree [data-upload-target][data-upload-path="${cssEscape(path)}"]`
+  );
+}
+
+function waitForChildren(parentRow) {
+  // Resolve once the parent's <ul.file-tree__children> has been
+  // populated by htmx. Single afterSwap listener; falls back after a
+  // generous timeout so a failed fetch can't hang the click handler.
+  return new Promise((resolve) => {
+    const children = parentRow.querySelector(":scope > .file-tree__children");
+    if (children && children.children.length > 0) { resolve(); return; }
+    const onSwap = (evt) => {
+      if (!children) return;
+      if (evt.target === children || children.contains(evt.target)) {
+        document.body.removeEventListener("htmx:afterSwap", onSwap);
+        resolve();
+      }
+    };
+    document.body.addEventListener("htmx:afterSwap", onSwap);
+    setTimeout(() => {
+      document.body.removeEventListener("htmx:afterSwap", onSwap);
+      resolve();
+    }, 2000);
+  });
+}
+
+async function revealBreadcrumb(path) {
+  if (!path) return;
+  const segments = path.split("/").filter(Boolean);
+  let accum = "";
+  for (let i = 0; i < segments.length; i++) {
+    accum = accum ? `${accum}/${segments[i]}` : segments[i];
+    let row = findTreeRow(accum);
+    if (!row) {
+      // Closest rendered ancestor needs its toggle clicked so htmx
+      // lazy-loads the path down to this segment.
+      const parentPath = segments.slice(0, i).join("/");
+      const parentRow = parentPath ? findTreeRow(parentPath) : document.getElementById("file-tree");
+      if (!parentRow) return;
+      const toggle = parentPath
+        ? parentRow.querySelector(":scope > .file-tree__toggle")
+        : null;
+      if (toggle) toggle.click();
+      await waitForChildren(parentRow);
+      row = findTreeRow(accum);
+      if (!row) return;
+    }
+  }
+  const target = findTreeRow(path);
+  if (target) target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+document.addEventListener("click", (evt) => {
+  const seg = evt.target.closest && evt.target.closest("[data-breadcrumb-path]");
+  if (!seg) return;
+  evt.preventDefault();
+  revealBreadcrumb(seg.dataset.breadcrumbPath || "");
+});
+
 // ---- Ctrl/Cmd+P → focus filename search (issue #62) -----------------
 //
 // Slice 5 framed the search input as "Cmd-P-style" but never wired the

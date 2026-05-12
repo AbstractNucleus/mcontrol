@@ -1382,6 +1382,87 @@ small {
   font-weight: 500;
 }
 
+.file-view__head {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.file-view__breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+}
+
+.file-view__breadcrumb-segment {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.file-view__breadcrumb-segment:hover {
+  color: var(--fg-primary);
+}
+
+.file-view__breadcrumb-sep {
+  color: var(--fg-muted);
+}
+
+.file-view__breadcrumb-leaf {
+  color: var(--fg-primary);
+  font-weight: 500;
+}
+
+.file-view__meta {
+  margin: 0;
+}
+
+.file-view__info-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.file-view__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.file-view__action {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  color: var(--fg-primary);
+  cursor: pointer;
+  padding: 6px var(--space-3);
+  font: inherit;
+  font-size: var(--fs-sm);
+  border-radius: var(--radius-xs);
+  text-decoration: none;
+}
+
+.file-view__action:hover {
+  background: var(--bg-sunken);
+  color: var(--accent);
+}
+
+.file-view__action--danger {
+  color: var(--danger-fg);
+}
+
+.file-view__action--danger:hover {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+}
+
 
 /* ---- File editor (CodeMirror) ----------------------------------------- */
 .file-editor {
