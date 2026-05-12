@@ -29,30 +29,7 @@
   <script src="/static/htmx.min.js" defer></script>
   <script src="/static/htmx-ext-sse.js" defer></script>
   <script src="/static/theme.js?v={{ version }}" defer></script>
-  {#
-    CodeMirror 6 loaded via CDN ESM (decision 016 — no bundler).
-    Versions pinned per decision 020. The `?deps=` queries force every
-    sub-package to share the same `@codemirror/state`/`view` instance —
-    mixing instances breaks the editor with "two different EditorState"
-    style errors that are a common esm.sh-CodeMirror footgun.
-  #}
-  <script type="importmap">
-  {
-    "imports": {
-      "@codemirror/state":        "https://esm.sh/@codemirror/state@6.5.2",
-      "@codemirror/view":         "https://esm.sh/@codemirror/view@6.36.2?deps=@codemirror/state@6.5.2",
-      "@codemirror/commands":     "https://esm.sh/@codemirror/commands@6.7.1?deps=@codemirror/state@6.5.2,@codemirror/view@6.36.2",
-      "@codemirror/language":     "https://esm.sh/@codemirror/language@6.10.8?deps=@codemirror/state@6.5.2,@codemirror/view@6.36.2",
-      "@codemirror/search":       "https://esm.sh/@codemirror/search@6.5.8?deps=@codemirror/state@6.5.2,@codemirror/view@6.36.2",
-      "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete@6.18.4?deps=@codemirror/state@6.5.2,@codemirror/view@6.36.2,@codemirror/language@6.10.8",
-      "@codemirror/lint":         "https://esm.sh/@codemirror/lint@6.8.4?deps=@codemirror/state@6.5.2,@codemirror/view@6.36.2",
-      "@codemirror/legacy-modes/mode/properties": "https://esm.sh/@codemirror/legacy-modes@6.4.2/mode/properties?deps=@codemirror/language@6.10.8",
-      "codemirror":               "https://esm.sh/codemirror@6.0.1?deps=@codemirror/state@6.5.2,@codemirror/view@6.36.2,@codemirror/commands@6.7.1,@codemirror/language@6.10.8,@codemirror/search@6.5.8,@codemirror/autocomplete@6.18.4,@codemirror/lint@6.8.4"
-    }
-  }
-  </script>
-  <script type="module" src="/static/file_editor.js"></script>
-  <script src="/static/file_uploader.js" defer></script>
+  {% block head_scripts %}{% endblock %}
   <script>
     // The file-save endpoint returns HTTP 409 with a swappable conflict
     // partial. Tell htmx to swap on 409 instead of treating it as an error.
