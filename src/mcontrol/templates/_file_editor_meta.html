@@ -1,0 +1,9 @@
+{# Save-handshake slot (issue #57). The form's hx-target points here; on a
+   successful save the handler returns just this fragment, swapping it via
+   outerHTML so the editor's EditorView stays mounted with cursor + scroll
+   intact. Carries the hidden mtime_ns input (so the next save uses the
+   fresh value) and surfaces the `saved` indicator when present. #}
+<span id="file-editor-meta" class="file-editor__meta">
+  <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+  {% if saved %}<span class="file-view__saved">saved</span>{% endif %}
+</span>

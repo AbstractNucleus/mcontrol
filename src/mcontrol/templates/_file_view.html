@@ -17,19 +17,22 @@
         <span class="file-view__breadcrumb-sep" aria-hidden="true">/</span>
       {% endif %}
     {% endfor %}
-    {% if saved %} — <span class="file-view__saved">saved</span>{% endif %}
   </nav>
   <p class="t-caption file-view__meta">{{ size|humansize }} · modified {{ mtime_ns|humantime }}</p>
 </header>
 {% if mode == 'text' %}
   {% if conflict %}{% include "_file_conflict.html" %}{% endif %}
+  {# Save targets a small meta slot (issue #57) so the editor stays mounted
+     across successful saves — the form's hx-target points at this slot and
+     the save handler returns just `_file_editor_meta.html`. The 409
+     conflict path uses HX-Retarget to swap the full #file-view instead. #}
   <form class="file-editor"
         hx-post="/servers/{{ server_name }}/files/save"
-        hx-target="#file-view"
-        hx-swap="innerHTML"
+        hx-target="#file-editor-meta"
+        hx-swap="outerHTML"
         data-file-editor-form>
     <input type="hidden" name="path" value="{{ filename }}">
-    <input type="hidden" name="mtime_ns" value="{{ mtime_ns }}">
+    {% include "_file_editor_meta.html" %}
     <textarea name="content"
               class="file-editor__textarea"
               data-file-editor
