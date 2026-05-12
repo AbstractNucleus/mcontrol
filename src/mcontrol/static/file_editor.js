@@ -52,9 +52,17 @@ function mountEditor(textarea) {
   textarea.dataset.fileEditorMounted = "1";
 
   const lang = languageFor(textarea.dataset.fileName);
+  const saveKeymap = {
+    key: "Mod-s",
+    run: () => {
+      const form = textarea.closest("[data-file-editor-form]");
+      if (form) form.requestSubmit();
+      return true;
+    },
+  };
   const extensions = [
     basicSetup,
-    keymap.of([indentWithTab]),
+    keymap.of([saveKeymap, indentWithTab]),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         textarea.value = update.state.doc.toString();
