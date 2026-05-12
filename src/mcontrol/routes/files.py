@@ -28,6 +28,7 @@ Path-safety contract (mirrors slice 5 plan; applies to every endpoint):
    never the target.
 """
 
+import asyncio
 import os
 import shutil
 import stat
@@ -37,7 +38,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Upload
 from fastapi.responses import FileResponse, HTMLResponse
 
 from mcontrol import db
-from mcontrol.file_writer import atomic_write_stream, atomic_write_text
+from mcontrol.file_writer import atomic_write_stream_async, atomic_write_text_async
 from mcontrol.templates import templates
 
 router = APIRouter()
@@ -180,8 +181,11 @@ async def view(
     rel = target.relative_to(base).as_posix()
     size = st.st_size
 
-    with target.open("rb") as f:
-        sniff = f.read(_BINARY_SNIFF_BYTES)
+    def _sniff() -> bytes:
+        with target.open("rb") as f:
+            return f.read(_BINARY_SNIFF_BYTES)
+
+    sniff = await asyncio.to_thread(_sniff)
     is_binary = b"\x00" in sniff
 
     if is_binary:
@@ -196,7 +200,9 @@ async def view(
             name="_file_view.html",
             context={"mode": "too_large", "filename": rel, "size": size},
         )
-    content = target.read_text(encoding="utf-8", errors="replace")
+    content = await asyncio.to_thread(
+        target.read_text, encoding="utf-8", errors="replace"
+    )
     return templates.TemplateResponse(
         request=request,
         name="_file_view.html",
@@ -247,7 +253,7 @@ async def save(
             status_code=409,
         )
 
-    atomic_write_text(target, normalized)
+    await atomic_write_text_async(target, normalized)
     new_st = target.stat()
     return templates.TemplateResponse(
         request=request,
@@ -357,7 +363,7 @@ async def upload(
 
     for f in files:
         target = target_dir / f.filename
-        atomic_write_stream(target, f.file)
+        await atomic_write_stream_async(target, f.file)
 
     base = Path(server["dir"]).resolve()
     entries = _list_dir(target_dir, base)

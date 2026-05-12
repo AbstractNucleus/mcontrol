@@ -10,6 +10,7 @@ container.
 Files land as root, same as slice 4's env_writer — no chown step.
 """
 
+import asyncio
 import os
 import shutil
 import tempfile
@@ -63,3 +64,22 @@ def atomic_write_stream(path: Path, src: BinaryIO) -> None:
             except OSError:
                 pass
         raise
+
+
+async def atomic_write_text_async(path: Path, content: str) -> None:
+    """Async wrapper around `atomic_write_text` — runs in a worker thread.
+
+    Multi-megabyte writes would otherwise stall every other in-flight
+    request under the single-worker uvicorn posture.
+    """
+    await asyncio.to_thread(atomic_write_text, path, content)
+
+
+async def atomic_write_stream_async(path: Path, src: BinaryIO) -> None:
+    """Async wrapper around `atomic_write_stream` — runs in a worker thread.
+
+    Upload bodies can be arbitrarily large (mod jars, world backups);
+    streaming them inline would block the event loop for the duration
+    of the copy.
+    """
+    await asyncio.to_thread(atomic_write_stream, path, src)
