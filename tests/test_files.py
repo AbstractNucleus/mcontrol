@@ -1725,7 +1725,7 @@ async def test_bulk_delete_removes_multiple_files(
         data={"paths": ["a.txt", "b.txt"], "confirm": "DELETE"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 204
     assert not (server_dir / "a.txt").exists()
     assert not (server_dir / "b.txt").exists()
     assert (server_dir / "stay.txt").exists()
@@ -1743,7 +1743,7 @@ async def test_bulk_delete_recursive_dir(
         data={"paths": ["doomed"], "confirm": "DELETE"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 204
     assert not d.exists()
 
 
@@ -1819,7 +1819,7 @@ async def test_bulk_move_relocates_multiple_files(
         data={"sources": ["a.txt", "b.txt"], "dest_dir": "dst"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 204
     assert not (server_dir / "a.txt").exists()
     assert not (server_dir / "b.txt").exists()
     assert (server_dir / "dst" / "a.txt").read_text(encoding="utf-8") == "a"
