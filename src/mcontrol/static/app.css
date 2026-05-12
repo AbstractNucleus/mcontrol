@@ -1021,6 +1021,20 @@ small {
   flex-wrap: wrap;
 }
 
+.file-tree__entry:focus {
+  outline: none;
+}
+
+.file-tree__entry:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.file-tree__entry--dir[aria-expanded="false"] > .file-tree__children {
+  display: none;
+}
+
 .file-tree__toggle {
   background: transparent;
   border: 0;
@@ -1076,6 +1090,11 @@ small {
   border-color: var(--border-medium);
 }
 
+.file-tree__menu-trigger:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 .file-tree__menu[open] .file-tree__menu-trigger {
   color: var(--fg-primary);
   border-color: var(--border-medium);
@@ -1112,9 +1131,11 @@ small {
   text-decoration: none;
 }
 
-.file-tree__menu-item:hover {
+.file-tree__menu-item:hover,
+.file-tree__menu-item:focus-visible {
   background: var(--bg-sunken);
   color: var(--accent);
+  outline: none;
 }
 
 .file-tree__menu-item--danger {
