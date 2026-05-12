@@ -8,7 +8,11 @@ modules; sharing a single instance keeps configuration in one place.
 from datetime import datetime
 from pathlib import Path
 
+from fastapi import Request
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+
+from mcontrol import health
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
@@ -40,3 +44,15 @@ def humantime(mtime_ns: int) -> str:
 
 templates.env.filters["humansize"] = humansize
 templates.env.filters["humantime"] = humantime
+
+
+def render_variables_card(request: Request, server: dict) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="_variables_card.html",
+        context={
+            "server": server,
+            "variables_error": health.variables_render_error(server),
+            "scripts_stale": health.compute_scripts_stale(server),
+        },
+    )

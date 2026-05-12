@@ -13,8 +13,8 @@ is the only entry point in the UI.
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db, health
-from mcontrol.templates import templates
+from mcontrol import db
+from mcontrol.templates import render_variables_card, templates
 
 router = APIRouter()
 
@@ -28,18 +28,6 @@ def _server_or_404(name: str) -> dict:
     if server is None:
         raise HTTPException(status_code=404, detail="Server not found")
     return server
-
-
-def _card(request: Request, server: dict) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request=request,
-        name="_variables_card.html",
-        context={
-            "server": server,
-            "variables_error": health.variables_render_error(server),
-            "scripts_stale": health.compute_scripts_stale(server),
-        },
-    )
 
 
 def _form(
@@ -77,7 +65,7 @@ async def get(request: Request, name: str, edit: int = 0) -> HTMLResponse:
     server = _server_or_404(name)
     if edit:
         return _form(request, server)
-    return _card(request, server)
+    return render_variables_card(request, server)
 
 
 @router.post("/servers/{name}/variables", response_class=HTMLResponse)
@@ -124,4 +112,4 @@ async def post(
     db.update_variables(name=name, variables=updated)
 
     refreshed = {**server, "variables": updated}
-    return _card(request, refreshed)
+    return render_variables_card(request, refreshed)

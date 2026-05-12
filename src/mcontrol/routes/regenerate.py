@@ -19,8 +19,7 @@ from fastapi.responses import HTMLResponse
 
 from mcontrol import db, health, scaffolding
 from mcontrol.file_writer import atomic_write_text
-from mcontrol.routes.variables import _card
-from mcontrol.templates import templates
+from mcontrol.templates import render_variables_card, templates
 
 router = APIRouter()
 
@@ -103,7 +102,7 @@ async def get(request: Request, name: str) -> HTMLResponse:
     # send the operator back to the card; the health banner on the
     # detail page already explains the variables-incomplete cause.
     if health.variables_render_error(server) is not None:
-        return _card(request, server)
+        return render_variables_card(request, server)
     return _render_diff_partial(request, server)
 
 
@@ -136,4 +135,4 @@ async def confirm(
     atomic_write_text(start_path, rendered_start)
     start_path.chmod(0o755)
 
-    return _card(request, server)
+    return render_variables_card(request, server)
