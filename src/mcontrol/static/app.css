@@ -1489,6 +1489,14 @@ small {
   align-items: center;
 }
 
+/* In-flight disable for the Save button (issue #65). htmx sets the
+   disabled attribute on the submit button for the duration of the POST
+   so a rapid double-click can't produce a duplicate request. */
+.file-editor button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 
 /* ---- Health banner ---------------------------------------------------- */
 .health-banner {
