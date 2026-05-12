@@ -1,9 +1,8 @@
 """Mojang account-name → UUID lookup client.
 
 Used by the slice 7 roster-add path: operator types a Minecraft
-handle, mcontrol resolves it to a canonical UUID via
-``GET https://api.mojang.com/users/profiles/minecraft/{name}`` and
-upserts into ``app_mcontrol.players``.
+handle, mcontrol resolves it to a canonical UUID via the Minecraft
+profile API and upserts into ``app_mcontrol.players``.
 
 Contract (decision 027 / slice 7 plan):
 
@@ -22,7 +21,12 @@ from uuid import UUID
 
 import httpx
 
-_BASE_URL = "https://api.mojang.com/users/profiles/minecraft/"
+# api.mojang.com is being wound down in favour of api.minecraftservices.com.
+# Try the replacement endpoint first; fall back to the legacy one on transient
+# failure (5xx / network error / timeout) so lookups keep working during the
+# migration period.
+_PRIMARY_BASE_URL = "https://api.minecraftservices.com/minecraft/profile/lookup/name/"
+_FALLBACK_BASE_URL = "https://api.mojang.com/users/profiles/minecraft/"
 _TIMEOUT_SECONDS = 5.0
 
 
@@ -33,14 +37,22 @@ class MojangError(Exception):
 
 
 async def lookup_by_name(name: str) -> dict[str, Any] | None:
-    url = _BASE_URL + quote(name, safe="")
-    try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
-            response = await client.get(url)
-    except httpx.TimeoutException as e:
-        raise MojangError(f"timeout looking up {name!r}") from e
-    except httpx.RequestError as e:
-        raise MojangError(f"network error looking up {name!r}: {e}") from e
+    encoded = quote(name, safe="")
+
+    async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+        response = None
+        try:
+            response = await client.get(_PRIMARY_BASE_URL + encoded)
+        except (httpx.TimeoutException, httpx.RequestError):
+            pass  # fall through to the legacy fallback
+
+        if response is None or 500 <= response.status_code < 600:
+            try:
+                response = await client.get(_FALLBACK_BASE_URL + encoded)
+            except httpx.TimeoutException as e:
+                raise MojangError(f"timeout looking up {name!r}") from e
+            except httpx.RequestError as e:
+                raise MojangError(f"network error looking up {name!r}: {e}") from e
 
     if response.status_code == 204:
         return None
