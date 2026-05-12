@@ -13,8 +13,7 @@
             class="file-conflict__btn"
             hx-get="/servers/{{ server_name }}/files/view?path={{ filename|urlencode }}"
             hx-target="#file-view"
-            hx-swap="innerHTML"
-            hx-confirm="Reload from disk and discard your edits?">Reload</button>
+            hx-swap="innerHTML">Reload (discard my edits)</button>
     <button type="button"
             class="file-conflict__btn"
             hx-post="/servers/{{ server_name }}/files/save"
