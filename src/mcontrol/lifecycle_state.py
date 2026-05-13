@@ -27,7 +27,7 @@ class LifecycleView(TypedDict):
 
 _RUNNING_LIKE = {"running", "paused"}
 _STOPPED_LIKE = {"created", "exited", "dead"}
-_TRANSIENT = {"restarting", "scaffolding"}
+_TRANSIENT = {"restarting", "removing", "scaffolding"}
 
 
 def view(state: str | None) -> LifecycleView:

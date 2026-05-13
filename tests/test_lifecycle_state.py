@@ -23,7 +23,7 @@ def test_running_states_accent_stop_disable_start(state):
     assert view["accent"] == "stop"
 
 
-@pytest.mark.parametrize("state", ["restarting", "scaffolding"])
+@pytest.mark.parametrize("state", ["restarting", "removing", "scaffolding"])
 def test_transient_states_disable_all_no_accent(state):
     view = lifecycle_state.view(state)
     assert view["start_disabled"] is True

@@ -537,6 +537,8 @@ small {
 .state-pill--dead    { color: var(--danger-fg);  background: var(--danger-bg);  border-color: transparent; }
 .state-pill--restarting { color: var(--warning-fg); background: var(--warning-bg); border-color: transparent; }
 .state-pill--restarting::before { animation: state-pulse 1.4s var(--ease) infinite; }
+.state-pill--removing  { color: var(--warning-fg); background: var(--warning-bg); border-color: transparent; }
+.state-pill--removing::before  { animation: state-pulse 1.4s var(--ease) infinite; }
 .state-pill--paused  { color: var(--info-fg);    background: var(--info-bg);    border-color: transparent; }
 .state-pill--created { color: var(--fg-secondary); background: var(--bg-sunken); }
 .state-pill--unknown { color: var(--fg-muted);  background: var(--bg-sunken); }
