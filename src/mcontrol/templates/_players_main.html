@@ -7,9 +7,9 @@
   </div>
 
   {% if flash %}
-    <p class="players-page__flash players-page__flash--{{ flash.kind }}">
-      {{ flash.message }}
-    </p>
+  <div hx-swap-oob="beforeend:#flash-stack">
+    {% include "_flash.html" %}
+  </div>
   {% endif %}
 
   {% if unknown_count > 0 %}

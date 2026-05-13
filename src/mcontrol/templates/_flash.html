@@ -1,0 +1,5 @@
+<div class="flash-msg flash-msg--{{ flash.kind }}" role="alert">
+  <span class="flash-msg__text">{{ flash.message }}</span>
+  <button class="flash-msg__dismiss" type="button" aria-label="Dismiss"
+          onclick="this.closest('.flash-msg').remove()">×</button>
+</div>

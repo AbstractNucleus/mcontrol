@@ -32,6 +32,7 @@
   <script src="/static/htmx.min.js" defer></script>
   <script src="/static/htmx-ext-sse.js" defer></script>
   <script src="/static/theme.js?v={{ version }}" defer></script>
+  <script src="/static/flash.js?v={{ version }}" defer></script>
   {% block head_scripts %}{% endblock %}
   <script>
     // The file-save endpoint returns HTTP 409 with a swappable conflict
@@ -58,5 +59,6 @@
   <main class="page-main">
     {% block main %}{% endblock %}
   </main>
+  <div id="flash-stack" class="flash-stack" aria-live="polite" aria-atomic="false"></div>
 </body>
 </html>
