@@ -30,7 +30,7 @@ Lint:
 uv run ruff check .
 ```
 
-## Deployment
+## Production deploy
 
 The tracked `docker-compose.yml` runs only the `app` service. TLS termination happens upstream at aserver-nginx, not inside this repo — see [decision 019](docs/decisions.md#019-tls-termination-at-aserver-nginx-not-in-repo-caddy). The container exposes `:8000` internally; bind it to a host LAN port through a per-host `docker-compose.override.yml` (gitignored) and reverse-proxy to it from the upstream nginx.
 
@@ -45,5 +45,3 @@ Pre-requisites:
 - `mcontrol.noelkleen.com` DNS A record (gray cloud) pointing at the terminator host's tailnet IP.
 - Tailscale running on both the terminator host and the app host.
 - A `.env` populated from `.env.example` (Supabase URL + service-role key + `SERVER_BASE_PATH`).
-
-Local dev without a terminator: bind the app port directly to `127.0.0.1:8000` via an override file and visit `http://localhost:8000/`. There is intentionally no out-of-the-box self-terminating shape — see decision 019 for why.
