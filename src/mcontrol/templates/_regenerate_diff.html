@@ -38,7 +38,7 @@
         hx-swap="outerHTML">
     <input type="hidden" name="compose_mtime_ns" value="{{ compose_mtime_ns }}">
     <input type="hidden" name="start_mtime_ns" value="{{ start_mtime_ns }}">
-    <button type="submit" class="btn btn--primary">Confirm</button>
+    <button type="submit" class="btn btn--primary">Confirm{% include "_spinner.html" %}</button>
     <a class="btn btn--ghost"
        hx-get="/servers/{{ server.name }}/variables"
        hx-target="#variables"
