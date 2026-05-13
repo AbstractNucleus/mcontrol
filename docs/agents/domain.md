@@ -4,10 +4,8 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root *(not yet created — fall back to `README.md` for project framing)*.
+- **`docs/CONTEXT.md`** — domain glossary (canonical term definitions; cross-links to decisions).
 - **`docs/decisions.md`** — single-file architectural decisions register. Entries are numbered (`001`, `002`, …) with a status table at the top. Read entries that touch the area you're about to work in. This repo uses a single-file register rather than the conventional `docs/adr/<NNN>-<slug>.md` per-file layout — same role, different shape.
-
-If `CONTEXT.md` doesn't exist, **proceed silently**. Don't flag its absence; don't suggest creating it upfront. The producer skill (`/grill-with-docs`) creates it lazily when terms actually get resolved.
 
 ## File structure
 
