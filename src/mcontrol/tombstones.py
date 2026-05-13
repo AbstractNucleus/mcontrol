@@ -27,7 +27,7 @@ from pathlib import Path
 
 from mcontrol.resources import read_disk_usage
 
-_DEFAULT_PURGE_AGE_DAYS = 7
+DEFAULT_PURGE_AGE_DAYS = 7
 
 # Mirrors the slug shape from routes/new_server.py (`_NAME_RE`). Greedy
 # backtrack on the slug + the trailing `-\d+$` anchor pins the unix-ts
@@ -46,7 +46,7 @@ class Tombstone:
     bytes: int
 
 
-def _parse(dir_name: str) -> tuple[str, int] | None:
+def parse(dir_name: str) -> tuple[str, int] | None:
     m = _TOMB_RE.fullmatch(dir_name)
     if m is None:
         return None
@@ -74,7 +74,7 @@ def count(base: Path) -> int:
                 continue
             if not entry.is_dir(follow_symlinks=False):
                 continue
-            if _parse(entry.name) is not None:
+            if parse(entry.name) is not None:
                 n += 1
     return n
 
@@ -103,7 +103,7 @@ def list_tombstones(base: Path) -> list[Tombstone]:
                 continue
             if not entry.is_dir(follow_symlinks=False):
                 continue
-            parsed = _parse(entry.name)
+            parsed = parse(entry.name)
             if parsed is None:
                 continue
             original_name, deleted_at_unix = parsed
@@ -134,7 +134,7 @@ def purge_one(base: Path, dir_name: str) -> None:
          still landed us elsewhere" case.
       3. ``target`` must be a real directory, not a symlink.
     """
-    if _parse(dir_name) is None:
+    if parse(dir_name) is None:
         raise ValueError(f"not a tombstone name: {dir_name!r}")
 
     base = Path(base).resolve()
@@ -148,7 +148,7 @@ def purge_one(base: Path, dir_name: str) -> None:
 
 
 def purge_older_than(
-    base: Path, days: int = _DEFAULT_PURGE_AGE_DAYS
+    base: Path, days: int = DEFAULT_PURGE_AGE_DAYS
 ) -> list[Tombstone]:
     """Purge every tombstone older than ``days`` days. Returns the list
     of tombstones that were purged (in the order they were removed).

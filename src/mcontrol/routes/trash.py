@@ -4,7 +4,7 @@
                                        directory under <base> with parsed
                                        original-name, age, and bytes.
   POST /trash/empty                 → purge every tombstone older than
-                                       _DEFAULT_PURGE_AGE_DAYS (7); type
+                                       DEFAULT_PURGE_AGE_DAYS (7); type
                                        'EMPTY' to confirm.
   POST /trash/{dir_name}/delete     → purge that single tombstone; type
                                        the parsed original server name to
@@ -52,7 +52,7 @@ def _base(request: Request) -> Path:
 
 def _list_view(base: Path) -> dict:
     rows = tombstones.list_tombstones(base)
-    cutoff = tombstones._DEFAULT_PURGE_AGE_DAYS * 86400
+    cutoff = tombstones.DEFAULT_PURGE_AGE_DAYS * 86400
     sweepable = [t for t in rows if t.age_seconds >= cutoff]
     sweep_bytes = sum(t.bytes for t in sweepable)
     return {
@@ -68,7 +68,7 @@ def _list_view(base: Path) -> dict:
         ],
         "sweep_count": len(sweepable),
         "sweep_bytes_human": format_bytes(sweep_bytes),
-        "purge_age_days": tombstones._DEFAULT_PURGE_AGE_DAYS,
+        "purge_age_days": tombstones.DEFAULT_PURGE_AGE_DAYS,
     }
 
 
@@ -84,7 +84,7 @@ async def empty_confirm(request: Request) -> HTMLResponse:
     """Modal partial — the count + bytes preview before the operator
     types 'EMPTY' to confirm."""
     base = _base(request)
-    cutoff = tombstones._DEFAULT_PURGE_AGE_DAYS * 86400
+    cutoff = tombstones.DEFAULT_PURGE_AGE_DAYS * 86400
     sweepable = [
         t for t in tombstones.list_tombstones(base) if t.age_seconds >= cutoff
     ]
@@ -101,7 +101,7 @@ async def empty_confirm(request: Request) -> HTMLResponse:
                 }
                 for t in sweepable
             ],
-            "purge_age_days": tombstones._DEFAULT_PURGE_AGE_DAYS,
+            "purge_age_days": tombstones.DEFAULT_PURGE_AGE_DAYS,
         },
     )
 
@@ -122,7 +122,7 @@ async def empty(request: Request, confirm: str = Form("")) -> HTMLResponse:
 @router.get("/trash/{dir_name}/confirm", response_class=HTMLResponse)
 async def delete_confirm(request: Request, dir_name: str) -> HTMLResponse:
     """Modal partial — type-name confirm for a single tombstone delete."""
-    parsed = tombstones._parse(dir_name)
+    parsed = tombstones.parse(dir_name)
     if parsed is None:
         raise HTTPException(status_code=404, detail="Not a tombstone")
     original_name, _ts = parsed
@@ -137,7 +137,7 @@ async def delete_confirm(request: Request, dir_name: str) -> HTMLResponse:
 async def delete(
     request: Request, dir_name: str, confirm_name: str = Form("")
 ) -> HTMLResponse:
-    parsed = tombstones._parse(dir_name)
+    parsed = tombstones.parse(dir_name)
     if parsed is None:
         raise HTTPException(status_code=404, detail="Not a tombstone")
     original_name, _ts = parsed
