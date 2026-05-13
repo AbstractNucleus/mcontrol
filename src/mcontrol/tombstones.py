@@ -138,10 +138,13 @@ def purge_one(base: Path, dir_name: str) -> None:
         raise ValueError(f"not a tombstone name: {dir_name!r}")
 
     base = Path(base).resolve()
-    target = (base / dir_name).resolve()
+    entry = base / dir_name
+    if entry.is_symlink():
+        raise ValueError(f"tombstone is not a directory: {dir_name!r}")
+    target = entry.resolve()
     if target.parent != base:
         raise ValueError(f"tombstone resolves outside base: {dir_name!r}")
-    if target.is_symlink() or not target.is_dir():
+    if not target.is_dir():
         raise ValueError(f"tombstone is not a directory: {dir_name!r}")
 
     shutil.rmtree(target)
