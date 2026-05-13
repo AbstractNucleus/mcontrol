@@ -1,0 +1,11 @@
+{
+  "name": "mcontrol",
+  "short_name": "mcontrol",
+  "icons": [
+    { "src": "/static/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF9F5",
+  "theme_color": "#D97757"
+}
