@@ -38,7 +38,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
-from mcontrol import db
+from mcontrol import db, file_safety
 from mcontrol.file_writer import atomic_write_stream_async, atomic_write_text_async
 from mcontrol.templates import templates
 
@@ -55,43 +55,6 @@ def _server_or_404(name: str) -> dict:
     return server
 
 
-def _is_special(mode: int) -> bool:
-    return (
-        stat.S_ISBLK(mode)
-        or stat.S_ISCHR(mode)
-        or stat.S_ISFIFO(mode)
-        or stat.S_ISSOCK(mode)
-    )
-
-
-def _resolve_within(base_dir: str, operator_path: str) -> Path:
-    """Resolve operator_path under base_dir per the path-safety contract.
-
-    Returns an absolute path that is guaranteed to live inside the
-    resolved base_dir, with no symlink in any intermediate component.
-    The returned path may not exist — callers handle 404 themselves.
-    """
-    base = Path(base_dir).resolve()
-    cleaned = operator_path.replace("\\", "/").lstrip("/")
-    if "\x00" in cleaned:
-        raise HTTPException(status_code=400, detail="invalid path")
-    parts = [p for p in cleaned.split("/") if p and p != "."]
-    if any(p == ".." for p in parts):
-        raise HTTPException(status_code=400, detail="path traversal not allowed")
-
-    current = base
-    for part in parts:
-        current = current / part
-        if current.is_symlink():
-            raise HTTPException(status_code=400, detail="symlinks are not followed")
-
-    try:
-        current.resolve(strict=False).relative_to(base)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="path outside server dir") from None
-    return current
-
-
 def _list_dir(target: Path, base: Path) -> list[dict]:
     entries: list[dict] = []
     for child in target.iterdir():
@@ -99,7 +62,7 @@ def _list_dir(target: Path, base: Path) -> list[dict]:
             st = child.lstat()
         except OSError:
             continue
-        if _is_special(st.st_mode):
+        if file_safety.is_special(st.st_mode):
             continue
         rel = child.relative_to(base).as_posix()
         if child.is_symlink():
@@ -111,25 +74,6 @@ def _list_dir(target: Path, base: Path) -> list[dict]:
         entries.append({"name": child.name, "path": rel, "kind": kind})
     entries.sort(key=lambda e: (0 if e["kind"] == "dir" else 1, e["name"].lower()))
     return entries
-
-
-def _stat_regular_file(target: Path) -> "stat.os.stat_result":
-    """Return lstat() of `target`, refusing symlinks/special/dirs.
-
-    Caller must already have run `_resolve_within`. Raises 404 if the
-    file vanished and 400 for symlink / special / directory.
-    """
-    try:
-        st = target.lstat()
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="file not found") from exc
-    if stat.S_ISLNK(st.st_mode):
-        raise HTTPException(status_code=400, detail="symlinks are not followed")
-    if _is_special(st.st_mode):
-        raise HTTPException(status_code=400, detail="not a regular file")
-    if stat.S_ISDIR(st.st_mode):
-        raise HTTPException(status_code=400, detail="not a file")
-    return st
 
 
 @router.get("/servers/{name}/files/tree", response_class=HTMLResponse)
@@ -146,7 +90,7 @@ async def tree(
     endpoint with the same flag so child fetches stay dirs-only.
     """
     server = _server_or_404(name)
-    target = _resolve_within(server["dir"], path)
+    target = file_safety.resolve_within(server["dir"], path)
     if not target.exists():
         raise HTTPException(status_code=404, detail="path not found")
     if not target.is_dir():
@@ -175,8 +119,8 @@ async def view(
     path: str = Query(...),
 ) -> HTMLResponse:
     server = _server_or_404(name)
-    target = _resolve_within(server["dir"], path)
-    st = _stat_regular_file(target)
+    target = file_safety.resolve_within(server["dir"], path)
+    st = file_safety.stat_regular_file(target)
 
     base = Path(server["dir"]).resolve()
     rel = target.relative_to(base).as_posix()
@@ -240,8 +184,8 @@ async def save(
     force: bool = Form(False),
 ) -> HTMLResponse:
     server = _server_or_404(name)
-    target = _resolve_within(server["dir"], path)
-    st = _stat_regular_file(target)
+    target = file_safety.resolve_within(server["dir"], path)
+    st = file_safety.stat_regular_file(target)
 
     base = Path(server["dir"]).resolve()
     rel = target.relative_to(base).as_posix()
@@ -286,23 +230,6 @@ async def save(
     )
 
 
-def _validate_upload_filename(name: str) -> None:
-    """Refuse any filename component the operator could weaponize.
-
-    Multipart filenames are attacker-controlled and naive concatenation
-    would let `foo/../../etc/passwd` escape the target dir. We forbid
-    path separators, dot segments, empties and NULs before going near
-    disk.
-    """
-    if not name:
-        raise HTTPException(status_code=400, detail="empty filename")
-    if "/" in name or "\\" in name:
-        raise HTTPException(status_code=400, detail=f"invalid filename: {name!r}")
-    if name in (".", ".."):
-        raise HTTPException(status_code=400, detail=f"invalid filename: {name!r}")
-    if "\x00" in name:
-        raise HTTPException(status_code=400, detail="invalid filename")
-
 
 @router.post("/servers/{name}/files/upload", response_class=HTMLResponse)
 async def upload(
@@ -325,7 +252,7 @@ async def upload(
     operator can re-upload the failed remainder.
     """
     server = _server_or_404(name)
-    target_dir = _resolve_within(server["dir"], path)
+    target_dir = file_safety.resolve_within(server["dir"], path)
     if not target_dir.exists():
         raise HTTPException(status_code=404, detail="path not found")
     if not target_dir.is_dir():
@@ -336,7 +263,7 @@ async def upload(
 
     # Filename validation first — never let an invalid name reach disk.
     for f in files:
-        _validate_upload_filename(f.filename or "")
+        file_safety.validate_upload_filename(f.filename or "")
 
     # Conflict scan: classify every existing target before any writes.
     # Hard refusals (dir, special) abort with 400 even when force=true —
@@ -349,7 +276,7 @@ async def upload(
             st = target.lstat()
         except FileNotFoundError:
             continue
-        if _is_special(st.st_mode):
+        if file_safety.is_special(st.st_mode):
             raise HTTPException(
                 status_code=400,
                 detail=f"refusing to clobber special file: {f.filename}",
@@ -422,14 +349,14 @@ async def delete(
     server = _server_or_404(name)
     if not path:
         raise HTTPException(status_code=400, detail="cannot delete server root")
-    target = _resolve_within(server["dir"], path)
+    target = file_safety.resolve_within(server["dir"], path)
 
     try:
         st = target.lstat()
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="file not found") from exc
 
-    if _is_special(st.st_mode):
+    if file_safety.is_special(st.st_mode):
         raise HTTPException(status_code=400, detail="not a regular file or directory")
 
     if stat.S_ISLNK(st.st_mode):
@@ -465,13 +392,13 @@ async def mkdir(
 ) -> HTMLResponse:
     """Create an empty directory `dirname` inside `path` (the parent dir)."""
     server = _server_or_404(name)
-    parent = _resolve_within(server["dir"], path)
+    parent = file_safety.resolve_within(server["dir"], path)
     if not parent.exists():
         raise HTTPException(status_code=404, detail="parent not found")
     if not parent.is_dir():
         raise HTTPException(status_code=400, detail="parent is not a directory")
 
-    _validate_upload_filename(dirname)
+    file_safety.validate_upload_filename(dirname)
 
     target = parent / dirname
     # `lstat` catches both regular collisions and existing symlinks.
@@ -507,14 +434,14 @@ async def rename(
     server = _server_or_404(name)
     if not path:
         raise HTTPException(status_code=400, detail="cannot rename server root")
-    target = _resolve_within(server["dir"], path)
+    target = file_safety.resolve_within(server["dir"], path)
 
     try:
         target.lstat()
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="path not found") from exc
 
-    _validate_upload_filename(new_name)
+    file_safety.validate_upload_filename(new_name)
 
     if new_name == target.name:
         # No-op rename — pretend success without touching disk so the
@@ -561,8 +488,8 @@ async def move(
     server = _server_or_404(name)
     if not source:
         raise HTTPException(status_code=400, detail="cannot move server root")
-    src = _resolve_within(server["dir"], source)
-    dst_parent = _resolve_within(server["dir"], dest_dir)
+    src = file_safety.resolve_within(server["dir"], source)
+    dst_parent = file_safety.resolve_within(server["dir"], dest_dir)
 
     try:
         src.lstat()
@@ -613,15 +540,15 @@ async def download(
 ) -> FileResponse:
     """Stream a single regular file to the operator with attachment disposition.
 
-    Reuses `_stat_regular_file` so symlinks, directories, special files,
+    Reuses `file_safety.stat_regular_file` so symlinks, directories, special files,
     traversal, and missing paths all refuse identically to the view
     endpoint. The browser triggers a save dialog because FileResponse
     sets `Content-Disposition: attachment; filename="..."` when `filename`
     is provided.
     """
     server = _server_or_404(name)
-    target = _resolve_within(server["dir"], path)
-    _stat_regular_file(target)
+    target = file_safety.resolve_within(server["dir"], path)
+    file_safety.stat_regular_file(target)
     return FileResponse(
         target,
         filename=target.name,
@@ -715,7 +642,7 @@ def _build_index(
                 st = full.lstat()
             except OSError:
                 continue
-            if _is_special(st.st_mode):
+            if file_safety.is_special(st.st_mode):
                 continue
             kind = (
                 "symlink" if stat.S_ISLNK(st.st_mode)
@@ -843,12 +770,12 @@ async def bulk_delete(
     # would leave the operator with mystery state.
     resolved: list[tuple[Path, int]] = []
     for p in cleaned:
-        target = _resolve_within(server["dir"], p)
+        target = file_safety.resolve_within(server["dir"], p)
         try:
             st = target.lstat()
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=f"not found: {p}") from exc
-        if _is_special(st.st_mode):
+        if file_safety.is_special(st.st_mode):
             raise HTTPException(status_code=400, detail=f"refuses special file: {p}")
         resolved.append((target, st.st_mode))
 
@@ -885,7 +812,7 @@ async def bulk_move(
     if any(not s for s in sources):
         raise HTTPException(status_code=400, detail="cannot move server root")
 
-    dst_parent = _resolve_within(server["dir"], dest_dir)
+    dst_parent = file_safety.resolve_within(server["dir"], dest_dir)
     if not dst_parent.exists():
         raise HTTPException(status_code=404, detail="destination not found")
     if not dst_parent.is_dir():
@@ -894,7 +821,7 @@ async def bulk_move(
 
     plan: list[tuple[Path, Path]] = []
     for s in sources:
-        src = _resolve_within(server["dir"], s)
+        src = file_safety.resolve_within(server["dir"], s)
         try:
             src.lstat()
         except FileNotFoundError as exc:
