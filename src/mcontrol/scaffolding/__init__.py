@@ -44,11 +44,12 @@ def render_start_script(variables: dict[str, Any]) -> str:
 
 
 def scaffold(name: str, variables: dict[str, Any], base: Path) -> None:
-    """Write the two scaffold files for a new server under <base>/<name>/.
+    """Write the scaffold files for a new server under <base>/<name>/.
 
     Layout:
       <base>/<name>/docker-compose.yml
       <base>/<name>/server/start_server.sh   (chmod 0o755)
+      <base>/<name>/server/eula.txt
 
     Both files go through file_writer.atomic_write_text so PR 4's
     regenerate flow inherits the same atomicity contract.
@@ -61,3 +62,4 @@ def scaffold(name: str, variables: dict[str, Any], base: Path) -> None:
     start_path = inner / "start_server.sh"
     atomic_write_text(start_path, render_start_script(variables))
     start_path.chmod(0o755)
+    atomic_write_text(inner / "eula.txt", "eula=true\n")

@@ -68,6 +68,15 @@
       {% if errors.jvm_extra_args %}<small class="new-server__error">{{ errors.jvm_extra_args }}</small>{% endif %}
     </label>
 
+    <label class="new-server__eula">
+      <input type="checkbox"
+             name="accept_eula"
+             {% if form.accept_eula %}checked{% endif %}
+             required>
+      <span>I accept the <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noopener noreferrer">Minecraft EULA</a></span>
+      {% if errors.accept_eula %}<small class="new-server__error">{{ errors.accept_eula }}</small>{% endif %}
+    </label>
+
     <div class="new-server__actions">
       <button type="submit" class="btn btn--primary">Create</button>
       <a class="btn btn--ghost" href="/">Cancel</a>

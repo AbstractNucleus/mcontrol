@@ -60,6 +60,8 @@ def _validate_static(form: dict) -> dict[str, str]:
         errors["port"] = f"Port must be between {_PORT_MIN} and {_PORT_MAX}."
     if not form["server_jar"].strip():
         errors["server_jar"] = "Required."
+    if not form["accept_eula"]:
+        errors["accept_eula"] = "You must accept the Minecraft EULA to create a server."
 
     return errors
 
@@ -77,6 +79,7 @@ async def new_submit(
     port: int = Form(...),
     server_jar: str = Form(...),
     jvm_extra_args: str = Form(""),
+    accept_eula: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
     form = {
         "name": name.strip(),
@@ -84,6 +87,7 @@ async def new_submit(
         "port": port,
         "server_jar": server_jar.strip(),
         "jvm_extra_args": jvm_extra_args.strip(),
+        "accept_eula": bool(accept_eula),
     }
     errors = _validate_static(form)
 
