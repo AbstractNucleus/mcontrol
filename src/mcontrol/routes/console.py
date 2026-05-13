@@ -17,6 +17,7 @@ If no SSE is open for a server, POST returns 409.
 """
 
 import asyncio
+from collections import defaultdict
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -32,6 +33,9 @@ _RCON_PORT = 25575
 _active_connections: dict[str, rcon._RconConnection] = {}
 # Server name → asyncio.Queue[str] of output lines (responses from POST flow back here).
 _output_queues: dict[str, asyncio.Queue] = {}
+# Server name → Lock held for the entire lifetime of an open SSE stream.
+# Prevents two concurrent clients from racing on _active_connections.
+_connection_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 _RCON_DISABLED_MSG = (
     b"data: [info] RCON is not enabled for this server. Set "
@@ -63,37 +67,45 @@ async def _stream(
         yield _RCON_DISABLED_MSG
         return
 
-    network_name = await docker_client.find_network_name(container_name)
-    if network_name is None:
-        yield b"data: [error] no docker network found for container\n\n"
+    lock = _connection_locks[name]
+    if lock.locked():
+        yield b"data: [error] console already open in another tab\n\n"
         return
-
-    await docker_client.attach_self_to_network(network_name)
+    await lock.acquire()
     try:
-        conn = await rcon.connect(container_name, _RCON_PORT, password)
-        queue: asyncio.Queue = asyncio.Queue()
-        _active_connections[name] = conn
-        _output_queues[name] = queue
+        network_name = await docker_client.find_network_name(container_name)
+        if network_name is None:
+            yield b"data: [error] no docker network found for container\n\n"
+            return
 
+        await docker_client.attach_self_to_network(network_name)
         try:
-            yield b"data: [info] rcon connected\n\n"
-            # Poll for client disconnect alongside queue reads. Short timeout
-            # keeps the loop responsive when the SSE consumer goes away.
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    line = await asyncio.wait_for(queue.get(), timeout=2.0)
-                except TimeoutError:
-                    yield b": keepalive\n\n"
-                    continue
-                yield f"data: {line}\n\n".encode()
+            conn = await rcon.connect(container_name, _RCON_PORT, password)
+            queue: asyncio.Queue = asyncio.Queue()
+            _active_connections[name] = conn
+            _output_queues[name] = queue
+
+            try:
+                yield b"data: [info] rcon connected\n\n"
+                # Poll for client disconnect alongside queue reads. Short timeout
+                # keeps the loop responsive when the SSE consumer goes away.
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        line = await asyncio.wait_for(queue.get(), timeout=2.0)
+                    except TimeoutError:
+                        yield b": keepalive\n\n"
+                        continue
+                    yield f"data: {line}\n\n".encode()
+            finally:
+                _active_connections.pop(name, None)
+                _output_queues.pop(name, None)
+                await conn.close()
         finally:
-            _active_connections.pop(name, None)
-            _output_queues.pop(name, None)
-            await conn.close()
+            await docker_client.detach_self_from_network(network_name)
     finally:
-        await docker_client.detach_self_from_network(network_name)
+        lock.release()
 
 
 @router.get("/servers/{name}/rcon")
