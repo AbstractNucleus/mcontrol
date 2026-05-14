@@ -15,7 +15,7 @@ from pathlib import Path
 
 import aiodocker
 
-from mcontrol import db, docker_client
+from mcontrol import db, db_async, docker_client
 
 
 async def run_discovery(docker: aiodocker.Docker, base_path: Path) -> int:
@@ -40,9 +40,9 @@ async def run_discovery(docker: aiodocker.Docker, base_path: Path) -> int:
         if entry.name.startswith("."):
             continue
 
-        existing = db.get_server(entry.name)
+        existing = await db_async.get_server(entry.name)
         if existing is None:
-            db.insert_server(
+            await db_async.insert_server(
                 name=entry.name,
                 dir=str(entry),
                 state=states.get(entry.name, "unknown"),
@@ -52,7 +52,7 @@ async def run_discovery(docker: aiodocker.Docker, base_path: Path) -> int:
             # the actual docker container may be named differently from the
             # directory once an operator has repointed it.
             container_name = db.container_name_for(existing)
-            db.update_server_state(
+            await db_async.update_server_state(
                 name=entry.name,
                 state=states.get(container_name, "unknown"),
             )

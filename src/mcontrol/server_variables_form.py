@@ -7,7 +7,7 @@ jvm_extra_args) fields with the same rules.
 
 import socket
 
-from mcontrol import db
+from mcontrol import db_async
 
 PORT_MIN = 1024
 PORT_MAX = 65535
@@ -27,14 +27,14 @@ def validate(form: dict) -> dict[str, str]:
     return errors
 
 
-def check_port_collision(exclude_name: str | None, port: int) -> str | None:
+async def check_port_collision(exclude_name: str | None, port: int) -> str | None:
     """Return an error string if *port* is already used by another server.
 
     Pass *exclude_name* as the current server's name so a server can keep
     its own port without triggering a false collision. Pass ``None`` for
     new-server forms where no existing row should be excluded.
     """
-    for row in db.list_servers():
+    for row in await db_async.list_servers():
         if exclude_name is not None and row["name"] == exclude_name:
             continue
         row_vars = row.get("variables") or {}

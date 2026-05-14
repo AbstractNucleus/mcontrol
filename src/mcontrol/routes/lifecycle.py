@@ -20,7 +20,7 @@ import aiodocker
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db, docker_client, lifecycle_state
+from mcontrol import db, db_async, docker_client, lifecycle_state
 from mcontrol.routes._dependencies import get_docker, get_server_or_404
 from mcontrol.templates import templates
 
@@ -54,7 +54,7 @@ async def start(
         await docker_client.start(docker, db.container_name_for(server))
     except TimeoutError:
         return _pill_and_buttons(server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
-    db.update_server_state(name=name, state="running")
+    await db_async.update_server_state(name=name, state="running")
     return _pill_and_buttons(server, "running")
 
 
@@ -68,7 +68,7 @@ async def stop(
         await docker_client.stop(docker, db.container_name_for(server))
     except TimeoutError:
         return _pill_and_buttons(server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
-    db.update_server_state(name=name, state="exited")
+    await db_async.update_server_state(name=name, state="exited")
     return _pill_and_buttons(server, "exited")
 
 
@@ -82,5 +82,5 @@ async def restart(
         await docker_client.restart(docker, db.container_name_for(server))
     except TimeoutError:
         return _pill_and_buttons(server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
-    db.update_server_state(name=name, state="running")
+    await db_async.update_server_state(name=name, state="running")
     return _pill_and_buttons(server, "running")

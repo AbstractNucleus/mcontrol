@@ -25,7 +25,7 @@ import aiodocker
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db, membership, server_rcon
+from mcontrol import db_async, membership, server_rcon
 from mcontrol.routes._dependencies import (
     get_docker,
     get_server_or_404,
@@ -89,7 +89,7 @@ def _members_view(server_dir: Path) -> tuple[list[dict], list[str]]:
     return members, malformed
 
 
-def _card(
+async def _card(
     request: Request,
     server: dict,
     *,
@@ -105,7 +105,7 @@ def _card(
             "server": server,
             "members": members,
             "malformed": malformed,
-            "roster": db.list_players(),
+            "roster": await db_async.list_players(),
             "running": server.get("state") == "running",
             "flash": flash,
         },
@@ -195,7 +195,7 @@ async def _flip(
 async def get_card(
     request: Request, server: dict = Depends(get_server_or_404)
 ) -> HTMLResponse:
-    return _card(request, server)
+    return await _card(request, server)
 
 
 @router.post("/servers/{name}/players", response_class=HTMLResponse)
@@ -206,9 +206,9 @@ async def add_from_roster(
     roster_uuid: str = Form(...),
 ) -> HTMLResponse:
     uuid = validate_uuid(roster_uuid)
-    player = db.get_player(uuid)
+    player = await db_async.get_player(uuid)
     if player is None:
-        return _card(
+        return await _card(
             request,
             server,
             flash=_error("That UUID is not in the roster."),
@@ -222,7 +222,7 @@ async def add_from_roster(
         name=player["name"],
         enabled=True,
     )
-    return _card(request, server, flash=flash)
+    return await _card(request, server, flash=flash)
 
 
 @router.post(
@@ -235,7 +235,7 @@ async def toggle_whitelist(
     uuid: str = Depends(validate_uuid),
     enabled: bool = Form(False),
 ) -> HTMLResponse:
-    player_name = _resolve_player_name(server, uuid)
+    player_name = await _resolve_player_name(server, uuid)
     flash = await _flip(
         docker,
         server,
@@ -244,7 +244,7 @@ async def toggle_whitelist(
         name=player_name,
         enabled=enabled,
     )
-    return _card(request, server, flash=flash)
+    return await _card(request, server, flash=flash)
 
 
 @router.post("/servers/{name}/players/{uuid}/op", response_class=HTMLResponse)
@@ -255,14 +255,14 @@ async def toggle_op(
     uuid: str = Depends(validate_uuid),
     enabled: bool = Form(False),
 ) -> HTMLResponse:
-    player_name = _resolve_player_name(server, uuid)
+    player_name = await _resolve_player_name(server, uuid)
     flash = await _flip(
         docker, server, kind="op", uuid=uuid, name=player_name, enabled=enabled
     )
-    return _card(request, server, flash=flash)
+    return await _card(request, server, flash=flash)
 
 
-def _resolve_player_name(server: dict, uuid: str) -> str:
+async def _resolve_player_name(server: dict, uuid: str) -> str:
     """Best-effort player-name lookup for an RCON command.
 
     Roster takes precedence (decision 027 — roster row is the
@@ -270,7 +270,7 @@ def _resolve_player_name(server: dict, uuid: str) -> str:
     the on-disk files (handles the case where a UUID is on a server
     but isn't in the roster yet — Import is the canonical fix, but
     toggling should still work)."""
-    player = db.get_player(uuid)
+    player = await db_async.get_player(uuid)
     if player is not None:
         return player["name"]
     server_dir = Path(server["dir"])

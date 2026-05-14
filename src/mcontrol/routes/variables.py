@@ -13,7 +13,7 @@ is the only entry point in the UI.
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db, server_variables_form
+from mcontrol import db_async, server_variables_form
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.templates import render_variables_card, templates
 
@@ -67,7 +67,7 @@ async def post(
     errors = server_variables_form.validate(form)
 
     if not errors:
-        collision = server_variables_form.check_port_collision(name, port)
+        collision = await server_variables_form.check_port_collision(name, port)
         if collision:
             errors["port"] = collision
 
@@ -83,7 +83,7 @@ async def post(
     else:
         updated.pop("jvm_extra_args", None)
 
-    db.update_variables(name=name, variables=updated)
+    await db_async.update_variables(name=name, variables=updated)
 
     refreshed = {**server, "variables": updated}
     return render_variables_card(request, refreshed)

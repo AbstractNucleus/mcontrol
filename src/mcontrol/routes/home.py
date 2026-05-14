@@ -6,7 +6,7 @@ import aiodocker
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from mcontrol import __version__, db, discovery, resources
+from mcontrol import __version__, db, db_async, discovery, resources
 from mcontrol.routes._dependencies import get_docker
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
@@ -41,7 +41,7 @@ async def home(
     request: Request,
     docker: aiodocker.Docker = Depends(get_docker),
 ) -> HTMLResponse:
-    servers = db.list_servers()
+    servers = await db_async.list_servers()
 
     container_names = [db.container_name_for(row) for row in servers]
     stats_results = await asyncio.gather(

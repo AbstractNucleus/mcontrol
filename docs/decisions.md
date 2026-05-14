@@ -57,6 +57,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 036 | Lifespan-scoped aiodocker client, injected via Depends       | Accepted | 2026-05-14 |
 | 037 | new-server hardening: surfaced rollback errors + TCP-probe port collision | Accepted | 2026-05-14 |
 | 038 | Shared modal helper: focus trap + return-focus via `data-modal-root` | Accepted | 2026-05-15 |
+| 039 | `db`: route sync supabase-py calls through `asyncio.to_thread`       | Accepted | 2026-05-15 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -700,3 +701,20 @@ Rejected:
 - **Server-render a focus-target attribute (`hx-focus="#…"`).** Would mean every route handler that returns a modal partial knows the id of the calling button. The button doesn't have a stable id today, and giving each tombstone-row Delete button a unique id just so the modal can return focus is busywork; the client-side capture is one map keyed by slot id.
 
 Trade-off: `static/modals.js` is the first piece of bespoke a11y JS in the panel. The other surfaces flagged by #110 (lifecycle buttons, flash, console) need different handling (button labelling, `aria-live` regions, console scroll-into-view) and are not lumped into this helper. If a future surface ever needs the same overlay pattern, it opts in with `data-modal-root` + a `#…-modal` slot id added to the two `if (target.id !== …)` guards in the helper — small, local, and a deliberate gate so the helper doesn't accumulate unrelated behaviour.
+
+## 039. `db`: route sync supabase-py calls through `asyncio.to_thread`
+
+**Status:** Accepted · 2026-05-15
+
+`supabase-py` is a synchronous HTTP client (its async cousin is `postgrest-py`). Pre-decision, every async FastAPI handler that touched the database called `db.<fn>(...)` directly: each PostgREST round-trip blocked the event loop for the full request latency, so under concurrent load the panel serialized on Supabase I/O — home renders waited on the same loop as lifecycle POSTs, console SSE keepalives, and the `/healthz` probes. The only call site that already did the right thing was `healthz._probe_db`, which wraps `db.ping` in `asyncio.to_thread`.
+
+This entry adds `src/mcontrol/db_async.py`: a thin async shim whose every wrapper is `return await asyncio.to_thread(db.<fn>, ...)`. Async route handlers import `db_async` and `await db_async.<fn>(...)` instead of calling `db.<fn>(...)` directly. Sync helpers that contain `db.*` calls (`server_variables_form.check_port_collision`, `routes/players._build_view`, `routes/players._memberships_for`, `routes/server_players._card`, `routes/server_players._resolve_player_name`) become `async def` and await through the shim. `db.container_name_for` stays sync and is called directly — it's pure-Python row inspection, no I/O.
+
+Rejected:
+
+- **Replace `supabase-py` with async `postgrest-py`.** The right long-term move (no threadpool hop, native async, one fewer abstraction), but the `db` surface is small, well-scoped, and the threadpool wrap is mechanical with zero behavioural change. A real swap means changing the query API at every call site, re-validating the auth setup, and handling response shape differences. Out of scope for the urgent "stop blocking the event loop" fix; a follow-up issue can do it once the panel's other slices settle.
+- **Wrap every call inline at the call site (`await asyncio.to_thread(db.list_servers)` per site).** Fine for a handful of sites, but `db.*` is called from 30+ places. Inline wraps mean every new route handler that touches the DB has to remember the pattern; the shim makes it the obvious move (`db_async` is what you import, `db` is just for `container_name_for`).
+- **Make `db_async` re-export `container_name_for` as a passthrough.** Tempting for surface symmetry, but it would hide the sync/async distinction. Keeping `container_name_for` on `db` and only on `db` makes the "is this an I/O call?" question visible at the import site.
+- **Convert the FastAPI sync `Depends` (`get_server_or_404`, `get_player_or_404`) by leaving them sync.** FastAPI runs sync dependencies on a threadpool already, so they aren't strictly blocking the event loop — but they'd be the only sync `db.*` call sites left in the route layer, and the "every async path goes through `db_async`" invariant is easier to keep when there are no exceptions. They become `async def` and await through the shim like everything else.
+
+Trade-off: every DB call now pays for one threadpool hop (Python's default thread pool, default size ~min(32, cpus+4)). At single-host scale with a handful of concurrent requests, the hop cost is negligible compared to the PostgREST round-trip itself. The shim adds one module and a 1:1 wrapper per helper — small surface to maintain and a clear seam to delete when `postgrest-py` async lands.

@@ -24,7 +24,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db, migration, server_variables_form
+from mcontrol import db_async, migration, server_variables_form
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
@@ -114,7 +114,7 @@ async def run_migration(
     }
     errors = server_variables_form.validate(form)
     if not errors:
-        collision = server_variables_form.check_port_collision(name, port)
+        collision = await server_variables_form.check_port_collision(name, port)
         if collision is not None:
             errors["port"] = collision
 
@@ -140,8 +140,8 @@ async def run_migration(
         variables["jvm_extra_args"] = form["jvm_extra_args"]
 
     migration.migrate(name, variables, base)
-    db.update_variables(name=name, variables=variables)
-    db.mark_scaffolded(name=name)
+    await db_async.update_variables(name=name, variables=variables)
+    await db_async.mark_scaffolded(name=name)
 
     response = HTMLResponse("", status_code=200)
     response.headers["HX-Redirect"] = f"/servers/{name}"
