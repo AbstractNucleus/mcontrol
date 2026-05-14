@@ -25,7 +25,7 @@ import aiodocker
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 
-from mcontrol import db, docker_client, rcon, server_props
+from mcontrol import db, docker_client, rcon, server_props, server_rcon
 from mcontrol.routes._dependencies import get_docker, get_server_or_404
 
 router = APIRouter()
@@ -84,6 +84,7 @@ async def _stream(
         await docker_client.attach_self_to_network(docker, network_name)
         try:
             conn = await rcon.connect(container_name, _RCON_PORT, password)
+            server_rcon.record_authed_password(name, password)
             queue: asyncio.Queue = asyncio.Queue()
             _active_connections[name] = conn
             _output_queues[name] = queue
