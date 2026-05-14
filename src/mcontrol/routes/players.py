@@ -29,11 +29,12 @@ returns the full page.
 import re
 from pathlib import Path
 
+import aiodocker
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol import __version__, db, membership, mojang, server_props, server_rcon
-from mcontrol.routes._dependencies import get_player_or_404
+from mcontrol.routes._dependencies import get_docker, get_player_or_404
 from mcontrol.templates import templates
 
 router = APIRouter()
@@ -247,7 +248,9 @@ async def remove_modal(
     )
 
 
-async def _cascade_remove(player: dict) -> tuple[list[str], list[dict]]:
+async def _cascade_remove(
+    docker: aiodocker.Docker, player: dict
+) -> tuple[list[str], list[dict]]:
     """Run a per-server remove for every server where this UUID has a
     membership. Returns ``(removed_from, failures)`` where:
 
@@ -291,7 +294,7 @@ async def _cascade_remove(player: dict) -> tuple[list[str], list[dict]]:
                     if kind == "whitelist"
                     else f"deop {name}"
                 )
-                await server_rcon.run_command(server, cmd)
+                await server_rcon.run_command(docker, server, cmd)
             else:
                 server_dir = Path(server["dir"])
                 if kind == "whitelist":
@@ -345,6 +348,7 @@ def _cascade_flash(player_name: str, removed: list[str], failures: list[dict]) -
 async def remove(
     request: Request,
     player: dict = Depends(get_player_or_404),
+    docker: aiodocker.Docker = Depends(get_docker),
     scope: str = Form(...),
 ) -> HTMLResponse:
     uuid = player["uuid"]
@@ -362,7 +366,7 @@ async def remove(
         return _partial(request, _ctx(_build_view(), flash=flash))
 
     if scope == "all":
-        removed, failures = await _cascade_remove(player)
+        removed, failures = await _cascade_remove(docker, player)
         db.delete_player(uuid)
         flash = _cascade_flash(player["name"], removed, failures)
         return _partial(request, _ctx(_build_view(), flash=flash))

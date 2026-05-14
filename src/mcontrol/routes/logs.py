@@ -4,17 +4,18 @@ extension)."""
 
 from collections.abc import AsyncIterator
 
+import aiodocker
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from mcontrol import db, docker_client
-from mcontrol.routes._dependencies import get_server_or_404
+from mcontrol.routes._dependencies import get_docker, get_server_or_404
 
 router = APIRouter()
 
 
-async def _sse(container_name: str) -> AsyncIterator[bytes]:
-    async for line in docker_client.logs_stream(container_name, tail=200):
+async def _sse(docker: aiodocker.Docker, container_name: str) -> AsyncIterator[bytes]:
+    async for line in docker_client.logs_stream(docker, container_name, tail=200):
         # Each line becomes one SSE message. \n inside a line would split
         # the SSE payload, so flatten any internal newlines.
         flat = line.replace("\r", "").replace("\n", " ")
@@ -22,6 +23,11 @@ async def _sse(container_name: str) -> AsyncIterator[bytes]:
 
 
 @router.get("/servers/{name}/logs")
-async def stream(server: dict = Depends(get_server_or_404)) -> StreamingResponse:
+async def stream(
+    server: dict = Depends(get_server_or_404),
+    docker: aiodocker.Docker = Depends(get_docker),
+) -> StreamingResponse:
     container_name = db.container_name_for(server)
-    return StreamingResponse(_sse(container_name), media_type="text/event-stream")
+    return StreamingResponse(
+        _sse(docker, container_name), media_type="text/event-stream"
+    )

@@ -37,7 +37,7 @@ def fake_stats(monkeypatch):
         "mem_limit": 12 * 1024**3,  # 12.0 GiB
     }
 
-    async def fake(container_name: str):
+    async def fake(_docker, container_name: str):
         captured["container_name"] = container_name
         return captured.get("override", payload)
 

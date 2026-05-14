@@ -2,7 +2,7 @@
 
 Three pure-ish functions feeding the detail-page Resources card:
 
-  - read_container_stats(container_name) -> dict
+  - read_container_stats(docker, container_name) -> dict
         Tagged dict: {"status": "ok", cpu_percent, mem_used, mem_limit}
         on success; {"status": "not-running"} when the container exists
         but isn't running; {"status": "unreachable"} when the daemon is
@@ -30,43 +30,34 @@ from typing import Any
 
 import aiodocker
 
-from mcontrol.settings import get_settings
 
-
-async def read_container_stats(container_name: str) -> dict[str, Any]:
+async def read_container_stats(
+    docker: aiodocker.Docker, container_name: str
+) -> dict[str, Any]:
     try:
-        docker = aiodocker.Docker(url=get_settings().docker_host)
+        container = await docker.containers.get(container_name)
     except Exception:
         return {"status": "unreachable"}
 
     try:
-        try:
-            container = await docker.containers.get(container_name)
-        except Exception:
-            return {"status": "unreachable"}
+        info = await container.show()
+    except Exception:
+        return {"status": "unreachable"}
+    if not info.get("State", {}).get("Running", False):
+        return {"status": "not-running"}
 
-        try:
-            info = await container.show()
-        except Exception:
-            return {"status": "unreachable"}
-        if not info.get("State", {}).get("Running", False):
-            return {"status": "not-running"}
+    try:
+        result = await container.stats(stream=False)
+    except Exception:
+        return {"status": "unreachable"}
+    snapshot = result[0] if isinstance(result, list) else result
 
-        try:
-            result = await container.stats(stream=False)
-        except Exception:
-            return {"status": "unreachable"}
-        snapshot = result[0] if isinstance(result, list) else result
-
-        return {
-            "status": "ok",
-            "cpu_percent": _cpu_percent(snapshot),
-            "mem_used": _mem_used(snapshot),
-            "mem_limit": int(snapshot.get("memory_stats", {}).get("limit", 0) or 0),
-        }
-    finally:
-        with suppress(Exception):
-            await docker.close()
+    return {
+        "status": "ok",
+        "cpu_percent": _cpu_percent(snapshot),
+        "mem_used": _mem_used(snapshot),
+        "mem_limit": int(snapshot.get("memory_stats", {}).get("limit", 0) or 0),
+    }
 
 
 def _cpu_percent(snapshot: dict[str, Any]) -> float:

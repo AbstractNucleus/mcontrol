@@ -198,7 +198,7 @@ async def test_add_from_roster_running_uses_rcon(client, fake_db, tmp_path, monk
 
     captured: dict = {}
 
-    async def fake_run(server, command):
+    async def fake_run(_docker, server, command):
         captured["command"] = command
         return "Added Notch to the whitelist"
 
@@ -220,7 +220,7 @@ async def test_add_from_roster_running_surfaces_rcon_unavailable_as_error_flash(
     fake_db["servers"]["atm10"] = _server_row(tmp_path, state="running")
     fake_db["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
 
-    async def fake_run(server, command):
+    async def fake_run(_docker, server, command):
         raise server_rcon.RconUnavailable("RCON is not enabled in server.properties.")
 
     monkeypatch.setattr(server_rcon, "run_command", fake_run)
@@ -283,7 +283,7 @@ async def test_toggle_whitelist_running_uses_rcon_remove(
 
     captured: dict = {}
 
-    async def fake_run(server, command):
+    async def fake_run(_docker, server, command):
         captured["command"] = command
         return "Removed Notch from the whitelist"
 
@@ -388,7 +388,7 @@ async def test_toggle_op_running_uses_rcon_op_and_deop(
 
     commands: list[str] = []
 
-    async def fake_run(server, command):
+    async def fake_run(_docker, server, command):
         commands.append(command)
         return ""
 

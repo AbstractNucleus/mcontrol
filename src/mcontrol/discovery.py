@@ -13,10 +13,12 @@ manager.
 
 from pathlib import Path
 
+import aiodocker
+
 from mcontrol import db, docker_client
 
 
-async def run_discovery(base_path: Path) -> int:
+async def run_discovery(docker: aiodocker.Docker, base_path: Path) -> int:
     """Walk base_path, insert new rows, refresh state on existing rows.
 
     Returns the count of dirs seen. If base_path doesn't exist, returns
@@ -27,7 +29,7 @@ async def run_discovery(base_path: Path) -> int:
     if not base_path.exists():
         return 0
 
-    states = await docker_client.container_states_by_name()
+    states = await docker_client.container_states_by_name(docker)
     count = 0
     for entry in sorted(base_path.iterdir(), key=lambda p: p.name):
         if not entry.is_dir():

@@ -1,7 +1,8 @@
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
+import aiodocker
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -38,15 +39,26 @@ logger = logging.getLogger("mcontrol")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings: Settings = app.state.settings
+    # Single aiodocker client lives for the whole process lifetime
+    # (decision #98). Routes inject it via Depends(get_docker); non-route
+    # callers (discovery here, healthz, resources, server_rcon) get it
+    # passed in explicitly.
+    docker = aiodocker.Docker(url=settings.docker_host)
+    app.state.docker = docker
+
     base_path = Path(settings.server_base_path)
     try:
-        count = await discovery.run_discovery(base_path)
+        count = await discovery.run_discovery(docker, base_path)
         logger.info("discovery: %d server dir(s) seen under %s", count, base_path)
     except Exception:
         # Discovery must never block the app from coming up — the home page
         # surfaces an empty state and the operator can investigate from there.
         logger.exception("discovery failed; continuing without it")
-    yield
+    try:
+        yield
+    finally:
+        with suppress(Exception):
+            await docker.close()
 
 
 def create_app() -> FastAPI:
@@ -87,8 +99,10 @@ def create_app() -> FastAPI:
     app.include_router(trash.router)
 
     @app.get("/healthz")
-    async def healthz_endpoint() -> JSONResponse:
-        status_code, payload = await healthz.build_report()
+    async def healthz_endpoint(request: Request) -> JSONResponse:
+        status_code, payload = await healthz.build_report(
+            request.app.state.docker
+        )
         return JSONResponse(status_code=status_code, content=payload)
 
     # Custom error pages (slice 12, decision 032). HTMX requests still

@@ -21,11 +21,12 @@ from collections import defaultdict
 from collections.abc import AsyncIterator
 from pathlib import Path
 
+import aiodocker
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from mcontrol import db, docker_client, rcon, server_props
-from mcontrol.routes._dependencies import get_server_or_404
+from mcontrol.routes._dependencies import get_docker, get_server_or_404
 
 router = APIRouter()
 
@@ -59,6 +60,7 @@ def _read_rcon_properties(props_path: Path) -> tuple[bool, str]:
 
 async def _stream(
     request: Request,
+    docker: aiodocker.Docker,
     name: str,
     container_name: str,
     server_dir: Path,
@@ -74,12 +76,12 @@ async def _stream(
         return
     await lock.acquire()
     try:
-        network_name = await docker_client.find_network_name(container_name)
+        network_name = await docker_client.find_network_name(docker, container_name)
         if network_name is None:
             yield b"data: [error] no docker network found for container\n\n"
             return
 
-        await docker_client.attach_self_to_network(network_name)
+        await docker_client.attach_self_to_network(docker, network_name)
         try:
             conn = await rcon.connect(container_name, _RCON_PORT, password)
             queue: asyncio.Queue = asyncio.Queue()
@@ -104,17 +106,26 @@ async def _stream(
                 _output_queues.pop(name, None)
                 await conn.close()
         finally:
-            await docker_client.detach_self_from_network(network_name)
+            await docker_client.detach_self_from_network(docker, network_name)
     finally:
         lock.release()
 
 
 @router.get("/servers/{name}/rcon")
 async def stream(
-    request: Request, name: str, server: dict = Depends(get_server_or_404)
+    request: Request,
+    name: str,
+    server: dict = Depends(get_server_or_404),
+    docker: aiodocker.Docker = Depends(get_docker),
 ) -> StreamingResponse:
     return StreamingResponse(
-        _stream(request, name, db.container_name_for(server), Path(server["dir"])),
+        _stream(
+            request,
+            docker,
+            name,
+            db.container_name_for(server),
+            Path(server["dir"]),
+        ),
         media_type="text/event-stream",
     )
 

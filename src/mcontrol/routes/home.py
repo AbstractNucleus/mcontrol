@@ -2,10 +2,12 @@ import asyncio
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, Response
+import aiodocker
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from mcontrol import __version__, db, discovery, resources
+from mcontrol.routes._dependencies import get_docker
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
@@ -35,12 +37,18 @@ def _format_memory(stats: object) -> str | None:
 
 
 @router.get("/", response_class=HTMLResponse)
-async def home(request: Request) -> HTMLResponse:
+async def home(
+    request: Request,
+    docker: aiodocker.Docker = Depends(get_docker),
+) -> HTMLResponse:
     servers = db.list_servers()
 
     container_names = [db.container_name_for(row) for row in servers]
     stats_results = await asyncio.gather(
-        *(resources.read_container_stats(name) for name in container_names),
+        *(
+            resources.read_container_stats(docker, name)
+            for name in container_names
+        ),
         return_exceptions=True,
     )
 
@@ -57,7 +65,10 @@ async def home(request: Request) -> HTMLResponse:
 
 
 @router.post("/rescan")
-async def rescan(request: Request) -> Response:
+async def rescan(
+    request: Request,
+    docker: aiodocker.Docker = Depends(get_docker),
+) -> Response:
     """Operator-triggered discovery (decision 034).
 
     Re-runs the same idempotent `discovery.run_discovery` routine the
@@ -80,7 +91,7 @@ async def rescan(request: Request) -> Response:
             detail=f"server_base_path does not exist: {base_path}",
         )
 
-    count = await discovery.run_discovery(base_path)
+    count = await discovery.run_discovery(docker, base_path)
     logger.info("rescan: %d server dir(s) seen under %s", count, base_path)
 
     if request.headers.get("hx-request"):

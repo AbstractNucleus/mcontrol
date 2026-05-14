@@ -478,7 +478,7 @@ async def test_post_scope_all_running_uses_rcon(
 
     commands: list[str] = []
 
-    async def fake_run(server, command):
+    async def fake_run(_docker, server, command):
         commands.append(command)
         return ""
 

@@ -52,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Panel host-bind parameterised in `docker-compose.yml` via `BSERVER_HOST_BIND_IP` (defaults to `127.0.0.1` for local dev)
 - TLS termination moved to aserver-nginx; in-repo Caddy service removed
 - Docker image references pinned to specific patch-level tags (no floating `:latest`)
+- aiodocker client is now lifespan-scoped (constructed once at startup, closed at shutdown) and injected into routes via `Depends(get_docker)`; per-call construction removed from ~10 sites
 
 ### Removed
 

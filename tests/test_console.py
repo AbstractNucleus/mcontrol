@@ -19,13 +19,13 @@ def fake_docker_network(monkeypatch):
     attaches: list[str] = []
     detaches: list[str] = []
 
-    async def fake_find(name):
+    async def fake_find(_docker, name):
         return f"{name}_default"
 
-    async def fake_attach(network):
+    async def fake_attach(_docker, network):
         attaches.append(network)
 
-    async def fake_detach(network):
+    async def fake_detach(_docker, network):
         detaches.append(network)
 
     monkeypatch.setattr(docker_client, "find_network_name", fake_find)
@@ -99,7 +99,7 @@ async def test_stream_attaches_then_detaches_network(
         async def is_disconnected(self):
             return True
 
-    gen = console._stream(_MockRequest(), "atm10", "atm10", tmp_path)
+    gen = console._stream(_MockRequest(), object(), "atm10", "atm10", tmp_path)
     chunks: list[bytes] = []
     async for chunk in gen:
         chunks.append(chunk)
@@ -123,7 +123,7 @@ async def test_stream_yields_friendly_message_when_rcon_disabled(
             return False
 
     chunks: list[bytes] = []
-    async for chunk in console._stream(_MockRequest(), "atm10", "atm10", tmp_path):
+    async for chunk in console._stream(_MockRequest(), object(), "atm10", "atm10", tmp_path):
         chunks.append(chunk)
 
     body = b"".join(chunks)
@@ -145,7 +145,7 @@ async def test_stream_yields_friendly_message_when_password_empty(
             return False
 
     chunks: list[bytes] = []
-    async for chunk in console._stream(_MockRequest(), "atm10", "atm10", tmp_path):
+    async for chunk in console._stream(_MockRequest(), object(), "atm10", "atm10", tmp_path):
         chunks.append(chunk)
 
     body = b"".join(chunks)
@@ -165,7 +165,7 @@ async def test_stream_yields_friendly_message_when_properties_missing(
             return False
 
     chunks: list[bytes] = []
-    async for chunk in console._stream(_MockRequest(), "atm10", "atm10", tmp_path):
+    async for chunk in console._stream(_MockRequest(), object(), "atm10", "atm10", tmp_path):
         chunks.append(chunk)
 
     body = b"".join(chunks)
@@ -232,7 +232,7 @@ async def test_stream_rejects_concurrent_connection(
 
         chunks: list[bytes] = []
         async for chunk in console._stream(
-            _MockRequest(), "concurrent_test", "concurrent_test", tmp_path
+            _MockRequest(), object(), "concurrent_test", "concurrent_test", tmp_path
         ):
             chunks.append(chunk)
     finally:

@@ -6,7 +6,7 @@ def fake_logs(monkeypatch):
     """Stub docker_client.logs_stream to yield predefined lines."""
     lines: list[str] = []
 
-    async def fake(name, *, tail=200):
+    async def fake(_docker, name, *, tail=200):
         for line in lines:
             yield line
 
@@ -52,7 +52,7 @@ async def test_logs_endpoint_uses_container_name_override(client, fake_get_serve
     }
     seen: list[str] = []
 
-    async def fake(name, *, tail=200):
+    async def fake(_docker, name, *, tail=200):
         seen.append(name)
         return
         yield  # pragma: no cover  (make this an async generator)

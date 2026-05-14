@@ -24,7 +24,7 @@ def fake_servers(monkeypatch):
 
 @pytest.fixture
 def fake_stats(monkeypatch):
-    async def fake_read(container_name: str):
+    async def fake_read(_docker, container_name: str):
         return {"status": "unreachable"}
     from mcontrol import resources
     monkeypatch.setattr(resources, "read_container_stats", fake_read)
@@ -38,7 +38,7 @@ def stub_discovery(monkeypatch):
 
     seen: list[Path] = []
 
-    async def fake_run(base_path: Path) -> int:
+    async def fake_run(_docker, base_path: Path) -> int:
         seen.append(base_path)
         return 0
 
@@ -72,8 +72,12 @@ async def test_rescan_503_when_base_path_missing(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SERVER_BASE_PATH", str(tmp_path / "does-not-exist"))
 
     from mcontrol.main import create_app
+    from tests.conftest import make_fake_docker
 
     app = create_app()
+    # ASGITransport skips lifespan, so seed app.state.docker for the
+    # Depends(get_docker) on /rescan (#98).
+    app.state.docker = make_fake_docker()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         response = await ac.post("/rescan", headers={"HX-Request": "true"})

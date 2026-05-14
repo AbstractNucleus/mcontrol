@@ -21,11 +21,16 @@ Decision 027:
 
 from pathlib import Path
 
+import aiodocker
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol import db, membership, server_rcon
-from mcontrol.routes._dependencies import get_server_or_404, validate_uuid
+from mcontrol.routes._dependencies import (
+    get_docker,
+    get_server_or_404,
+    validate_uuid,
+)
 from mcontrol.templates import templates
 
 router = APIRouter()
@@ -124,10 +129,17 @@ _RCON_VERB = {
 }
 
 
-async def _apply_running(server: dict, *, kind: str, name: str, enabled: bool) -> dict:
+async def _apply_running(
+    docker: aiodocker.Docker,
+    server: dict,
+    *,
+    kind: str,
+    name: str,
+    enabled: bool,
+) -> dict:
     cmd = f"{_RCON_VERB[(kind, enabled)]} {name}"
     try:
-        response = await server_rcon.run_command(server, cmd)
+        response = await server_rcon.run_command(docker, server, cmd)
     except server_rcon.RconUnavailable as exc:
         return _error(str(exc))
     return _ok(response.strip() or f"{cmd}: ok")
@@ -163,9 +175,19 @@ def _apply_offline(
     return _ok(f"{name} {verb} the {kind} (offline file edit).")
 
 
-async def _flip(server: dict, *, kind: str, uuid: str, name: str, enabled: bool) -> dict:
+async def _flip(
+    docker: aiodocker.Docker,
+    server: dict,
+    *,
+    kind: str,
+    uuid: str,
+    name: str,
+    enabled: bool,
+) -> dict:
     if server.get("state") == "running":
-        return await _apply_running(server, kind=kind, name=name, enabled=enabled)
+        return await _apply_running(
+            docker, server, kind=kind, name=name, enabled=enabled
+        )
     return _apply_offline(server, kind=kind, uuid=uuid, name=name, enabled=enabled)
 
 
@@ -180,6 +202,7 @@ async def get_card(
 async def add_from_roster(
     request: Request,
     server: dict = Depends(get_server_or_404),
+    docker: aiodocker.Docker = Depends(get_docker),
     roster_uuid: str = Form(...),
 ) -> HTMLResponse:
     uuid = validate_uuid(roster_uuid)
@@ -192,7 +215,12 @@ async def add_from_roster(
             status_code=422,
         )
     flash = await _flip(
-        server, kind="whitelist", uuid=uuid, name=player["name"], enabled=True
+        docker,
+        server,
+        kind="whitelist",
+        uuid=uuid,
+        name=player["name"],
+        enabled=True,
     )
     return _card(request, server, flash=flash)
 
@@ -203,12 +231,18 @@ async def add_from_roster(
 async def toggle_whitelist(
     request: Request,
     server: dict = Depends(get_server_or_404),
+    docker: aiodocker.Docker = Depends(get_docker),
     uuid: str = Depends(validate_uuid),
     enabled: bool = Form(False),
 ) -> HTMLResponse:
     player_name = _resolve_player_name(server, uuid)
     flash = await _flip(
-        server, kind="whitelist", uuid=uuid, name=player_name, enabled=enabled
+        docker,
+        server,
+        kind="whitelist",
+        uuid=uuid,
+        name=player_name,
+        enabled=enabled,
     )
     return _card(request, server, flash=flash)
 
@@ -217,12 +251,13 @@ async def toggle_whitelist(
 async def toggle_op(
     request: Request,
     server: dict = Depends(get_server_or_404),
+    docker: aiodocker.Docker = Depends(get_docker),
     uuid: str = Depends(validate_uuid),
     enabled: bool = Form(False),
 ) -> HTMLResponse:
     player_name = _resolve_player_name(server, uuid)
     flash = await _flip(
-        server, kind="op", uuid=uuid, name=player_name, enabled=enabled
+        docker, server, kind="op", uuid=uuid, name=player_name, enabled=enabled
     )
     return _card(request, server, flash=flash)
 

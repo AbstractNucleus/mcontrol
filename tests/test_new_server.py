@@ -21,8 +21,12 @@ def base_dir(tmp_path, monkeypatch, env):
 @pytest.fixture
 async def app_client(base_dir) -> AsyncIterator[AsyncClient]:
     from mcontrol.main import create_app
+    from tests.conftest import make_fake_docker
 
     app = create_app()
+    # ASGITransport doesn't trigger lifespan, so seed app.state.docker
+    # for the Depends(get_docker) the home route resolves (#98).
+    app.state.docker = make_fake_docker()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

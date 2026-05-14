@@ -22,6 +22,8 @@ layer can map to a flash message:
 
 from pathlib import Path
 
+import aiodocker
+
 from mcontrol import docker_client, rcon, server_props
 
 _RCON_PORT = 25575
@@ -34,7 +36,7 @@ class RconUnavailable(Exception):
     error string — those flow back to the caller verbatim."""
 
 
-async def run_command(server: dict, command: str) -> str:
+async def run_command(docker: aiodocker.Docker, server: dict, command: str) -> str:
     """Open RCON, run ``command``, return the server's literal response.
 
     ``server`` is the DB row (we pull ``dir`` for server.properties and
@@ -49,11 +51,11 @@ async def run_command(server: dict, command: str) -> str:
 
     container_name = server.get("container_name") or server["name"]
 
-    network_name = await docker_client.find_network_name(container_name)
+    network_name = await docker_client.find_network_name(docker, container_name)
     if network_name is None:
         raise RconUnavailable(f"No docker network found for {container_name!r}.")
 
-    await docker_client.attach_self_to_network(network_name)
+    await docker_client.attach_self_to_network(docker, network_name)
     try:
         try:
             conn = await rcon.connect(container_name, _RCON_PORT, password)
@@ -66,4 +68,4 @@ async def run_command(server: dict, command: str) -> str:
         finally:
             await conn.close()
     finally:
-        await docker_client.detach_self_from_network(network_name)
+        await docker_client.detach_self_from_network(docker, network_name)
