@@ -15,7 +15,7 @@ from pathlib import Path
 
 import aiodocker
 
-from mcontrol import db, db_async, docker_client
+from mcontrol.infra import db, db_async, docker_client
 
 
 async def run_discovery(docker: aiodocker.Docker, base_path: Path) -> int:

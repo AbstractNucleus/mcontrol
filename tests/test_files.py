@@ -20,7 +20,8 @@ def fake_server(monkeypatch, server_dir: Path):
     rows: dict[str, dict] = {
         "atm10": {"name": "atm10", "dir": str(server_dir)}
     }
-    from mcontrol import db, file_search
+    from mcontrol import file_search
+    from mcontrol.infra import db
     monkeypatch.setattr(db, "get_server", rows.get)
     # The search index is a module-level singleton keyed by server name;
     # clear it between tests so cached state from a previous tmp_path
@@ -1665,7 +1666,8 @@ async def test_search_cache_two_servers_isolated(
         "srvA": {"name": "srvA", "dir": str(a_dir)},
         "srvB": {"name": "srvB", "dir": str(b_dir)},
     }
-    from mcontrol import db, file_search
+    from mcontrol import file_search
+    from mcontrol.infra import db
     monkeypatch.setattr(db, "get_server", rows.get)
     file_search._search_index.clear()
 
@@ -1902,7 +1904,7 @@ async def test_bulk_move_404_when_destination_missing(
 # ---- server_detail integration ----------------------------------------
 
 async def test_server_detail_renders_files_pane(client, monkeypatch) -> None:
-    from mcontrol import db
+    from mcontrol.infra import db
     monkeypatch.setattr(db, "get_server", lambda n: {
         "name": "atm10",
         "container_name": None,

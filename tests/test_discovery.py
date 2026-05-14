@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from mcontrol import discovery
+from mcontrol.domain import discovery
 
 
 @pytest.fixture

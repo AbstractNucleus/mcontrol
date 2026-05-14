@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from mcontrol import scaffolding
+from mcontrol.domain import scaffolding
 from mcontrol.file_writer import atomic_write_text
 
 _LEGACY_FILENAMES = ("Dockerfile", "entrypoint.sh", ".dockerignore", ".env")

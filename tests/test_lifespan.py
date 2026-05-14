@@ -17,7 +17,8 @@ async def test_lifespan_runs_discovery_with_settings_path(
         captured["base_path"] = base_path
         return await fake_run(docker, base_path)
 
-    from mcontrol import discovery, main
+    from mcontrol import main
+    from mcontrol.domain import discovery
 
     monkeypatch.setattr(discovery, "run_discovery", wrapper)
 
@@ -41,7 +42,8 @@ async def test_lifespan_does_not_block_startup_on_discovery_failure(
     async def boom(_docker, _base_path):
         raise RuntimeError("supabase died")
 
-    from mcontrol import discovery, main
+    from mcontrol import main
+    from mcontrol.domain import discovery
 
     monkeypatch.setattr(discovery, "run_discovery", boom)
 
@@ -65,7 +67,8 @@ async def test_lifespan_closes_docker_client_on_shutdown(
     closed during shutdown (decision #98)."""
     monkeypatch.setenv("SERVER_BASE_PATH", str(tmp_path))
 
-    from mcontrol import discovery, main
+    from mcontrol import main
+    from mcontrol.domain import discovery
 
     async def _noop(_docker, _base_path):
         return 0

@@ -17,7 +17,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import health, scaffolding
+from mcontrol.domain import health, scaffolding
 from mcontrol.file_writer import atomic_write_text
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.templates import render_variables_card, templates

@@ -32,7 +32,8 @@ from pathlib import Path
 
 import aiodocker
 
-from mcontrol import docker_client, rcon, server_props
+from mcontrol import rcon, server_props
+from mcontrol.infra import docker_client
 
 _RCON_PORT = 25575
 

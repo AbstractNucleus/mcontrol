@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from mcontrol import server_rcon
+from mcontrol.infra import server_rcon
 
 
 def _server_with_props(tmp_path: Path, props_body: str) -> dict:
@@ -55,7 +55,7 @@ async def test_run_command_raises_when_no_docker_network(tmp_path, monkeypatch):
     async def fake_find(_docker, name):
         return None
 
-    from mcontrol import docker_client
+    from mcontrol.infra import docker_client
 
     monkeypatch.setattr(docker_client, "find_network_name", fake_find)
 

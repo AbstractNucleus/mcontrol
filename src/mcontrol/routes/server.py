@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import __version__, health, lifecycle_state
+from mcontrol import __version__
+from mcontrol.domain import health, lifecycle_state
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.templates import templates
 

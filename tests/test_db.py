@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from mcontrol import db
+from mcontrol.infra import db
 
 
 @pytest.fixture(autouse=True)

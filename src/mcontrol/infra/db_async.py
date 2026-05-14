@@ -19,7 +19,7 @@ of ``mcontrol.db`` still flow through.
 import asyncio
 from typing import Any
 
-from mcontrol import db
+from mcontrol.infra import db
 
 
 async def list_servers() -> list[dict[str, Any]]:

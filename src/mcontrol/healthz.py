@@ -20,7 +20,7 @@ from typing import Any
 
 import aiodocker
 
-from mcontrol import db
+from mcontrol.infra import db
 from mcontrol.settings import get_settings
 
 _TIMEOUT_S = 0.25

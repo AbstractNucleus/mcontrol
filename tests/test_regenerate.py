@@ -10,13 +10,13 @@ from pathlib import Path
 
 import pytest
 
-from mcontrol import scaffolding
+from mcontrol.domain import scaffolding
 
 
 @pytest.fixture
 def fake_db(monkeypatch):
     state = {"rows": []}
-    from mcontrol import db
+    from mcontrol.infra import db
 
     def fake_get_server(name):
         for row in state["rows"]:

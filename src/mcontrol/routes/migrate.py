@@ -25,7 +25,8 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import migration, server_variables_form
+from mcontrol import server_variables_form
+from mcontrol.domain import migration
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.services import server_service
 from mcontrol.settings import Settings

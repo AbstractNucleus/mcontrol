@@ -10,7 +10,7 @@ def fake_logs(monkeypatch):
         for line in lines:
             yield line
 
-    from mcontrol import docker_client
+    from mcontrol.infra import docker_client
 
     monkeypatch.setattr(docker_client, "logs_stream", fake)
     return lines
@@ -19,7 +19,7 @@ def fake_logs(monkeypatch):
 @pytest.fixture
 def fake_get_server(monkeypatch):
     rows: dict[str, dict] = {}
-    from mcontrol import db
+    from mcontrol.infra import db
     monkeypatch.setattr(db, "get_server", lambda n: rows.get(n))
     return rows
 
@@ -57,7 +57,7 @@ async def test_logs_endpoint_uses_container_name_override(client, fake_get_serve
         return
         yield  # pragma: no cover  (make this an async generator)
 
-    from mcontrol import docker_client
+    from mcontrol.infra import docker_client
     monkeypatch.setattr(docker_client, "logs_stream", fake)
 
     async with client.stream("GET", "/servers/atm10/logs") as response:

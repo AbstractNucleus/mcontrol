@@ -7,14 +7,14 @@ import pytest
 @pytest.fixture
 def fake_get_server(monkeypatch):
     rows: dict[str, dict] = {}
-    from mcontrol import db
+    from mcontrol.infra import db
     monkeypatch.setattr(db, "get_server", lambda n: rows.get(n))
     return rows
 
 
 @pytest.fixture
 def fake_docker_network(monkeypatch):
-    from mcontrol import docker_client
+    from mcontrol.infra import docker_client
 
     attaches: list[str] = []
     detaches: list[str] = []

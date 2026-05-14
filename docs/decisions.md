@@ -851,3 +851,50 @@ Tests that reached into the old module's private state and updated to the new mo
 - `tests/test_files.py::test_search_cache_two_servers_isolated` — patched `routes.files._search_index.clear()` and asserted membership on it; now reads `file_search._search_index`.
 
 Trade-off: the package adds one level of import indirection (call sites import `routes.files.tree.router` internally, the public `router` symbol re-exports the merged result). The win is that opening `routes/files/mutate.py` shows only the four mutate endpoints, the lstat/dispatch sequence is one screen tall, and the search-index cache no longer hides at the bottom of a thousand-line route module. The matching test file stays put for now (2k+ lines) — splitting `test_files.py` is its own refactor and was not in scope for this PR.
+
+## 045. layout: routes/ → services/ → domain/ → infra/ tier rule
+
+**Status:** Accepted · 2026-05-15
+
+Issue #100 — pre-decision, `src/mcontrol/` was flat: `discovery.py`, `health.py`, `lifecycle_state.py`, `membership.py`, `migration.py`, `tombstones.py`, `scaffolding/`, `db.py`, `db_async.py`, `docker_client.py`, and `server_rcon.py` all sat next to `routes/` and `services/`. The mental model "discovery → DB → routes → docker_client" was implicit; readers had to learn it by tracing imports.
+
+This entry pins the four-tier rule and reshapes the layout to match it:
+
+- `routes/` — HTTP/HTML layer (FastAPI handlers, Jinja responses, request-shape validation, HTMX template choice). Same as it ever was.
+- `services/` — orchestration (FastAPI-unaware, primitives in, primitives out, raises plain Python exceptions). Established by decision 043.
+- `domain/` — business logic and state model. Pure where it can be; modules that need I/O may keep their direct calls but tier as domain because the rule they encode is what the panel _means_. Moved here: `discovery.py`, `health.py`, `lifecycle_state.py`, `membership.py`, `migration.py`, `tombstones.py`, `scaffolding/` (whole package, including the Jinja `templates/` data directory).
+- `infra/` — external-system adapters. Moved here: `db.py` (supabase-py), `db_async.py` (the `to_thread` shim from decision 039), `docker_client.py` (aiodocker), `server_rcon.py` (mcrcon). Each wraps a single external system; nothing in `infra/` encodes a panel-specific rule.
+
+Hard rules upheld:
+
+- **No behaviour changes.** All 607 tests pass without modification of assertions — the diff is file paths and import strings only. `git mv` preserves history for every move.
+- **`domain/__init__.py` and `infra/__init__.py` start empty.** No re-exports — `from mcontrol.domain import discovery` is the canonical form, not `from mcontrol.domain.discovery import run_discovery` smuggled through a package re-export. Keeps "which tier does this live in?" answerable from the import line.
+- **Tests track the moves.** Each test's `from mcontrol import X` moved to the new package (`from mcontrol.domain import X` or `from mcontrol.infra import X`); the test file names stay parallel-to-src as before. No test logic changed.
+- **`file_search.py` stays at top-level.** Decision 044 just lifted it out of `routes/files.py`; moving it again would be pure churn. It is conceptually domain-ish (FastAPI-unaware, owns app-wide state), but `mcontrol.file_search` is the import that the file-routes package was just rewritten to use, and the location works fine for now.
+- **`server_variables_form.py` stays at top-level.** It is a route-coupled form validator (decision 042); the name is route-shaped and only the three variables-handling routes consume it. Tiering it as domain would lie about its consumers.
+
+What stayed at top-level (and why):
+
+- `main.py` / `__init__.py` — entrypoint.
+- `settings.py` / `config.py` — Pydantic Settings, consumed by every tier.
+- `templates.py` — the shared `Jinja2Templates` instance + the per-state render helpers. It imports `domain.health` to compute the detail-page banner; classifying it as a `routes/` helper would have meant a `routes/templates.py` shadowing the `templates/` data directory, and `infra/` would be wrong because templates are not an external system.
+- `healthz.py` — the deep `/healthz` probe (decision 030). It is a FastAPI route, but it lives at top-level next to `templates.py` because it composes three subsystem probes; the route is registered from `main.create_app` rather than a `routes/` module. Distinct from `domain/health.py` (per-server scaffold-integrity).
+- `mojang.py`, `rcon.py`, `server_props.py`, `resources.py` — single-purpose helpers consumed across tiers. Each is a thin module against one external concern (Mojang API, mcrcon wire protocol, `server.properties` parser, `psutil` + Docker stats). Could plausibly tier as infra; chose to leave them at top-level because they are stateless utilities without the "panel uses N of these as its DB / Docker / RCON" coupling that the four `infra/` modules have. Future re-tier candidates.
+- `file_safety.py`, `file_writer.py`, `file_search.py` — file-tree primitives reused across `routes/files/`, `domain/scaffolding/`, `domain/migration.py`, `domain/membership.py`. Domain-or-infra both fit; staying flat keeps every consumer's import path short.
+
+Rejected:
+
+- **Re-export domain/infra modules from `mcontrol`** to keep `from mcontrol import db` working as before. Cheaper diff (zero test edits), but the rule that #100 wanted to surface is exactly _which tier_ a module sits in — masking that with a top-level re-export would have made every import line lie about where the code lives. The 38 affected `from mcontrol import X` sites were already worth touching.
+- **Class-based DI in `infra/`.** Tempted to make `db`, `db_async`, `docker_client`, `server_rcon` consume an injected client object instead of holding module-level singletons / lifespan state. Decision 043 already rejected class-based services for the same reason: the panel has no shared state to live on `self`, the lifespan-scoped docker client already comes via FastAPI `Depends`, and `monkeypatch.setattr` on the module is what the existing tests use.
+- **Split `discovery.py` into a `domain/discovery_rules.py` + `infra/discovery_walk.py` pair.** The plan explicitly said: "If a 'domain' module currently does I/O (e.g. `discovery.py` directly calls aiodocker), that's fine — leave the I/O calls in place." Splitting it would have been a content refactor in disguise and the structural-move PR was the wrong place for it.
+- **Move `mojang`, `rcon`, `server_props`, `resources` into `infra/`.** Each is a single-file adapter against one external concern, and the rule for `infra/` (decision 045) is broad enough to admit them. Held off because they're thin enough that top-level access is convenient and re-tiering them would either bloat this PR or get redone after a later "what really belongs in infra" pass. The four `infra/` modules picked here are the ones where multiple call sites currently spell out the import path (`db.*`, `db_async.*`, `docker_client.*`, `server_rcon.*`), so the win-per-move was highest.
+- **Move `healthz.py` to `routes/healthz.py`.** Mechanically reasonable — it _is_ a FastAPI route — but it lives at top-level historically because it isn't a per-server route and `main.create_app` registers it directly. Moving it would have been the only "route-shaped" change in this PR, conflating tiering with route organisation. Left for a future cleanup if/when there's more than one app-level route.
+
+Tests that moved with their target module (no logic changes, just import-path updates):
+
+- `tests/test_db.py`, `tests/test_docker_client.py`, `tests/test_server_rcon.py` — `from mcontrol import X` → `from mcontrol.infra import X`.
+- `tests/test_discovery.py`, `tests/test_health.py`, `tests/test_lifecycle_state.py`, `tests/test_membership.py`, `tests/test_migration.py`, `tests/test_scaffolding.py`, `tests/test_tombstones.py`, `tests/test_variables.py`, `tests/test_regenerate.py`, `tests/test_topnav_badge.py` — `from mcontrol import X` → `from mcontrol.domain import X`.
+- `tests/test_players.py`, `tests/test_server_players.py`, `tests/test_server_resources.py` — multi-target imports split across the two new packages.
+- `tests/test_console.py`, `tests/test_lifecycle.py`, `tests/test_logs.py`, `tests/test_new_server.py`, `tests/test_delete_server.py`, `tests/test_bindings.py`, `tests/test_home.py`, `tests/test_migrate_routes.py`, `tests/test_rescan.py`, `tests/test_server_detail.py`, `tests/test_lifespan.py`, `tests/test_files.py` — inline-import patches in fixtures + test bodies updated to the new packages.
+
+Trade-off: every import that used to be one segment past `mcontrol` is now two. The convention is uniform across the repo, so the cost is one-time scrollback while reading and the per-line cost goes away once readers internalise the tier rule. Future modules should land in the right tier or document why — a top-level module is now a deliberate choice (the five listed above), not a default.

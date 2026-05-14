@@ -6,7 +6,7 @@ tests use tmp_path to drive both sides without mocking.
 
 from pathlib import Path
 
-from mcontrol import health, scaffolding
+from mcontrol.domain import health, scaffolding
 
 
 def _scaffolded_row(tmp_path: Path, **overrides) -> dict:

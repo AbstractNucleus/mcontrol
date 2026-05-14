@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from mcontrol import migration
+from mcontrol.domain import migration
 
 # ---- fixture ------------------------------------------------------
 

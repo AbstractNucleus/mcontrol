@@ -32,7 +32,8 @@ from typing import Any
 
 from jinja2 import UndefinedError
 
-from mcontrol import membership, scaffolding, server_rcon
+from mcontrol.domain import membership, scaffolding
+from mcontrol.infra import server_rcon
 
 
 def _compose_path(server: dict[str, Any]) -> Path:

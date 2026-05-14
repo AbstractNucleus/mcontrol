@@ -17,7 +17,8 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from mcontrol import db_async, server_variables_form
+from mcontrol import server_variables_form
+from mcontrol.infra import db_async
 from mcontrol.server_variables_form import LOADERS
 from mcontrol.services import server_service
 from mcontrol.settings import Settings

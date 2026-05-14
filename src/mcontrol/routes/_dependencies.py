@@ -5,7 +5,7 @@ from uuid import UUID
 import aiodocker
 from fastapi import Depends, HTTPException, Request
 
-from mcontrol import db_async
+from mcontrol.infra import db_async
 
 
 def get_docker(request: Request) -> aiodocker.Docker:
