@@ -16,21 +16,15 @@ tombstone invisible to subsequent scans.
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol import db
+from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
 router = APIRouter()
-
-
-def _server_or_404(name: str) -> dict:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
-    return server
 
 
 def _partial(
@@ -56,8 +50,11 @@ def _partial(
 
 
 @router.get("/servers/{name}/delete", response_class=HTMLResponse)
-async def get(request: Request, name: str, confirm: int = 0) -> HTMLResponse:
-    server = _server_or_404(name)
+async def get(
+    request: Request,
+    server: dict = Depends(get_server_or_404),
+    confirm: int = 0,
+) -> HTMLResponse:
     return _partial(request, server, confirm=bool(confirm))
 
 
@@ -65,10 +62,9 @@ async def get(request: Request, name: str, confirm: int = 0) -> HTMLResponse:
 async def post(
     request: Request,
     name: str,
+    server: dict = Depends(get_server_or_404),
     confirm_name: str = Form(""),
 ) -> HTMLResponse:
-    server = _server_or_404(name)
-
     # Re-check state at request time — protects against the operator
     # starting the server in another tab between page render and click.
     if server.get("state") == "running":

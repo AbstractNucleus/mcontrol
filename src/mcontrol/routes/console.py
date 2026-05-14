@@ -21,10 +21,11 @@ from collections import defaultdict
 from collections.abc import AsyncIterator
 from pathlib import Path
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from mcontrol import db, docker_client, rcon, server_props
+from mcontrol.routes._dependencies import get_server_or_404
 
 router = APIRouter()
 
@@ -109,11 +110,9 @@ async def _stream(
 
 
 @router.get("/servers/{name}/rcon")
-async def stream(request: Request, name: str) -> StreamingResponse:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
-
+async def stream(
+    request: Request, name: str, server: dict = Depends(get_server_or_404)
+) -> StreamingResponse:
     return StreamingResponse(
         _stream(request, name, db.container_name_for(server), Path(server["dir"])),
         media_type="text/event-stream",

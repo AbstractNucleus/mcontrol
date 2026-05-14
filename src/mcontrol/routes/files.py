@@ -35,24 +35,18 @@ import stat
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
-from mcontrol import db, file_safety
+from mcontrol import file_safety
 from mcontrol.file_writer import atomic_write_stream_async, atomic_write_text_async
+from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.templates import templates
 
 router = APIRouter()
 
 _TEXT_VIEW_BYTES_MAX = 5 * 1024 * 1024
 _BINARY_SNIFF_BYTES = 8 * 1024
-
-
-def _server_or_404(name: str) -> dict:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
-    return server
 
 
 def _list_dir(target: Path, base: Path) -> list[dict]:
@@ -80,6 +74,7 @@ def _list_dir(target: Path, base: Path) -> list[dict]:
 async def tree(
     request: Request,
     name: str,
+    server: dict = Depends(get_server_or_404),
     path: str = Query(""),
     picker: bool = Query(False),
 ) -> HTMLResponse:
@@ -89,7 +84,6 @@ async def tree(
     the move-destination modal (slice 5 PR 5). Lazy-load uses the same
     endpoint with the same flag so child fetches stay dirs-only.
     """
-    server = _server_or_404(name)
     target = file_safety.resolve_within(server["dir"], path)
     if not target.exists():
         raise HTTPException(status_code=404, detail="path not found")
@@ -116,9 +110,9 @@ async def tree(
 async def view(
     request: Request,
     name: str,
+    server: dict = Depends(get_server_or_404),
     path: str = Query(...),
 ) -> HTMLResponse:
-    server = _server_or_404(name)
     target = file_safety.resolve_within(server["dir"], path)
     st = file_safety.stat_regular_file(target)
 
@@ -178,12 +172,12 @@ async def view(
 async def save(
     request: Request,
     name: str,
+    server: dict = Depends(get_server_or_404),
     path: str = Form(...),
     content: str = Form(...),
     mtime_ns: int = Form(...),
     force: bool = Form(False),
 ) -> HTMLResponse:
-    server = _server_or_404(name)
     target = file_safety.resolve_within(server["dir"], path)
     st = file_safety.stat_regular_file(target)
 
@@ -235,6 +229,7 @@ async def save(
 async def upload(
     request: Request,
     name: str,
+    server: dict = Depends(get_server_or_404),
     path: str = Form(""),
     force: bool = Form(False),
     files: list[UploadFile] = File(...),  # noqa: B008 — FastAPI dep-injection idiom
@@ -251,7 +246,6 @@ async def upload(
     conflict scan, files 1–6 are on disk. That's acceptable; the
     operator can re-upload the failed remainder.
     """
-    server = _server_or_404(name)
     target_dir = file_safety.resolve_within(server["dir"], path)
     if not target_dir.exists():
         raise HTTPException(status_code=404, detail="path not found")
@@ -333,6 +327,7 @@ def _parent_listing(server_dir: str, target: Path) -> tuple[Path, list[dict]]:
 async def delete(
     request: Request,
     name: str,
+    server: dict = Depends(get_server_or_404),
     path: str = Form(""),
     confirm_name: str = Form(""),
 ) -> HTMLResponse:
@@ -346,7 +341,6 @@ async def delete(
     Symlinks are unlinked as link entries; their targets are never
     followed, consistent with the slice's path-safety contract.
     """
-    server = _server_or_404(name)
     if not path:
         raise HTTPException(status_code=400, detail="cannot delete server root")
     target = file_safety.resolve_within(server["dir"], path)
@@ -387,11 +381,11 @@ async def delete(
 async def mkdir(
     request: Request,
     name: str,
+    server: dict = Depends(get_server_or_404),
     path: str = Form(""),
     dirname: str = Form(...),
 ) -> HTMLResponse:
     """Create an empty directory `dirname` inside `path` (the parent dir)."""
-    server = _server_or_404(name)
     parent = file_safety.resolve_within(server["dir"], path)
     if not parent.exists():
         raise HTTPException(status_code=404, detail="parent not found")
@@ -423,6 +417,7 @@ async def mkdir(
 async def rename(
     request: Request,
     name: str,
+    server: dict = Depends(get_server_or_404),
     path: str = Form(""),
     new_name: str = Form(...),
 ) -> HTMLResponse:
@@ -431,7 +426,6 @@ async def rename(
     Refuses `path=""` (server root has no parent), names that fail the
     upload-filename validator, and any pre-existing collision (no force).
     """
-    server = _server_or_404(name)
     if not path:
         raise HTTPException(status_code=400, detail="cannot rename server root")
     target = file_safety.resolve_within(server["dir"], path)
@@ -476,6 +470,7 @@ async def rename(
 async def move(
     request: Request,
     name: str,
+    server: dict = Depends(get_server_or_404),
     source: str = Form(""),
     dest_dir: str = Form(""),
 ) -> HTMLResponse:
@@ -485,7 +480,6 @@ async def move(
     moving a directory into itself or any descendant (would loop), and any
     pre-existing collision at the destination (no force).
     """
-    server = _server_or_404(name)
     if not source:
         raise HTTPException(status_code=400, detail="cannot move server root")
     src = file_safety.resolve_within(server["dir"], source)
@@ -536,6 +530,7 @@ async def move(
 @router.get("/servers/{name}/files/download")
 async def download(
     name: str,
+    server: dict = Depends(get_server_or_404),
     path: str = Query(...),
 ) -> FileResponse:
     """Stream a single regular file to the operator with attachment disposition.
@@ -546,7 +541,6 @@ async def download(
     sets `Content-Disposition: attachment; filename="..."` when `filename`
     is provided.
     """
-    server = _server_or_404(name)
     target = file_safety.resolve_within(server["dir"], path)
     file_safety.stat_regular_file(target)
     return FileResponse(
@@ -678,6 +672,7 @@ def _get_search_index(
 async def search(
     request: Request,
     name: str,
+    server: dict = Depends(get_server_or_404),
     q: str = Query(""),
     include_chunks: bool = Query(False),
 ) -> HTMLResponse:
@@ -696,7 +691,6 @@ async def search(
     parent. Pass `include_chunks=1` to query an alternate index that
     includes them.
     """
-    server = _server_or_404(name)
     needle = q.strip().lower()
     if len(needle) < _SEARCH_MIN_LEN:
         return templates.TemplateResponse(
@@ -744,6 +738,7 @@ async def search(
 @router.post("/servers/{name}/files/bulk_delete")
 async def bulk_delete(
     name: str,
+    server: dict = Depends(get_server_or_404),
     paths: list[str] = Form(...),  # noqa: B008 — FastAPI dep-injection idiom
     confirm: str = Form(""),
 ) -> Response:
@@ -755,7 +750,6 @@ async def bulk_delete(
     same path-safety contract as single delete: refuse symlinks-as-path-
     components, refuse special files, refuse `paths == [""]` (root).
     """
-    server = _server_or_404(name)
     if confirm != "DELETE":
         raise HTTPException(status_code=400, detail="confirm must be 'DELETE'")
     cleaned = [p for p in paths if p]
@@ -794,6 +788,7 @@ async def bulk_delete(
 @router.post("/servers/{name}/files/bulk_move")
 async def bulk_move(
     name: str,
+    server: dict = Depends(get_server_or_404),
     sources: list[str] = Form(...),  # noqa: B008 — FastAPI dep-injection idiom
     dest_dir: str = Form(""),
 ) -> Response:
@@ -806,7 +801,6 @@ async def bulk_move(
     back if a later one trips an OS-level error — that's a system fault,
     not an operator-recoverable one.
     """
-    server = _server_or_404(name)
     if not sources:
         raise HTTPException(status_code=400, detail="no sources")
     if any(not s for s in sources):

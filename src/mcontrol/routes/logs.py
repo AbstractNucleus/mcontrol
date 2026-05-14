@@ -4,10 +4,11 @@ extension)."""
 
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from mcontrol import db, docker_client
+from mcontrol.routes._dependencies import get_server_or_404
 
 router = APIRouter()
 
@@ -21,10 +22,6 @@ async def _sse(container_name: str) -> AsyncIterator[bytes]:
 
 
 @router.get("/servers/{name}/logs")
-async def stream(name: str) -> StreamingResponse:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
-
+async def stream(server: dict = Depends(get_server_or_404)) -> StreamingResponse:
     container_name = db.container_name_for(server)
     return StreamingResponse(_sse(container_name), media_type="text/event-stream")

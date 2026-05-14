@@ -1,17 +1,17 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import __version__, db, health, lifecycle_state
+from mcontrol import __version__, health, lifecycle_state
+from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.templates import templates
 
 router = APIRouter()
 
 
 @router.get("/servers/{name}", response_class=HTMLResponse)
-async def server_detail(request: Request, name: str) -> HTMLResponse:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
+async def server_detail(
+    request: Request, server: dict = Depends(get_server_or_404)
+) -> HTMLResponse:
     state = server.get("state", "unknown")
     return templates.TemplateResponse(
         request=request,

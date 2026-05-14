@@ -14,21 +14,15 @@ Flow:
 import difflib
 from pathlib import Path
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db, health, scaffolding
+from mcontrol import health, scaffolding
 from mcontrol.file_writer import atomic_write_text
+from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.templates import render_variables_card, templates
 
 router = APIRouter()
-
-
-def _server_or_404(name: str) -> dict:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
-    return server
 
 
 def _compose_path(server_dir: Path) -> Path:
@@ -96,8 +90,9 @@ def _render_diff_partial(
 
 
 @router.get("/servers/{name}/regenerate", response_class=HTMLResponse)
-async def get(request: Request, name: str) -> HTMLResponse:
-    server = _server_or_404(name)
+async def get(
+    request: Request, server: dict = Depends(get_server_or_404)
+) -> HTMLResponse:
     # If variables don't render, there is nothing meaningful to diff —
     # send the operator back to the card; the health banner on the
     # detail page already explains the variables-incomplete cause.
@@ -109,11 +104,10 @@ async def get(request: Request, name: str) -> HTMLResponse:
 @router.post("/servers/{name}/regenerate/confirm", response_class=HTMLResponse)
 async def confirm(
     request: Request,
-    name: str,
+    server: dict = Depends(get_server_or_404),
     compose_mtime_ns: int = Form(...),
     start_mtime_ns: int = Form(...),
 ) -> HTMLResponse:
-    server = _server_or_404(name)
     server_dir = Path(server["dir"])
     variables = server.get("variables") or {}
 

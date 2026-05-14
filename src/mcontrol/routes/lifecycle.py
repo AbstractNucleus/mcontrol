@@ -16,10 +16,11 @@ carrying two HTMX swap targets:
 """
 
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
 from mcontrol import db, docker_client, lifecycle_state
+from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.templates import templates
 
 router = APIRouter()
@@ -43,11 +44,7 @@ def _pill_and_buttons(server: dict, state: str, *, flash: str | None = None) -> 
 
 
 @router.post("/servers/{name}/lifecycle/start", response_class=HTMLResponse)
-async def start(name: str) -> HTMLResponse:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
-
+async def start(name: str, server: dict = Depends(get_server_or_404)) -> HTMLResponse:
     try:
         await docker_client.start(db.container_name_for(server))
     except TimeoutError:
@@ -57,11 +54,7 @@ async def start(name: str) -> HTMLResponse:
 
 
 @router.post("/servers/{name}/lifecycle/stop", response_class=HTMLResponse)
-async def stop(name: str) -> HTMLResponse:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
-
+async def stop(name: str, server: dict = Depends(get_server_or_404)) -> HTMLResponse:
     try:
         await docker_client.stop(db.container_name_for(server))
     except TimeoutError:
@@ -71,11 +64,7 @@ async def stop(name: str) -> HTMLResponse:
 
 
 @router.post("/servers/{name}/lifecycle/restart", response_class=HTMLResponse)
-async def restart(name: str) -> HTMLResponse:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
-
+async def restart(name: str, server: dict = Depends(get_server_or_404)) -> HTMLResponse:
     try:
         await docker_client.restart(db.container_name_for(server))
     except TimeoutError:

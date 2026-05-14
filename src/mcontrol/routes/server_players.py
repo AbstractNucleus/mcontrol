@@ -20,29 +20,15 @@ Decision 027:
 """
 
 from pathlib import Path
-from uuid import UUID
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol import db, membership, server_rcon
+from mcontrol.routes._dependencies import get_server_or_404, validate_uuid
 from mcontrol.templates import templates
 
 router = APIRouter()
-
-
-def _server_or_404(name: str) -> dict:
-    server = db.get_server(name)
-    if server is None:
-        raise HTTPException(status_code=404, detail="Server not found")
-    return server
-
-
-def _validate_uuid(value: str) -> str:
-    try:
-        return str(UUID(value))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="invalid uuid") from exc
 
 
 def _members_view(server_dir: Path) -> tuple[list[dict], list[str]]:
@@ -184,19 +170,19 @@ async def _flip(server: dict, *, kind: str, uuid: str, name: str, enabled: bool)
 
 
 @router.get("/servers/{name}/players", response_class=HTMLResponse)
-async def get_card(request: Request, name: str) -> HTMLResponse:
-    server = _server_or_404(name)
+async def get_card(
+    request: Request, server: dict = Depends(get_server_or_404)
+) -> HTMLResponse:
     return _card(request, server)
 
 
 @router.post("/servers/{name}/players", response_class=HTMLResponse)
 async def add_from_roster(
     request: Request,
-    name: str,
+    server: dict = Depends(get_server_or_404),
     roster_uuid: str = Form(...),
 ) -> HTMLResponse:
-    server = _server_or_404(name)
-    uuid = _validate_uuid(roster_uuid)
+    uuid = validate_uuid(roster_uuid)
     player = db.get_player(uuid)
     if player is None:
         return _card(
@@ -216,12 +202,10 @@ async def add_from_roster(
 )
 async def toggle_whitelist(
     request: Request,
-    name: str,
-    uuid: str,
+    server: dict = Depends(get_server_or_404),
+    uuid: str = Depends(validate_uuid),
     enabled: bool = Form(False),
 ) -> HTMLResponse:
-    server = _server_or_404(name)
-    uuid = _validate_uuid(uuid)
     player_name = _resolve_player_name(server, uuid)
     flash = await _flip(
         server, kind="whitelist", uuid=uuid, name=player_name, enabled=enabled
@@ -232,12 +216,10 @@ async def toggle_whitelist(
 @router.post("/servers/{name}/players/{uuid}/op", response_class=HTMLResponse)
 async def toggle_op(
     request: Request,
-    name: str,
-    uuid: str,
+    server: dict = Depends(get_server_or_404),
+    uuid: str = Depends(validate_uuid),
     enabled: bool = Form(False),
 ) -> HTMLResponse:
-    server = _server_or_404(name)
-    uuid = _validate_uuid(uuid)
     player_name = _resolve_player_name(server, uuid)
     flash = await _flip(
         server, kind="op", uuid=uuid, name=player_name, enabled=enabled
