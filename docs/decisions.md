@@ -810,3 +810,44 @@ Tests that reached into route-private helpers and moved with the helper:
 - `tests/test_lifecycle.py::test_probe_listener_returns_true_when_port_answers` and `::test_probe_listener_returns_false_on_persistent_refusal` patched `routes.lifecycle.socket` + `_LISTENER_PROBE_*` constants; now patch the same names on `services.lifecycle_service`.
 
 Trade-off: every cutover route still has a small amount of orchestration — the route's `_render_form` / `_card` / `_partial` helpers stay route-side because they build template responses, and the route still owns the input-validation pass (form shape, UUID, name regex, EULA check). The services get the I/O sequences and the rules that survive across multiple call sites. The split keeps the route layer thin enough to read top-to-bottom and the service layer wide enough that the rules have one home each, but it isn't "all logic in services" — that would have meant returning HTML strings or render contexts from services, which violates the FastAPI-unawareness rule. #101 (the files-routes carve-up) and #100 (the top-level `routes/` / `domain/` / `infra/` regroup) follow this same FastAPI-unawareness invariant: services own rules and I/O sequences, routes own request shape + template choice.
+
+## 044. routes/files: split 945-line module into a package; lift search index to mcontrol.file_search
+
+**Status:** Accepted · 2026-05-15
+
+Issue #101 — `routes/files.py` had grown to 945 lines (~19% of `src/`) covering tree, view, save, upload, delete, mkdir, rename, move, download, search, bulk_delete, bulk_move, plus a per-server in-memory search-index cache. The matching `tests/test_files.py` is 2k+ lines. Touching any single concern meant scrolling through the whole file, and the search-index cache — app-wide process state that has nothing to do with request shape — was sitting at the bottom of a route module.
+
+This entry converts the route module into a package and lifts the index into a top-level module:
+
+- `src/mcontrol/routes/files/__init__.py` — merges per-submodule `APIRouter` instances into one `router` so `from mcontrol.routes.files import router` keeps working in `main.create_app`.
+- `routes/files/_safety.py` — package-internal: `_list_dir`, `_parent_listing`, and the view-size constants (`_TEXT_VIEW_BYTES_MAX`, `_BINARY_SNIFF_BYTES`). The path-safety primitives themselves stay in `mcontrol.file_safety` (reused across other route modules); this file just bundles the listing-shape helpers only the files routes need.
+- `routes/files/tree.py` — `GET /servers/{name}/files/tree` (plus `?picker=1`).
+- `routes/files/view.py` — `GET /files/view` and `GET /files/download`. Both are read-only single-file endpoints that share the `stat_regular_file` refusal contract.
+- `routes/files/write.py` — `POST /files/save`, `POST /files/upload`, `POST /files/mkdir`. The three create/update endpoints; they share the upload-filename validator and the search-index invalidate call.
+- `routes/files/mutate.py` — `POST /files/delete`, `/rename`, `/move`, `/bulk_delete`, `/bulk_move`. The "shuffle entries around" endpoints; they share the lstat-classify-then-act sequence and the symlink-as-link-entry contract.
+- `routes/files/search.py` — `GET /files/search`. Owns the request shape (`q`, `include_chunks`), the `_SEARCH_LIMIT` cap, and the htmx template choice; the index walk + cache are in `file_search`.
+- `src/mcontrol/file_search.py` — app-wide module (FastAPI-unaware). Owns `_search_index`, `_INDEX_TTL_SECONDS`, `_now`, `_is_world_like_parent`, `_SEARCH_DEFAULT_SKIP_DIRS`, `_build_index`, plus public `get_search_index` and `invalidate`. The cache pattern (per-server dict with `default` and `with_chunks` slots, monotonic-clock TTL) is unchanged — only its home moved.
+
+Hard rules upheld:
+
+- **Existing imports keep working.** `from mcontrol.routes.files import router` is the canonical import (mounted in `main.create_app`); the package `__init__` builds the merged router. No call sites elsewhere reach into `routes.files.*` (verified by grep).
+- **No behaviour changes.** All 119 tests under `tests/test_files.py` plus the full 607-test suite pass unmodified except for the four module-path patches called out below. URL paths, response shapes, htmx headers, and conflict semantics are byte-identical to the pre-split implementation.
+- **Services boundary intact (decision 043).** `file_search` does not import FastAPI; it takes a `Path` and a server-name string and returns primitives. Routes call `file_search.invalidate(name)` after each mutation and `file_search.get_search_index(...)` from the search endpoint.
+- **No new service module needed.** Each route's remaining logic (lstat classification + os-call dispatch + template choice) is genuinely route-level — it's already a thin sequence of FastAPI-aware steps. Forcing a `files_service.py` would have meant either returning HTML render contexts from a service (violates FastAPI-unawareness) or wrapping every `os.rename` in a single-call service function (zero deduplication win). The search-index cache was the only piece of `routes/files.py` that genuinely belonged outside the route layer, and it moved.
+
+Rejected:
+
+- **One `files/handlers.py` module instead of a per-concern split.** Cheaper diff but loses the cognitive-load win that motivated the issue — `mutate.py` and `write.py` would still be one ~700-line file. The five-module split keeps each file under ~250 LOC and maps onto the test-file's existing section headers (tree, view, save, upload, delete, mkdir, rename, move, search, bulk).
+- **Keep `download` next to `tree` because both are GETs.** Tempting (and the issue's suggested layout grouped them), but `download` shares the regular-file refusal contract with `view` (`stat_regular_file`) and renders a `FileResponse` rather than an htmx fragment — it's a read-only single-file endpoint, same as view. Putting them together meant `view.py` owns "render or stream one regular file" cleanly.
+- **Drop `tree.py` because it's one endpoint.** The issue body explicitly allows folding it into `view.py` if it ends up empty. It's a small file but it's a different concern (directory listing + dirs-only picker vs. single-file rendering); keeping it separate also keeps `view.py`'s import surface small. Reversing later is a one-line move.
+- **Module-level `_search_index` becomes an `lru_cache` or a lifespan-injected store.** The issue's hard rules say "the existing in-process cache pattern stays as-is for now (don't change *how* it's cached, only *where* it lives)." TTL + manual invalidation doesn't fit `lru_cache`'s shape, and a lifespan-scoped store would force every test to spin up the FastAPI app; the module-level dict is already what the tests pin against. Future refactor candidate, not this PR.
+- **Re-export the moved cache globals from `routes.files` for test back-compat.** Considered, but the issue's stop conditions explicitly call out test-patch-path updates as the allowed change for this kind of move, and re-exporting `_now` / `_INDEX_TTL_SECONDS` / `_search_index` would smuggle module-state aliases back into the routes package — readers would expect them to live there. Four test-line patches is the honest fix.
+
+Tests that reached into the old module's private state and updated to the new module path:
+
+- `tests/test_files.py::fake_server` — patched `routes.files._search_index.clear()`; now patches `file_search._search_index.clear()`.
+- `tests/test_files.py::test_search_caps_at_limit_and_marks_truncated` — patched `mcontrol.routes.files._SEARCH_LIMIT`; now patches `mcontrol.routes.files.search._SEARCH_LIMIT` (the constant moved with the endpoint).
+- `tests/test_files.py::test_search_cache_ttl_expires` — patched `routes.files._now` and read `routes.files._INDEX_TTL_SECONDS`; now patches and reads the same names on `mcontrol.file_search`.
+- `tests/test_files.py::test_search_cache_two_servers_isolated` — patched `routes.files._search_index.clear()` and asserted membership on it; now reads `file_search._search_index`.
+
+Trade-off: the package adds one level of import indirection (call sites import `routes.files.tree.router` internally, the public `router` symbol re-exports the merged result). The win is that opening `routes/files/mutate.py` shows only the four mutate endpoints, the lstat/dispatch sequence is one screen tall, and the search-index cache no longer hides at the bottom of a thousand-line route module. The matching test file stays put for now (2k+ lines) — splitting `test_files.py` is its own refactor and was not in scope for this PR.
