@@ -16,11 +16,7 @@ from contextlib import suppress
 
 import aiodocker
 
-from mcontrol.settings import Settings
-
-
-def _settings() -> Settings:
-    return Settings()
+from mcontrol.settings import get_settings
 
 
 def self_container_id() -> str:
@@ -43,7 +39,7 @@ async def container_states_by_name() -> dict[str, str]:
     Returns an empty dict if the Docker daemon is unreachable — callers
     treat "no entry" as state="unknown" for that server.
     """
-    settings = _settings()
+    settings = get_settings()
     try:
         docker = aiodocker.Docker(url=settings.docker_host)
     except Exception:
@@ -69,7 +65,7 @@ async def container_states_by_name() -> dict[str, str]:
 
 
 async def start(container_name: str) -> None:
-    docker = aiodocker.Docker(url=_settings().docker_host)
+    docker = aiodocker.Docker(url=get_settings().docker_host)
     try:
         c = await docker.containers.get(container_name)
         await c.start()
@@ -79,7 +75,7 @@ async def start(container_name: str) -> None:
 
 
 async def stop(container_name: str) -> None:
-    docker = aiodocker.Docker(url=_settings().docker_host)
+    docker = aiodocker.Docker(url=get_settings().docker_host)
     try:
         c = await docker.containers.get(container_name)
         await c.stop()
@@ -89,7 +85,7 @@ async def stop(container_name: str) -> None:
 
 
 async def restart(container_name: str) -> None:
-    docker = aiodocker.Docker(url=_settings().docker_host)
+    docker = aiodocker.Docker(url=get_settings().docker_host)
     try:
         c = await docker.containers.get(container_name)
         await c.restart()
@@ -107,7 +103,7 @@ async def logs_stream(
     underlying aiodocker stream closes (caller disconnect, or container
     exit). Caller is responsible for catching cancellation.
     """
-    docker = aiodocker.Docker(url=_settings().docker_host)
+    docker = aiodocker.Docker(url=get_settings().docker_host)
     try:
         c = await docker.containers.get(container_name)
         async for line in c.log(stdout=True, stderr=True, tail=tail, follow=True):
@@ -120,7 +116,7 @@ async def logs_stream(
 async def find_network_name(container_name: str) -> str | None:
     """Return the name of the first non-host docker network the container
     is attached to, or None if it has none."""
-    docker = aiodocker.Docker(url=_settings().docker_host)
+    docker = aiodocker.Docker(url=get_settings().docker_host)
     try:
         c = await docker.containers.get(container_name)
         info = await c.show()
@@ -138,7 +134,7 @@ async def find_network_name(container_name: str) -> str | None:
 async def attach_self_to_network(network_name: str) -> None:
     """Connect the mcontrol container to the given docker network. Idempotent
     in practice: if already connected, the API returns 403 which we suppress."""
-    docker = aiodocker.Docker(url=_settings().docker_host)
+    docker = aiodocker.Docker(url=get_settings().docker_host)
     try:
         network = await docker.networks.get(network_name)
         with suppress(Exception):
@@ -149,7 +145,7 @@ async def attach_self_to_network(network_name: str) -> None:
 
 
 async def detach_self_from_network(network_name: str) -> None:
-    docker = aiodocker.Docker(url=_settings().docker_host)
+    docker = aiodocker.Docker(url=get_settings().docker_host)
     try:
         network = await docker.networks.get(network_name)
         with suppress(Exception):
