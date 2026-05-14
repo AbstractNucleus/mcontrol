@@ -15,6 +15,9 @@ carrying two HTMX swap targets:
   lock-step with the freshly-updated state.
 """
 
+import asyncio
+import socket
+import time
 
 import aiodocker
 from fastapi import APIRouter, Depends
@@ -27,6 +30,36 @@ from mcontrol.templates import templates
 router = APIRouter()
 
 _TIMEOUT_MSG = "Docker timed out — the container may still be starting. Try again."
+
+# After docker_client.start() returns, the container process is up but
+# the JVM may still be binding the listener port. Probe 127.0.0.1:port
+# briefly so the DB state is honest: "running" only when the listener
+# is up, otherwise "starting" (decision 041).
+_LISTENER_PROBE_DEADLINE_S = 10.0
+_LISTENER_PROBE_INTERVAL_S = 0.25
+_LISTENER_PROBE_CONNECT_TIMEOUT_S = 0.5
+
+
+async def _probe_listener(port: int) -> bool:
+    """Return True if a TCP connect to 127.0.0.1:port succeeds within
+    the probe deadline. Connects are run in a thread to avoid blocking
+    the event loop (decision 041)."""
+    deadline = time.monotonic() + _LISTENER_PROBE_DEADLINE_S
+
+    def _connect_once() -> bool:
+        try:
+            with socket.create_connection(
+                ("127.0.0.1", port), timeout=_LISTENER_PROBE_CONNECT_TIMEOUT_S
+            ):
+                return True
+        except OSError:
+            return False
+
+    while time.monotonic() < deadline:
+        if await asyncio.to_thread(_connect_once):
+            return True
+        await asyncio.sleep(_LISTENER_PROBE_INTERVAL_S)
+    return False
 
 
 def _pill_and_buttons(server: dict, state: str, *, flash: str | None = None) -> HTMLResponse:
@@ -55,8 +88,18 @@ async def start(
         await docker_client.start(docker, db.container_name_for(server))
     except TimeoutError:
         return _pill_and_buttons(server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
-    await db_async.update_server_state(name=name, state="running")
-    return _pill_and_buttons(server, "running")
+    # docker_client.start() returns when the container *process* is up,
+    # not when the JVM has bound the listener. Probe 127.0.0.1:port and
+    # only commit "running" once the port answers; otherwise commit
+    # "starting" so the UI is honest (decision 041, issue #94).
+    port = (server.get("variables") or {}).get("port")
+    if isinstance(port, int):
+        listening = await _probe_listener(port)
+    else:
+        listening = True
+    new_state = "running" if listening else "starting"
+    await db_async.update_server_state(name=name, state=new_state)
+    return _pill_and_buttons(server, new_state)
 
 
 @router.post("/servers/{name}/lifecycle/stop", response_class=HTMLResponse)

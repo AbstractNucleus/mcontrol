@@ -740,3 +740,22 @@ Rejected:
 - **Use `aria-disabled="true"` instead of the native `disabled` attribute.** Native `disabled` is what `lifecycle_state.view` already produces for the state-aware mapping (decision 033); `hx-disabled-elt="this"` augments that on click. Mixing in `aria-disabled` would mean reconciling two sources of truth for the same condition.
 
 Trade-off: `static/lifecycle.js` is a second small a11y JS file, after `modals.js`. The trade is "one file per concern" vs. "one a11y.js." At three files in `static/` already specific to a UI surface (`flash.js`, `theme.js`, `modals.js`), per-concern is the established posture; lifecycle.js follows it. If a future audit ever wants to consolidate, the merge target is `a11y.js` and each helper's IIFE drops in as a section without cross-talk.
+
+## 041. Lifecycle: TCP-probe listener port after start; new `"starting"` state for probe timeout
+
+**Status:** Accepted · 2026-05-15
+
+`docker_client.start()` returns when the container *process* is up, which for a Minecraft server is several seconds before the JVM has bound the listener port. Before this change `routes/lifecycle.py` committed `state="running"` unconditionally on a successful start (#94), so the state pill flipped green and the Stop button armed while the server still couldn't accept a connection.
+
+The fix is in `routes.lifecycle.start`: after `docker_client.start()` returns, the handler runs `_probe_listener(server["variables"]["port"])`, which TCP-connects to `127.0.0.1:port` in a thread (`asyncio.to_thread`, same shape as `server_variables_form.check_port_bound` from decision 037), polling every 250ms with a 10s deadline. On success the handler writes `state="running"`. On timeout it writes a new lifecycle value `"starting"` and the pill renders amber.
+
+`"starting"` is not a docker-reported state — it is an mcontrol-only signal meaning "container is up; listener has not bound." `mcontrol.lifecycle_state.view("starting")` disables Start (no-op while starting) but leaves Stop and Restart reachable so the operator can recover from a stuck start without waiting for anything. `discovery.run_discovery` does not produce `"starting"`: a manual rescan re-reads docker and overwrites the row with `"running"` or `"exited"` as appropriate, which is the documented recovery path.
+
+Rejected:
+
+- **Flash an error and leave state untouched on timeout.** Loses information — the container *is* up, and the operator's mental model of "start succeeded" is partially correct. A distinct lifecycle value is honest and lets the buttons stay sensible (Stop reachable).
+- **Add a periodic background poller that reconciles state.** This would let the start handler optimistically write `"running"` and trust the poller to flip it to something correct. Decision 021 commits discovery to operator-triggered (`POST /rescan`, decision 034), and decision 033 commits the lifecycle UI to deriving from a single DB column refreshed on the user-visible transitions. Adding a background poller reverses both decisions for a problem this narrowly scoped.
+- **Probe RCON instead of TCP.** RCON port is configurable and not always exposed; the listener port is in `variables.port` and always meaningful. A TCP connect is enough to disambiguate "JVM bound the socket" from "container process is starting up." Application-level health is out of scope here.
+- **Block the request until probe resolves with no fallback.** The probe deadline is 10s precisely so the HTMX request can't hang forever; if the JVM is genuinely slow today, `"starting"` is the honest answer and the operator can hit Rescan once the world is loaded.
+
+Trade-off: the start handler now blocks up to 10s before responding. That is intentional — the alternative is a brief lie on the state pill — but it does mean a slow JVM produces a 10s wait for the HTMX swap. `hx-disabled-elt="this"` (decision 040) already keeps the button disabled in that window so double-clicks don't compound.

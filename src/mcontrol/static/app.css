@@ -652,6 +652,8 @@ small {
 .state-pill--unknown { color: var(--fg-muted);  background: var(--bg-sunken); }
 .state-pill--pending { color: var(--warning-fg); background: var(--warning-bg); border-color: transparent; }
 .state-pill--pending::before { animation: state-pulse 1.4s var(--ease) infinite; }
+.state-pill--starting { color: var(--warning-fg); background: var(--warning-bg); border-color: transparent; }
+.state-pill--starting::before { animation: state-pulse 1.4s var(--ease) infinite; }
 
 @keyframes state-pulse {
   0%, 100% { opacity: 1; }

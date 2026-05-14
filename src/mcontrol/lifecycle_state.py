@@ -28,6 +28,10 @@ class LifecycleView(TypedDict):
 _RUNNING_LIKE = {"running", "paused"}
 _STOPPED_LIKE = {"created", "exited", "dead"}
 _TRANSIENT = {"restarting", "removing", "scaffolding"}
+# mcontrol-specific lifecycle value (decision 041): container is up but
+# the listener port hasn't bound yet. Only ever written by the start
+# handler on probe timeout, never returned by docker discovery.
+_STARTING = "starting"
 
 
 def view(state: str | None) -> LifecycleView:
@@ -51,6 +55,16 @@ def view(state: str | None) -> LifecycleView:
             "stop_disabled": False,
             "restart_disabled": False,
             "accent": "stop",
+        }
+    if state == _STARTING:
+        # Container is up; listener probe timed out (decision 041).
+        # Operator can Stop a stuck-start or Restart it; Start would be
+        # a no-op. No accent — there's no obvious next action.
+        return {
+            "start_disabled": True,
+            "stop_disabled": False,
+            "restart_disabled": False,
+            "accent": None,
         }
     if state in _TRANSIENT:
         return {
