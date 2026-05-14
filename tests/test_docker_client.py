@@ -183,6 +183,48 @@ async def test_restart_calls_container_restart(env, monkeypatch):
     assert fake._restarted is True
 
 
+async def test_start_raises_timeout_when_container_hangs(env, monkeypatch):
+    import asyncio
+
+    class _HangingContainer(_FakeContainer):
+        async def start(self):
+            await asyncio.sleep(9999)
+
+    _docker_with_named_container(monkeypatch, _HangingContainer())
+    monkeypatch.setattr(docker_client, "_LIFECYCLE_TIMEOUT_S", 0.01)
+
+    with pytest.raises(asyncio.TimeoutError):
+        await docker_client.start("atm10")
+
+
+async def test_stop_raises_timeout_when_container_hangs(env, monkeypatch):
+    import asyncio
+
+    class _HangingContainer(_FakeContainer):
+        async def stop(self):
+            await asyncio.sleep(9999)
+
+    _docker_with_named_container(monkeypatch, _HangingContainer())
+    monkeypatch.setattr(docker_client, "_LIFECYCLE_TIMEOUT_S", 0.01)
+
+    with pytest.raises(asyncio.TimeoutError):
+        await docker_client.stop("atm10")
+
+
+async def test_restart_raises_timeout_when_container_hangs(env, monkeypatch):
+    import asyncio
+
+    class _HangingContainer(_FakeContainer):
+        async def restart(self):
+            await asyncio.sleep(9999)
+
+    _docker_with_named_container(monkeypatch, _HangingContainer())
+    monkeypatch.setattr(docker_client, "_LIFECYCLE_TIMEOUT_S", 0.01)
+
+    with pytest.raises(asyncio.TimeoutError):
+        await docker_client.restart("atm10")
+
+
 async def test_logs_stream_yields_lines(env, monkeypatch):
     fake = _FakeContainer()
 

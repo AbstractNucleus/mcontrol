@@ -1,0 +1,10 @@
+{#
+  Lifecycle flash message (issue 90).
+  `message` — error string or None (empty clears any prior flash).
+  `oob` — bool (default false): sets hx-swap-oob="true" for OOB swaps.
+#}
+<div id="lifecycle-flash"
+     class="lifecycle-flash{% if message %} lifecycle-flash--error{% endif %}"
+     {% if oob %}hx-swap-oob="true"{% endif %}>
+  {% if message %}{{ message }}{% endif %}
+</div>

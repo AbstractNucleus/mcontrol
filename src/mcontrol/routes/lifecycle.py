@@ -15,6 +15,7 @@ carrying two HTMX swap targets:
   lock-step with the freshly-updated state.
 """
 
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 
@@ -23,8 +24,10 @@ from mcontrol.templates import templates
 
 router = APIRouter()
 
+_TIMEOUT_MSG = "Docker timed out — the container may still be starting. Try again."
 
-def _pill_and_buttons(server: dict, state: str) -> HTMLResponse:
+
+def _pill_and_buttons(server: dict, state: str, *, flash: str | None = None) -> HTMLResponse:
     pill = templates.get_template("_state_pill.html").render({"state": state})
     buttons = templates.get_template("_lifecycle_buttons.html").render(
         {
@@ -33,7 +36,10 @@ def _pill_and_buttons(server: dict, state: str) -> HTMLResponse:
             "oob": True,
         }
     )
-    return HTMLResponse(pill + buttons)
+    flash_html = templates.get_template("_lifecycle_flash.html").render(
+        {"message": flash, "oob": True}
+    )
+    return HTMLResponse(pill + buttons + flash_html)
 
 
 @router.post("/servers/{name}/lifecycle/start", response_class=HTMLResponse)
@@ -42,7 +48,10 @@ async def start(name: str) -> HTMLResponse:
     if server is None:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    await docker_client.start(db.container_name_for(server))
+    try:
+        await docker_client.start(db.container_name_for(server))
+    except TimeoutError:
+        return _pill_and_buttons(server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
     db.update_server_state(name=name, state="running")
     return _pill_and_buttons(server, "running")
 
@@ -53,7 +62,10 @@ async def stop(name: str) -> HTMLResponse:
     if server is None:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    await docker_client.stop(db.container_name_for(server))
+    try:
+        await docker_client.stop(db.container_name_for(server))
+    except TimeoutError:
+        return _pill_and_buttons(server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
     db.update_server_state(name=name, state="exited")
     return _pill_and_buttons(server, "exited")
 
@@ -64,6 +76,9 @@ async def restart(name: str) -> HTMLResponse:
     if server is None:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    await docker_client.restart(db.container_name_for(server))
+    try:
+        await docker_client.restart(db.container_name_for(server))
+    except TimeoutError:
+        return _pill_and_buttons(server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
     db.update_server_state(name=name, state="running")
     return _pill_and_buttons(server, "running")
