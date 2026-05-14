@@ -32,6 +32,22 @@ async def test_flash_js_is_served(client):
     assert content_type.startswith(("application/javascript", "text/javascript"))
 
 
+async def test_lifecycle_js_is_served(client):
+    # Decision 039: aria-busy on click + aria-live state announcement
+    # for the three lifecycle buttons. Gate on the opt-in attribute and
+    # the aria-live region id so the contract between the module and the
+    # templates stays checked in one place.
+    response = await client.get("/static/lifecycle.js")
+    assert response.status_code == 200
+    content_type = response.headers["content-type"]
+    assert content_type.startswith(("application/javascript", "text/javascript"))
+    body = response.text
+    assert "data-lifecycle-button" in body
+    assert "lifecycle-status" in body
+    assert "lifecycle-buttons" in body
+    assert "aria-busy" in body
+
+
 async def test_modals_js_is_served(client):
     # Decision 037: shared focus-trap / return-focus helper for the three
     # overlay modals (player-remove, trash-empty, trash-delete).

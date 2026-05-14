@@ -74,6 +74,12 @@ def _button_chunk(body: str, verb: str) -> str:
     return body[open_tag:close_tag]
 
 
+def _is_disabled(chunk: str) -> bool:
+    """Standalone `disabled` attribute (not `hx-disabled-elt`, which
+    decision 039 added to every lifecycle button)."""
+    return " disabled>" in chunk or " disabled " in chunk
+
+
 async def test_server_detail_running_state_accents_stop_disables_start(
     client, fake_get_server
 ):
@@ -87,15 +93,15 @@ async def test_server_detail_running_state_accents_stop_disables_start(
     assert 'hx-swap-oob' not in wrapper_open
 
     start = _button_chunk(body, "start")
-    assert 'disabled' in start
+    assert _is_disabled(start)
     assert 'btn--primary' not in start
 
     stop = _button_chunk(body, "stop")
     assert 'btn--primary' in stop
-    assert 'disabled' not in stop
+    assert not _is_disabled(stop)
 
     restart = _button_chunk(body, "restart")
-    assert 'disabled' not in restart
+    assert not _is_disabled(restart)
 
 
 async def test_server_detail_exited_state_accents_start_disables_others(
@@ -107,13 +113,13 @@ async def test_server_detail_exited_state_accents_start_disables_others(
 
     start = _button_chunk(body, "start")
     assert 'btn--primary' in start
-    assert 'disabled' not in start
+    assert not _is_disabled(start)
 
     stop = _button_chunk(body, "stop")
-    assert 'disabled' in stop
+    assert _is_disabled(stop)
 
     restart = _button_chunk(body, "restart")
-    assert 'disabled' in restart
+    assert _is_disabled(restart)
 
 
 async def test_server_detail_restarting_state_disables_all_no_accent(
@@ -125,7 +131,7 @@ async def test_server_detail_restarting_state_disables_all_no_accent(
 
     for verb in ("start", "stop", "restart"):
         chunk = _button_chunk(body, verb)
-        assert 'disabled' in chunk, f"{verb} should be disabled in restarting state"
+        assert _is_disabled(chunk), f"{verb} should be disabled in restarting state"
         assert 'btn--primary' not in chunk, f"{verb} should not carry accent in restarting state"
 
 
@@ -136,6 +142,52 @@ def _element_chunk(body: str, element_id: str) -> str:
     open_tag = body.rfind('<', 0, idx)
     close_tag = body.index('>', idx)
     return body[open_tag:close_tag + 1]
+
+
+async def test_server_detail_lifecycle_buttons_carry_a11y_attrs(
+    client, fake_get_server
+):
+    """Decision 039: each lifecycle button opts into static/lifecycle.js
+    via `data-lifecycle-button`, carries a server-scoped `aria-label`,
+    uses `hx-disabled-elt="this"` so htmx disables on click, and is a
+    native `<button>` (keyboard-activatable for free)."""
+    fake_get_server["atm10"] = _row("atm10", state="running")
+    response = await client.get("/servers/atm10")
+    body = response.text
+
+    for verb in ("start", "stop", "restart"):
+        chunk = _button_chunk(body, verb)
+        assert "data-lifecycle-button" in chunk, f"{verb} missing opt-in attr"
+        assert f'aria-label="{verb.title()} atm10"' in chunk, f"{verb} aria-label"
+        assert 'hx-disabled-elt="this"' in chunk, f"{verb} missing hx-disabled-elt"
+        assert 'type="button"' in chunk, f"{verb} should be type=button"
+
+
+async def test_server_detail_lifecycle_buttons_wrapper_carries_state(
+    client, fake_get_server
+):
+    """The wrapper carries `data-state` so static/lifecycle.js can read
+    the current state back when announcing post-action transitions."""
+    fake_get_server["atm10"] = _row("atm10", state="running")
+    response = await client.get("/servers/atm10")
+    body = response.text
+    wrapper_open = body.split('id="lifecycle-buttons"', 1)[1].split('>', 1)[0]
+    assert 'data-state="running"' in wrapper_open
+
+
+async def test_server_detail_renders_aria_live_lifecycle_status(
+    client, fake_get_server
+):
+    """A visually-hidden aria-live region sits next to the lifecycle row
+    so screen readers get post-action state announcements (decision 039)."""
+    fake_get_server["atm10"] = _row("atm10")
+    response = await client.get("/servers/atm10")
+    body = response.text
+    assert 'id="lifecycle-status"' in body
+    region = body.split('id="lifecycle-status"', 1)[1].split('>', 1)[0]
+    assert 'aria-live="polite"' in region
+    assert 'aria-atomic="true"' in region
+    assert 'visually-hidden' in region
 
 
 async def test_server_detail_renders_log_pane(client, fake_get_server):
