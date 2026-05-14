@@ -59,6 +59,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 038 | Shared modal helper: focus trap + return-focus via `data-modal-root` | Accepted | 2026-05-15 |
 | 039 | `db`: route sync supabase-py calls through `asyncio.to_thread`       | Accepted | 2026-05-15 |
 | 042 | server-jar: loader enum surfaced on the new-server form and server detail; new servers pick explicitly, no backfill inference at form submit | Accepted | 2026-05-15 |
+| 043 | services/ layer: thin route handlers + business rules in services/{server,lifecycle,membership}_service.py | Accepted | 2026-05-15 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -780,3 +781,32 @@ Rejected:
 - **Render the badge inline with the jar name in the variables block.** Visible only on legacy/non-scaffolded rows; the title-bar placement is visible regardless of `scaffolded_at` state and matches "small label/badge near the server name" from the issue.
 
 Trade-off: this PR ships the data plumbing — the value flows from form → DB → detail page and has no other consumer yet. JVM-arg presets, loader-specific docs links, mod-folder auto-detect, and "change loader after creation" are all explicitly future scope. The `infer_loader_from_jar` helper is unused by the new-server flow at submit, but is the single source of truth for the rule shared with the supabase-server backfill — future callers (a migrate-flow guess, a one-off backfill script if the DB-side backfill ever has gaps) can reach for it without re-deriving the order.
+
+## 043. services/ layer: thin route handlers + business rules in services/{server,lifecycle,membership}_service.py
+
+**Status:** Accepted · 2026-05-15
+
+Issue #97 — pre-decision, route handlers in `routes/` called `db.*`, `db_async.*`, `docker_client.*`, and `server_rcon.*` directly and also owned cross-cutting business rules: the DB-first scaffold ordering + rollback, the tombstone rename + DB-row delete, the legacy-to-scaffold migration sequence, the JSONB merge for variables, the post-start TCP listener probe and state-commit, the RCON-vs-offline dispatch for whitelist/op flips, the cascade-remove walk, the Mojang lookup + upsert flow, the unknown-UUID import. Routes were the only test seam, so every test mocked db or docker even when the rule under test was pure-logic.
+
+This entry adds `src/mcontrol/services/` with three modules:
+
+- `server_service.py` — `scaffold_new_server` (insert → render → mark, with rollback raising `ScaffoldError`), `delete_server_with_tombstone`, `migrate_legacy_server`, `update_server_variables` (JSONB merge), `update_server_bindings`.
+- `lifecycle_service.py` — `start_server` / `stop_server` / `restart_server` (docker call + post-start probe + state commit + RCON-cache forget), `probe_listener` and its `_LISTENER_PROBE_*` constants moved out of the route module.
+- `membership_service.py` — `apply_membership` (RCON-vs-offline dispatch), `resolve_player_name`, `build_roster_view`, `memberships_for`, `add_player_to_roster`, `import_unknown_uuids`, `cascade_remove_player`, `cascade_flash`, `per_server_members_view`.
+
+The boundary rule that matters for #101 (files routes) and #100 (top-level module reshuffle): **services are FastAPI-unaware.** They take primitives (str, int, dict, Path) or domain dicts (the server-row, the player-row), return primitives or domain dicts, and raise plain Python exceptions. They never import `fastapi`, never see a `Request`, never construct an `HTMLResponse`, never read or write HTMX headers, never build flash-message HTML. The route layer parses the form, calls the service, and translates the service's return value (or exception) into HTTP. The reverse rule also holds: routes don't reach into `db.*`/`db_async.*`/`docker_client.*`/`server_rcon.*` directly for business operations — those imports cluster in services. The route layer's remaining `db_async.*` calls are the gate operations FastAPI already does at the dependency layer (`get_server_or_404`, `get_player_or_404`, the roster-membership check in `add_from_roster`) and the lone `delete_player` in the cascade-remove handler, which is the final step the route owns because it's the row-existence post-condition for the response.
+
+Rejected:
+
+- **One big `service.py` module.** Easier to grep, but the three concerns (server CRUD, lifecycle, membership) don't share state and the test suite is already organised along these lines (`test_new_server.py`, `test_lifecycle.py`, `test_server_players.py`, etc.). Three files maps 1:1 onto the test files and keeps each module under ~300 LOC.
+- **A `domain/` package with class-based services.** Tempting structure (`ServerService`, `LifecycleService`) but the panel has no shared state to live on `self` and no DI surface to inject the dependencies — every call site already imports `db_async` and the lifespan-scoped docker client comes via FastAPI `Depends`. Module-level functions are the simplest move; the trade-off is no constructor-injection seam, but `monkeypatch.setattr` on the module is what the existing tests already use.
+- **Move the path-safety check + name-regex + port-collision rules into the service.** These are 422 surfaces — the route renders the form with field-level errors. Pulling them into the service would either return errors-as-dicts (smuggling form concerns into the service) or raise typed exceptions for each rule (one exception class per field is overkill). They're shape-validation that happens before the service ever runs; keeping them in the route layer means the service signature stays "primitives in, primitives out, raise on failure." Decision 042's `server_variables_form.validate` already centralised the cross-route shape rules; that module stays put.
+- **Make the service the sole writer of every `db_async.delete_player` call.** Almost the rule, but in `players.remove` the route owns the delete because it's the response post-condition (cascade or roster scope) and the cascade `removed/failures` return value belongs to the service. Splitting "delete" out of "cascade and delete" would force the route to know which step raised; keeping the cascade body in the service and the final `delete_player` in the route reads more honestly.
+- **Update existing tests beyond the two documented "reach into private" cases.** Tests for new-server, delete, migrate, variables, bindings, players, and server-players all pass unmodified after the cutover because they patch `db.*` / `docker_client.*` / `scaffolding.scaffold` / `shutil.rmtree` at module level — the service module shares those imports, so the patches propagate.
+
+Tests that reached into route-private helpers and moved with the helper:
+
+- `tests/test_lifecycle.py::test_start_with_listener_bound_commits_running` and `::test_start_with_listener_probe_timeout_commits_starting` patched `routes.lifecycle._probe_listener`; now patch `services.lifecycle_service.probe_listener`.
+- `tests/test_lifecycle.py::test_probe_listener_returns_true_when_port_answers` and `::test_probe_listener_returns_false_on_persistent_refusal` patched `routes.lifecycle.socket` + `_LISTENER_PROBE_*` constants; now patch the same names on `services.lifecycle_service`.
+
+Trade-off: every cutover route still has a small amount of orchestration — the route's `_render_form` / `_card` / `_partial` helpers stay route-side because they build template responses, and the route still owns the input-validation pass (form shape, UUID, name regex, EULA check). The services get the I/O sequences and the rules that survive across multiple call sites. The split keeps the route layer thin enough to read top-to-bottom and the service layer wide enough that the rules have one home each, but it isn't "all logic in services" — that would have meant returning HTML strings or render contexts from services, which violates the FastAPI-unawareness rule. #101 (the files-routes carve-up) and #100 (the top-level `routes/` / `domain/` / `infra/` regroup) follow this same FastAPI-unawareness invariant: services own rules and I/O sequences, routes own request shape + template choice.
