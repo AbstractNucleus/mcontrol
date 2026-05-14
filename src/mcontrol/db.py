@@ -94,15 +94,28 @@ def container_name_for(server: dict[str, Any]) -> str:
     return server["name"]
 
 
-def insert_scaffolding_server(*, name: str, dir: str, variables: dict[str, Any]) -> None:
+def insert_scaffolding_server(
+    *, name: str, dir: str, variables: dict[str, Any], loader: str
+) -> None:
     """Create a new mcontrol-scaffolded row in state='scaffolding'.
 
     Slice 6 PR 2 — first of the two DB writes that bracket the
     on-disk scaffold. mark_scaffolded transitions the row to 'created'
     once the files are written.
+
+    `loader` is the operator's explicit choice from the new-server form
+    (issue #123). Stored as a top-level column on `servers`, not inside
+    `variables` — the DB enforces the enum via the supabase-server#8
+    migration.
     """
     _table().insert(
-        {"name": name, "dir": dir, "state": "scaffolding", "variables": variables}
+        {
+            "name": name,
+            "dir": dir,
+            "state": "scaffolding",
+            "variables": variables,
+            "loader": loader,
+        }
     ).execute()
 
 

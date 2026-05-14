@@ -52,11 +52,13 @@ def fake_db(monkeypatch):
                 return row
         return None
 
-    def fake_insert_scaffolding_server(*, name, dir, variables):
-        state["writes"].append(("insert", {"name": name, "dir": dir, "variables": variables}))
+    def fake_insert_scaffolding_server(*, name, dir, variables, loader):
+        state["writes"].append(
+            ("insert", {"name": name, "dir": dir, "variables": variables, "loader": loader})
+        )
         state["rows"].append(
             {"name": name, "dir": dir, "state": "scaffolding", "variables": variables,
-             "container_name": None, "scaffolded_at": None}
+             "loader": loader, "container_name": None, "scaffolded_at": None}
         )
 
     def fake_mark_scaffolded(*, name):
@@ -88,6 +90,7 @@ def _form(**overrides) -> dict:
         "memory_budget_gb": "8",
         "port": "25575",
         "server_jar": "paper-1.21.4.jar",
+        "loader": "vanilla",
         "jvm_extra_args": "",
         "accept_eula": "on",
     }
@@ -111,6 +114,19 @@ async def test_get_new_renders_form(app_client, fake_db):
     assert 'name="accept_eula"' in body
     # Hint about uploading the jar after scaffolding (slice 6 contract).
     assert "upload" in body.lower()
+
+
+async def test_get_new_renders_loader_select_with_all_enum_options(app_client, fake_db):
+    """Issue #123: loader dropdown carries all five enum values and
+    defaults to vanilla."""
+    response = await app_client.get("/servers/new")
+
+    body = response.text
+    assert 'name="loader"' in body
+    for opt in ("vanilla", "forge", "fabric", "paper", "quilt"):
+        assert f'value="{opt}"' in body
+    # Default selection is vanilla.
+    assert 'value="vanilla" selected' in body
 
 
 async def test_home_links_to_new_server_form(app_client, fake_db):
@@ -168,6 +184,50 @@ async def test_post_includes_jvm_extra_args_in_variables_when_present(
     assert insert_kwargs["variables"]["jvm_extra_args"] == "-XX:+UseG1GC"
 
 
+async def test_post_persists_loader_at_top_level_not_in_variables(
+    app_client, base_dir, fake_db
+):
+    """Issue #123: loader is a top-level column on the row, not nested
+    inside variables JSONB."""
+    response = await app_client.post("/servers/new", data=_form(loader="forge"))
+
+    assert response.status_code == 303
+    insert_kwargs = fake_db["writes"][0][1]
+    assert insert_kwargs["loader"] == "forge"
+    assert "loader" not in insert_kwargs["variables"]
+
+
+async def test_post_defaults_loader_to_vanilla_when_field_absent(
+    app_client, base_dir, fake_db
+):
+    """Form omitting the loader field falls back to the route default —
+    matching the dropdown's default and the supabase-server column default."""
+    body = _form()
+    body.pop("loader", None)
+
+    response = await app_client.post("/servers/new", data=body)
+
+    assert response.status_code == 303
+    insert_kwargs = fake_db["writes"][0][1]
+    assert insert_kwargs["loader"] == "vanilla"
+
+
+async def test_post_does_not_silently_override_loader_from_jar_filename(
+    app_client, base_dir, fake_db
+):
+    """Issue #123 (decision): the operator's explicit dropdown choice is
+    authoritative — even when the jar filename screams a different
+    loader, the row stores what the form said."""
+    response = await app_client.post(
+        "/servers/new",
+        data=_form(loader="vanilla", server_jar="forge-1.21.4-installer.jar"),
+    )
+
+    assert response.status_code == 303
+    insert_kwargs = fake_db["writes"][0][1]
+    assert insert_kwargs["loader"] == "vanilla"
+
+
 # ---- POST validation errors ----------------------------------------
 
 
@@ -181,6 +241,7 @@ async def test_post_includes_jvm_extra_args_in_variables_when_present(
         ("port", "80", "between"),
         ("port", "70000", "between"),
         ("server_jar", "   ", "Required"),
+        ("loader", "neoforge", "Must be one of"),
     ],
 )
 async def test_post_rejects_invalid_field(

@@ -234,6 +234,30 @@ async def test_server_detail_links_back_to_home(client, fake_get_server):
     assert 'href="/"' in response.text
 
 
+async def test_server_detail_renders_loader_badge_when_set(client, fake_get_server):
+    """Issue #123: when a row has a loader value, the detail title bar
+    shows a small badge next to the state pill."""
+    row = _row("atm10")
+    row["loader"] = "forge"
+    fake_get_server["atm10"] = row
+
+    response = await client.get("/servers/atm10")
+    body = response.text
+    assert "loader-badge" in body
+    assert ">forge<" in body
+
+
+async def test_server_detail_omits_loader_badge_when_absent(client, fake_get_server):
+    """A row missing the loader field (legacy rows pre-supabase-server#8
+    backfill, defensive case) should not render the badge."""
+    row = _row("atm10")
+    # _row() does not set 'loader' — keep it that way.
+    fake_get_server["atm10"] = row
+
+    response = await client.get("/servers/atm10")
+    assert "loader-badge" not in response.text
+
+
 async def test_server_detail_legacy_row_has_no_variables_card_or_banner(
     client, fake_get_server
 ):

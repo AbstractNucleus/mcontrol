@@ -19,6 +19,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from mcontrol import db_async, scaffolding, server_variables_form
+from mcontrol.server_variables_form import LOADERS
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
@@ -38,7 +39,7 @@ def _render_form(
     return templates.TemplateResponse(
         request=request,
         name="new_server.html",
-        context={"form": form, "errors": errors},
+        context={"form": form, "errors": errors, "loaders": LOADERS},
         status_code=status_code,
     )
 
@@ -69,6 +70,7 @@ async def new_submit(
     memory_budget_gb: int = Form(...),
     port: int = Form(...),
     server_jar: str = Form(...),
+    loader: str = Form("vanilla"),
     jvm_extra_args: str = Form(""),
     accept_eula: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
@@ -77,6 +79,7 @@ async def new_submit(
         "memory_budget_gb": memory_budget_gb,
         "port": port,
         "server_jar": server_jar.strip(),
+        "loader": loader,
         "jvm_extra_args": jvm_extra_args.strip(),
         "accept_eula": bool(accept_eula),
     }
@@ -125,7 +128,7 @@ async def new_submit(
         variables["jvm_extra_args"] = form["jvm_extra_args"]
 
     await db_async.insert_scaffolding_server(
-        name=form["name"], dir=str(target), variables=variables
+        name=form["name"], dir=str(target), variables=variables, loader=form["loader"]
     )
     try:
         scaffolding.scaffold(form["name"], variables, base)

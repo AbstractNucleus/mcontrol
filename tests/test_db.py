@@ -161,6 +161,7 @@ def test_insert_scaffolding_server_writes_state_and_variables(env, monkeypatch):
         name="newshire",
         dir="/srv/newshire",
         variables={"port": 25575, "memory_budget_gb": 8, "server_jar": "paper.jar"},
+        loader="paper",
     )
 
     table.insert.assert_called_once_with(
@@ -169,6 +170,7 @@ def test_insert_scaffolding_server_writes_state_and_variables(env, monkeypatch):
             "dir": "/srv/newshire",
             "state": "scaffolding",
             "variables": {"port": 25575, "memory_budget_gb": 8, "server_jar": "paper.jar"},
+            "loader": "paper",
         }
     )
     table.insert.return_value.execute.assert_called_once_with()

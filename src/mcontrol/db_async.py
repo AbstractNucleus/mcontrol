@@ -51,10 +51,14 @@ async def update_bindings(
 
 
 async def insert_scaffolding_server(
-    *, name: str, dir: str, variables: dict[str, Any]
+    *, name: str, dir: str, variables: dict[str, Any], loader: str
 ) -> None:
     await asyncio.to_thread(
-        db.insert_scaffolding_server, name=name, dir=dir, variables=variables
+        db.insert_scaffolding_server,
+        name=name,
+        dir=dir,
+        variables=variables,
+        loader=loader,
     )
 
 

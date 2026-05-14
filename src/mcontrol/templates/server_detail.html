@@ -50,6 +50,9 @@
   <h1 class="detail-title">
     <span class="detail-title__name">{{ server.name }}</span>
     {% include "_state_pill.html" %}
+    {% if server.loader %}
+      <span class="loader-badge" aria-label="Loader: {{ server.loader }}">{{ server.loader }}</span>
+    {% endif %}
   </h1>
 
   {% if health_issues %}

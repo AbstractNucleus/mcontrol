@@ -691,6 +691,20 @@ small {
   font-family: var(--font-mono);
 }
 
+.loader-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--bg-sunken);
+  color: var(--fg-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+}
+
 .server-detail {
   display: grid;
   grid-template-columns: max-content 1fr;
