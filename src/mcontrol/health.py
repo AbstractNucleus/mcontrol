@@ -17,6 +17,11 @@ Issue types:
                             state per decision 027.)
   - ops-malformed         — server/ops.json is not valid list-of-objects
                             JSON. (Slice 7 PR 2.)
+  - rcon-password-stale   — on-disk rcon.password differs from the value
+                            mcontrol last authenticated with. Means the
+                            running JVM still holds the old password and
+                            new RCON connections will fail until the
+                            container restarts. (Issue 119.)
 
 Computed on every detail-page render, never stored. PR 4 (Regenerate)
 also calls compute_scripts_stale to gate its button.
@@ -27,7 +32,7 @@ from typing import Any
 
 from jinja2 import UndefinedError
 
-from mcontrol import membership, scaffolding
+from mcontrol import membership, scaffolding, server_rcon
 
 
 def _compose_path(server: dict[str, Any]) -> Path:
@@ -86,6 +91,17 @@ def _membership_issues(server: dict[str, Any]) -> list[dict[str, str]]:
 def compute_issues(server: dict[str, Any]) -> list[dict[str, str]]:
     """Return a list of {code, message} dicts for the health banner."""
     issues: list[dict[str, str]] = list(_membership_issues(server))
+
+    if server_rcon.stale_password_detected(server):
+        issues.append(
+            {
+                "code": "rcon-password-stale",
+                "message": (
+                    "RCON password changed on disk but server is still running "
+                    "with the old value — restart required."
+                ),
+            }
+        )
 
     if server.get("scaffolded_at") is None:
         return issues

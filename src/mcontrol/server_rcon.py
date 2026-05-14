@@ -18,6 +18,14 @@ layer can map to a flash message:
   - The container has no docker network attached.
   - Auth failure (wrong password).
   - TCP/network error reaching the container.
+
+Stale-password detection (issue 119): every successful RCON auth records
+the password that worked into ``_last_authed_password`` (keyed by server
+name). The server-detail route compares on-disk ``rcon.password`` to
+this cached value; if they differ, the running JVM still has the old
+value and the operator must restart. The cache lives for the lifetime
+of the mcontrol process, which is the same lifetime as the running JVMs
+we care about.
 """
 
 from pathlib import Path
@@ -27,6 +35,48 @@ import aiodocker
 from mcontrol import docker_client, rcon, server_props
 
 _RCON_PORT = 25575
+
+# Server name → password that most recently authenticated successfully.
+# Populated by run_command (here) and routes/console._stream after a
+# successful rcon.connect; consumed by stale_password_detected.
+_last_authed_password: dict[str, str] = {}
+
+
+def record_authed_password(server_name: str, password: str) -> None:
+    """Record the password that just succeeded against the running JVM."""
+    _last_authed_password[server_name] = password
+
+
+def forget_authed_password(server_name: str) -> None:
+    """Drop the cached password — the JVM that knew it is gone.
+
+    Called from the stop and restart lifecycle handlers so the next
+    successful auth re-establishes the baseline against the fresh JVM.
+    """
+    _last_authed_password.pop(server_name, None)
+
+
+def stale_password_detected(server: dict) -> bool:
+    """True iff we know the running JVM's password and it differs from disk.
+
+    Returns False when we've never observed a successful auth for this
+    server (no baseline to compare against), when the server isn't
+    currently running (no stale JVM to warn about), or when on-disk and
+    cached values match. Reads ``server.properties`` via ``server_props``,
+    which is mtime-cached so render-time overhead is one ``stat`` call
+    once warm.
+    """
+    if server.get("state") != "running":
+        return False
+    server_name = server["name"]
+    if server_name not in _last_authed_password:
+        return False
+    server_dir = Path(server["dir"])
+    props = server_props.read_properties(server_dir / "server" / "server.properties")
+    disk_password = props.get("rcon.password", "")
+    if not disk_password:
+        return False
+    return disk_password != _last_authed_password[server_name]
 
 
 class RconUnavailable(Exception):
@@ -63,6 +113,7 @@ async def run_command(docker: aiodocker.Docker, server: dict, command: str) -> s
             raise RconUnavailable("RCON authentication failed.") from exc
         except OSError as exc:
             raise RconUnavailable(f"Could not reach {container_name}: {exc}") from exc
+        record_authed_password(server["name"], password)
         try:
             return await conn.run(command)
         finally:
