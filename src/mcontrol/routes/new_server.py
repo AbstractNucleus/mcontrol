@@ -18,7 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from mcontrol import db, scaffolding
+from mcontrol import db, scaffolding, server_variables_form
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
@@ -27,9 +27,6 @@ router = APIRouter()
 logger = logging.getLogger("mcontrol.new_server")
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,31}$")
-_PORT_MIN = 1024
-_PORT_MAX = 65535
-_MEMORY_MIN_GB = 2
 
 
 def _render_form(
@@ -48,18 +45,12 @@ def _render_form(
 
 def _validate_static(form: dict) -> dict[str, str]:
     """Validate fields against shape rules (no DB / disk lookups)."""
-    errors: dict[str, str] = {}
+    errors = server_variables_form.validate(form)
 
     if not _NAME_RE.match(form["name"]):
         errors["name"] = (
             "3–32 chars; lowercase letters, digits, and hyphens; must start with a letter."
         )
-    if form["memory_budget_gb"] < _MEMORY_MIN_GB:
-        errors["memory_budget_gb"] = f"Minimum {_MEMORY_MIN_GB} GB."
-    if not (_PORT_MIN <= form["port"] <= _PORT_MAX):
-        errors["port"] = f"Port must be between {_PORT_MIN} and {_PORT_MAX}."
-    if not form["server_jar"].strip():
-        errors["server_jar"] = "Required."
     if not form["accept_eula"]:
         errors["accept_eula"] = "You must accept the Minecraft EULA to create a server."
 
@@ -112,13 +103,9 @@ async def new_submit(
         elif target is not None and target.exists():
             errors["name"] = "Directory already exists."
         else:
-            for row in servers:
-                row_vars = row.get("variables") or {}
-                if row_vars.get("port") == form["port"]:
-                    errors["port"] = (
-                        f"Port {form['port']} is already used by '{row['name']}'."
-                    )
-                    break
+            collision = server_variables_form.check_port_collision(None, form["port"])
+            if collision:
+                errors["port"] = collision
 
     if errors:
         return _render_form(request, form=form, errors=errors, status_code=422)

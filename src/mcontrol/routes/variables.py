@@ -13,14 +13,10 @@ is the only entry point in the UI.
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db
+from mcontrol import db, server_variables_form
 from mcontrol.templates import render_variables_card, templates
 
 router = APIRouter()
-
-_PORT_MIN = 1024
-_PORT_MAX = 65535
-_MEMORY_MIN_GB = 2
 
 
 def _server_or_404(name: str) -> dict:
@@ -49,17 +45,6 @@ def _form(
     )
 
 
-def _validate(form: dict) -> dict[str, str]:
-    errors: dict[str, str] = {}
-    if form["memory_budget_gb"] < _MEMORY_MIN_GB:
-        errors["memory_budget_gb"] = f"Minimum {_MEMORY_MIN_GB} GB."
-    if not (_PORT_MIN <= form["port"] <= _PORT_MAX):
-        errors["port"] = f"Port must be between {_PORT_MIN} and {_PORT_MAX}."
-    if not form["server_jar"].strip():
-        errors["server_jar"] = "Required."
-    return errors
-
-
 @router.get("/servers/{name}/variables", response_class=HTMLResponse)
 async def get(request: Request, name: str, edit: int = 0) -> HTMLResponse:
     server = _server_or_404(name)
@@ -84,18 +69,12 @@ async def post(
         "server_jar": server_jar.strip(),
         "jvm_extra_args": jvm_extra_args.strip(),
     }
-    errors = _validate(form)
+    errors = server_variables_form.validate(form)
 
     if not errors:
-        for row in db.list_servers():
-            if row["name"] == name:
-                continue
-            row_vars = row.get("variables") or {}
-            if row_vars.get("port") == port:
-                errors["port"] = (
-                    f"Port {port} is already used by '{row['name']}'."
-                )
-                break
+        collision = server_variables_form.check_port_collision(name, port)
+        if collision:
+            errors["port"] = collision
 
     if errors:
         return _form(request, server, form=form, errors=errors, status_code=422)
