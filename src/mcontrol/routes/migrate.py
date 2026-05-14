@@ -15,7 +15,8 @@ disappears, the form is gone, no rollback button.
 DB ordering mirrors `routes/new_server.py`: the "scaffolded" stamp is
 the canonical marker, written *after* the file ops succeed. Failure
 mid-stream leaves the row legacy; the operator re-clicks and the
-idempotent migration converges.
+idempotent migration converges. The migration + DB writes live in
+``services.server_service.migrate_legacy_server``.
 """
 
 import re
@@ -24,8 +25,9 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db_async, migration, server_variables_form
+from mcontrol import migration, server_variables_form
 from mcontrol.routes._dependencies import get_server_or_404
+from mcontrol.services import server_service
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
@@ -139,9 +141,7 @@ async def run_migration(
     if form["jvm_extra_args"]:
         variables["jvm_extra_args"] = form["jvm_extra_args"]
 
-    migration.migrate(name, variables, base)
-    await db_async.update_variables(name=name, variables=variables)
-    await db_async.mark_scaffolded(name=name)
+    await server_service.migrate_legacy_server(name=name, variables=variables, base=base)
 
     response = HTMLResponse("", status_code=200)
     response.headers["HX-Redirect"] = f"/servers/{name}"

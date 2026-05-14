@@ -8,24 +8,23 @@ DB-first ordering (slice 6 plan):
 
 If anything between (1) and (3) raises, best-effort rollback both
 sides: rmtree(<dir>) + db.delete_server(name), then re-raise as 500.
+The rollback flow lives in ``services.server_service.scaffold_new_server``.
 """
 
-import logging
 import re
-import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from mcontrol import db_async, scaffolding, server_variables_form
+from mcontrol import db_async, server_variables_form
 from mcontrol.server_variables_form import LOADERS
+from mcontrol.services import server_service
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
 router = APIRouter()
 
-logger = logging.getLogger("mcontrol.new_server")
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,31}$")
 
@@ -127,32 +126,15 @@ async def new_submit(
     if form["jvm_extra_args"]:
         variables["jvm_extra_args"] = form["jvm_extra_args"]
 
-    await db_async.insert_scaffolding_server(
-        name=form["name"], dir=str(target), variables=variables, loader=form["loader"]
-    )
     try:
-        scaffolding.scaffold(form["name"], variables, base)
-        await db_async.mark_scaffolded(name=form["name"])
-    except Exception:
-        logger.exception("scaffold failed for %r — rolling back", form["name"])
-        orphan: Path | None = None
-        if target.exists():
-            try:
-                shutil.rmtree(target)
-            except OSError:
-                logger.exception(
-                    "rollback rmtree failed for %r at %s — operator must remove manually",
-                    form["name"],
-                    target,
-                )
-                orphan = target
-        try:
-            await db_async.delete_server(form["name"])
-        except Exception:
-            logger.exception("rollback delete_server failed for %r", form["name"])
-        detail = "failed to scaffold server"
-        if orphan is not None:
-            detail += f"; orphan directory left at {orphan}"
-        raise HTTPException(status_code=500, detail=detail) from None
+        await server_service.scaffold_new_server(
+            name=form["name"],
+            target=target,
+            variables=variables,
+            loader=form["loader"],
+            base=base,
+        )
+    except server_service.ScaffoldError as exc:
+        raise HTTPException(status_code=500, detail=exc.detail) from None
 
     return RedirectResponse(url=f"/servers/{form['name']}", status_code=303)

@@ -17,6 +17,10 @@ Decision 027:
     levels (those go through the slice-5 file editor).
   - Running → RCON; offline → mtime-checked file edit. RCON responses
     are surfaced verbatim in a flash message.
+
+The RCON-vs-offline dispatch, view assembly, and name resolution live
+in ``services.membership_service`` — this module is thin orchestration
+plus template rendering.
 """
 
 from pathlib import Path
@@ -25,68 +29,16 @@ import aiodocker
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db_async, membership, server_rcon
+from mcontrol import db_async, membership
 from mcontrol.routes._dependencies import (
     get_docker,
     get_server_or_404,
     validate_uuid,
 )
+from mcontrol.services import membership_service
 from mcontrol.templates import templates
 
 router = APIRouter()
-
-
-def _members_view(server_dir: Path) -> tuple[list[dict], list[str]]:
-    """Build the combined whitelist+ops view for the card.
-
-    Returns ``(members, malformed_kinds)`` where ``members`` is a list
-    of ``{uuid, name, in_whitelist, in_op}`` and ``malformed_kinds`` is
-    a subset of ``["whitelist", "ops"]`` for files that failed to
-    parse — the card surfaces those inline so the operator knows why a
-    section is empty even though the per-server health banner already
-    flagged the file (slice 7 PR 2 also extends ``health.py``)."""
-    malformed: list[str] = []
-    by_uuid: dict[str, dict] = {}
-
-    try:
-        wl_entries, _ = membership.read_whitelist(server_dir)
-    except membership.MalformedFileError:
-        wl_entries = []
-        malformed.append("whitelist")
-    for entry in wl_entries:
-        uuid = entry.get("uuid")
-        name = entry.get("name")
-        if not uuid or not name:
-            continue
-        by_uuid[uuid] = {
-            "uuid": uuid,
-            "name": name,
-            "in_whitelist": True,
-            "in_op": False,
-        }
-
-    try:
-        ops_entries, _ = membership.read_ops(server_dir)
-    except membership.MalformedFileError:
-        ops_entries = []
-        malformed.append("ops")
-    for entry in ops_entries:
-        uuid = entry.get("uuid")
-        name = entry.get("name")
-        if not uuid or not name:
-            continue
-        if uuid in by_uuid:
-            by_uuid[uuid]["in_op"] = True
-        else:
-            by_uuid[uuid] = {
-                "uuid": uuid,
-                "name": name,
-                "in_whitelist": False,
-                "in_op": True,
-            }
-
-    members = sorted(by_uuid.values(), key=lambda m: m["name"].lower())
-    return members, malformed
 
 
 async def _card(
@@ -97,7 +49,7 @@ async def _card(
     status_code: int = 200,
 ) -> HTMLResponse:
     server_dir = Path(server["dir"])
-    members, malformed = _members_view(server_dir)
+    members, malformed = membership_service.per_server_members_view(server_dir)
     return templates.TemplateResponse(
         request=request,
         name="_server_players_card.html",
@@ -113,69 +65,11 @@ async def _card(
     )
 
 
-def _ok(message: str) -> dict:
-    return {"kind": "ok", "message": message}
-
-
 def _error(message: str) -> dict:
     return {"kind": "error", "message": message}
 
 
-_RCON_VERB = {
-    ("whitelist", True): "whitelist add",
-    ("whitelist", False): "whitelist remove",
-    ("op", True): "op",
-    ("op", False): "deop",
-}
-
-
-async def _apply_running(
-    docker: aiodocker.Docker,
-    server: dict,
-    *,
-    kind: str,
-    name: str,
-    enabled: bool,
-) -> dict:
-    cmd = f"{_RCON_VERB[(kind, enabled)]} {name}"
-    try:
-        response = await server_rcon.run_command(docker, server, cmd)
-    except server_rcon.RconUnavailable as exc:
-        return _error(str(exc))
-    return _ok(response.strip() or f"{cmd}: ok")
-
-
-def _apply_offline(
-    server: dict, *, kind: str, uuid: str, name: str, enabled: bool
-) -> dict:
-    server_dir = Path(server["dir"])
-    try:
-        if kind == "whitelist":
-            wrote = (
-                membership.add_whitelist_entry(server_dir, uuid=uuid, name=name)
-                if enabled
-                else membership.remove_whitelist_entry(server_dir, uuid=uuid)
-            )
-        else:
-            wrote = (
-                membership.add_op_entry(server_dir, uuid=uuid, name=name)
-                if enabled
-                else membership.remove_op_entry(server_dir, uuid=uuid)
-            )
-    except membership.StaleWriteError:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"{kind}.json changed on disk between read and write — retry."
-            ),
-        ) from None
-    if not wrote:
-        return _ok(f"{name} was already {'in' if enabled else 'out of'} the {kind}.")
-    verb = "added to" if enabled else "removed from"
-    return _ok(f"{name} {verb} the {kind} (offline file edit).")
-
-
-async def _flip(
+async def _flip_with_stale_guard(
     docker: aiodocker.Docker,
     server: dict,
     *,
@@ -184,11 +78,21 @@ async def _flip(
     name: str,
     enabled: bool,
 ) -> dict:
-    if server.get("state") == "running":
-        return await _apply_running(
-            docker, server, kind=kind, name=name, enabled=enabled
+    """Route-layer wrapper around ``membership_service.apply_membership``
+    that maps the offline mtime-drift exception to a 409 (RCON path
+    swallows upstream errors into a flash; the offline path lets file-
+    level errors propagate so HTTP can carry them)."""
+    try:
+        return await membership_service.apply_membership(
+            docker, server, kind=kind, uuid=uuid, name=name, enabled=enabled
         )
-    return _apply_offline(server, kind=kind, uuid=uuid, name=name, enabled=enabled)
+    except membership.StaleWriteError:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{kind}.json changed on disk between read and write — retry."
+            ),
+        ) from None
 
 
 @router.get("/servers/{name}/players", response_class=HTMLResponse)
@@ -214,7 +118,7 @@ async def add_from_roster(
             flash=_error("That UUID is not in the roster."),
             status_code=422,
         )
-    flash = await _flip(
+    flash = await _flip_with_stale_guard(
         docker,
         server,
         kind="whitelist",
@@ -235,8 +139,12 @@ async def toggle_whitelist(
     uuid: str = Depends(validate_uuid),
     enabled: bool = Form(False),
 ) -> HTMLResponse:
-    player_name = await _resolve_player_name(server, uuid)
-    flash = await _flip(
+    player_name = await membership_service.resolve_player_name(server, uuid)
+    if player_name is None:
+        raise HTTPException(
+            status_code=404, detail="Could not resolve a name for that UUID."
+        )
+    flash = await _flip_with_stale_guard(
         docker,
         server,
         kind="whitelist",
@@ -255,34 +163,12 @@ async def toggle_op(
     uuid: str = Depends(validate_uuid),
     enabled: bool = Form(False),
 ) -> HTMLResponse:
-    player_name = await _resolve_player_name(server, uuid)
-    flash = await _flip(
+    player_name = await membership_service.resolve_player_name(server, uuid)
+    if player_name is None:
+        raise HTTPException(
+            status_code=404, detail="Could not resolve a name for that UUID."
+        )
+    flash = await _flip_with_stale_guard(
         docker, server, kind="op", uuid=uuid, name=player_name, enabled=enabled
     )
     return await _card(request, server, flash=flash)
-
-
-async def _resolve_player_name(server: dict, uuid: str) -> str:
-    """Best-effort player-name lookup for an RCON command.
-
-    Roster takes precedence (decision 027 — roster row is the
-    operator-trusted source). Falls back to whichever name appears in
-    the on-disk files (handles the case where a UUID is on a server
-    but isn't in the roster yet — Import is the canonical fix, but
-    toggling should still work)."""
-    player = await db_async.get_player(uuid)
-    if player is not None:
-        return player["name"]
-    server_dir = Path(server["dir"])
-    for reader in (membership.read_whitelist, membership.read_ops):
-        try:
-            entries, _ = reader(server_dir)
-        except membership.MalformedFileError:
-            continue
-        for entry in entries:
-            if entry.get("uuid") == uuid and entry.get("name"):
-                return entry["name"]
-    raise HTTPException(
-        status_code=404,
-        detail="Could not resolve a name for that UUID.",
-    )
