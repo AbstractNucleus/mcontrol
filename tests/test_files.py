@@ -20,13 +20,12 @@ def fake_server(monkeypatch, server_dir: Path):
     rows: dict[str, dict] = {
         "atm10": {"name": "atm10", "dir": str(server_dir)}
     }
-    from mcontrol import db
-    from mcontrol.routes import files as files_routes
+    from mcontrol import db, file_search
     monkeypatch.setattr(db, "get_server", rows.get)
     # The search index is a module-level singleton keyed by server name;
     # clear it between tests so cached state from a previous tmp_path
     # doesn't bleed into this one.
-    files_routes._search_index.clear()
+    file_search._search_index.clear()
     return rows
 
 
@@ -1476,7 +1475,7 @@ async def test_search_caps_at_limit_and_marks_truncated(
     client, fake_server, server_dir: Path, monkeypatch
 ) -> None:
     """Generate more than the cap so the truncated badge shows."""
-    monkeypatch.setattr("mcontrol.routes.files._SEARCH_LIMIT", 5)
+    monkeypatch.setattr("mcontrol.routes.files.search._SEARCH_LIMIT", 5)
     for i in range(20):
         (server_dir / f"matchX-{i}.txt").write_text("x", encoding="utf-8")
 
@@ -1620,12 +1619,12 @@ async def test_search_cache_ttl_expires(
 ) -> None:
     """An out-of-band edit doesn't invalidate the cache, but the TTL
     safety net rebuilds the index after `_INDEX_TTL_SECONDS`."""
-    from mcontrol.routes import files as files_routes
+    from mcontrol import file_search
 
     (server_dir / "old.txt").write_text("x", encoding="utf-8")
 
     clock = [1000.0]
-    monkeypatch.setattr(files_routes, "_now", lambda: clock[0])
+    monkeypatch.setattr(file_search, "_now", lambda: clock[0])
 
     first = await client.get(
         "/servers/atm10/files/search", params={"q": "newfile"}
@@ -1642,7 +1641,7 @@ async def test_search_cache_ttl_expires(
     assert "newfile.txt" not in stale.text
 
     # Advance past the TTL → cache is treated as expired and rebuilt.
-    clock[0] += files_routes._INDEX_TTL_SECONDS + 1
+    clock[0] += file_search._INDEX_TTL_SECONDS + 1
 
     fresh = await client.get(
         "/servers/atm10/files/search", params={"q": "newfile"}
@@ -1666,10 +1665,9 @@ async def test_search_cache_two_servers_isolated(
         "srvA": {"name": "srvA", "dir": str(a_dir)},
         "srvB": {"name": "srvB", "dir": str(b_dir)},
     }
-    from mcontrol import db
-    from mcontrol.routes import files as files_routes
+    from mcontrol import db, file_search
     monkeypatch.setattr(db, "get_server", rows.get)
-    files_routes._search_index.clear()
+    file_search._search_index.clear()
 
     # Warm both caches.
     ra = await client.get("/servers/srvA/files/search", params={"q": "alpha"})
@@ -1683,8 +1681,8 @@ async def test_search_cache_two_servers_isolated(
     )
     assert mk.status_code == 200
 
-    assert "srvA" not in files_routes._search_index
-    assert "srvB" in files_routes._search_index
+    assert "srvA" not in file_search._search_index
+    assert "srvB" in file_search._search_index
 
 
 async def test_search_cache_skip_rules_apply_at_build(
