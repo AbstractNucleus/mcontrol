@@ -106,6 +106,10 @@ async def new_submit(
             collision = server_variables_form.check_port_collision(None, form["port"])
             if collision:
                 errors["port"] = collision
+            else:
+                bound = server_variables_form.check_port_bound(form["port"])
+                if bound:
+                    errors["port"] = bound
 
     if errors:
         return _render_form(request, form=form, errors=errors, status_code=422)
@@ -126,12 +130,24 @@ async def new_submit(
         db.mark_scaffolded(name=form["name"])
     except Exception:
         logger.exception("scaffold failed for %r — rolling back", form["name"])
+        orphan: Path | None = None
         if target.exists():
-            shutil.rmtree(target, ignore_errors=True)
+            try:
+                shutil.rmtree(target)
+            except OSError:
+                logger.exception(
+                    "rollback rmtree failed for %r at %s — operator must remove manually",
+                    form["name"],
+                    target,
+                )
+                orphan = target
         try:
             db.delete_server(form["name"])
         except Exception:
             logger.exception("rollback delete_server failed for %r", form["name"])
-        raise HTTPException(status_code=500, detail="failed to scaffold server") from None
+        detail = "failed to scaffold server"
+        if orphan is not None:
+            detail += f"; orphan directory left at {orphan}"
+        raise HTTPException(status_code=500, detail=detail) from None
 
     return RedirectResponse(url=f"/servers/{form['name']}", status_code=303)
