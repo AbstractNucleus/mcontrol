@@ -79,6 +79,60 @@ async def test_start_calls_docker_start_and_returns_state_pill(
     assert ("update_server_state", {"name": "atm10", "state": "running"}) in stub_db_writes
 
 
+async def test_start_with_listener_bound_commits_running(
+    client, fake_server_row, stub_db_writes, stub_docker, monkeypatch
+):
+    """When the post-start TCP probe finds a listener, state is 'running'."""
+    from mcontrol.routes import lifecycle as lifecycle_route
+
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "exited", "variables": {"port": 25565},
+    }
+
+    seen_ports: list[int] = []
+
+    async def fake_probe(port):
+        seen_ports.append(port)
+        return True
+
+    monkeypatch.setattr(lifecycle_route, "_probe_listener", fake_probe)
+
+    response = await client.post("/servers/atm10/lifecycle/start")
+
+    assert response.status_code == 200
+    assert "state-pill--running" in response.text
+    assert seen_ports == [25565]
+    assert ("update_server_state", {"name": "atm10", "state": "running"}) in stub_db_writes
+
+
+async def test_start_with_listener_probe_timeout_commits_starting(
+    client, fake_server_row, stub_db_writes, stub_docker, monkeypatch
+):
+    """When the probe times out the state is 'starting', not 'running'."""
+    from mcontrol.routes import lifecycle as lifecycle_route
+
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "exited", "variables": {"port": 25565},
+    }
+
+    async def fake_probe(_port):
+        return False
+
+    monkeypatch.setattr(lifecycle_route, "_probe_listener", fake_probe)
+
+    response = await client.post("/servers/atm10/lifecycle/start")
+
+    assert response.status_code == 200
+    assert "state-pill--starting" in response.text
+    assert ("update_server_state", {"name": "atm10", "state": "starting"}) in stub_db_writes
+    # The Stop button must remain reachable so the operator can recover
+    # from a stuck start without having to wait for a manual rescan.
+    stop = _button_chunk(response.text, "stop")
+    assert not _is_disabled(stop)
+
+
 async def test_restart_calls_docker_restart_and_returns_state_pill(
     client, fake_server_row, stub_db_writes, stub_docker
 ):
@@ -100,6 +154,37 @@ async def test_lifecycle_returns_404_for_unknown_server(
 ):
     response = await client.post("/servers/unknown/lifecycle/start")
     assert response.status_code == 404
+
+
+async def test_probe_listener_returns_true_when_port_answers(monkeypatch):
+    """The probe returns True as soon as a TCP connect succeeds."""
+    from mcontrol.routes import lifecycle as lifecycle_route
+
+    def fake_create_connection(*_a, **_kw):
+        class _Sock:
+            def __enter__(self): return self
+            def __exit__(self, *exc): return False
+        return _Sock()
+
+    monkeypatch.setattr(lifecycle_route.socket, "create_connection", fake_create_connection)
+
+    assert await lifecycle_route._probe_listener(25565) is True
+
+
+async def test_probe_listener_returns_false_on_persistent_refusal(monkeypatch):
+    """The probe returns False when the connect keeps failing until the
+    deadline. We shrink the deadline so the test doesn't actually wait
+    10s."""
+    from mcontrol.routes import lifecycle as lifecycle_route
+
+    def fake_create_connection(*_a, **_kw):
+        raise ConnectionRefusedError()
+
+    monkeypatch.setattr(lifecycle_route.socket, "create_connection", fake_create_connection)
+    monkeypatch.setattr(lifecycle_route, "_LISTENER_PROBE_DEADLINE_S", 0.05)
+    monkeypatch.setattr(lifecycle_route, "_LISTENER_PROBE_INTERVAL_S", 0.01)
+
+    assert await lifecycle_route._probe_listener(25565) is False
 
 
 async def test_start_timeout_returns_flash_and_does_not_update_state(

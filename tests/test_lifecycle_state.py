@@ -32,6 +32,17 @@ def test_transient_states_disable_all_no_accent(state):
     assert view["accent"] is None
 
 
+def test_starting_state_keeps_stop_and_restart_reachable():
+    """Decision 041: 'starting' means the container is up but the
+    listener hasn't bound. Operator can Stop a stuck-start or Restart
+    it; Start would be a no-op."""
+    view = lifecycle_state.view("starting")
+    assert view["start_disabled"] is True
+    assert view["stop_disabled"] is False
+    assert view["restart_disabled"] is False
+    assert view["accent"] is None
+
+
 @pytest.mark.parametrize("state", ["unknown", "bogus", "", None])
 def test_unrecognised_state_enables_all_no_accent(state):
     view = lifecycle_state.view(state)
