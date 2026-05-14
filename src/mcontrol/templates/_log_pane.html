@@ -5,6 +5,10 @@
   </header>
   <pre id="log-stream"
        class="log-pane__stream"
+       role="log"
+       aria-live="polite"
+       aria-atomic="false"
+       aria-label="Server log output"
        hx-ext="sse"
        sse-connect="/servers/{{ server.name }}/logs"
        sse-swap="message"
