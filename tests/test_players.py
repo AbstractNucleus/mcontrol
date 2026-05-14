@@ -417,6 +417,28 @@ async def test_remove_modal_hides_remove_all_when_no_memberships(
     assert 'value="roster"' in body  # "Roster only" still rendered
 
 
+async def test_remove_modal_carries_a11y_dialog_markup(
+    client, fake_db_with_delete, tmp_path
+):
+    # Decision 037 contract: the modal opts into the shared focus-trap
+    # helper by carrying role=dialog + aria-modal + aria-labelledby +
+    # data-modal-root, and the Cancel button opts into the helper's
+    # click-to-close by carrying data-modal-close. The shared script
+    # only touches modal roots that declare these hooks.
+    fake_db_with_delete["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    fake_db_with_delete["servers"] = [_server_row(tmp_path, "atm10")]
+
+    response = await client.get(f"/players/{_NOTCH_UUID}/remove")
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'role="dialog"' in body
+    assert 'aria-modal="true"' in body
+    assert 'aria-labelledby="player-remove-title"' in body
+    assert "data-modal-root" in body
+    assert "data-modal-close" in body
+
+
 async def test_post_scope_roster_deletes_row_only(
     client, fake_db_with_delete, tmp_path
 ):

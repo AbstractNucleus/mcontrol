@@ -134,6 +134,37 @@ async def test_get_delete_confirm_renders_for_valid_tombstone_name(trash_client)
     assert "confirm_name" in body
 
 
+async def test_empty_confirm_carries_a11y_dialog_markup(trash_client):
+    # Decision 037: the shared focus-trap helper triggers on
+    # role=dialog + aria-modal + aria-labelledby + data-modal-root.
+    # Same contract for both trash modals.
+    client, base = trash_client
+    now = int(time.time())
+    _make_tombstone(base, "stale", now - 8 * 86400)
+
+    response = await client.get("/trash/empty/confirm")
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'role="dialog"' in body
+    assert 'aria-modal="true"' in body
+    assert 'aria-labelledby="trash-empty-title"' in body
+    assert "data-modal-root" in body
+
+
+async def test_delete_confirm_carries_a11y_dialog_markup(trash_client):
+    # Decision 037: same hooks on the per-tombstone delete modal.
+    client, _base = trash_client
+    response = await client.get("/trash/.deleted-atm10-1700000000/confirm")
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'role="dialog"' in body
+    assert 'aria-modal="true"' in body
+    assert 'aria-labelledby="trash-delete-title"' in body
+    assert "data-modal-root" in body
+
+
 # ---------------------------------------------------------------------------
 # POST /trash/empty
 # ---------------------------------------------------------------------------

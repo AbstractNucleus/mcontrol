@@ -30,3 +30,20 @@ async def test_flash_js_is_served(client):
     assert response.status_code == 200
     content_type = response.headers["content-type"]
     assert content_type.startswith(("application/javascript", "text/javascript"))
+
+
+async def test_modals_js_is_served(client):
+    # Decision 037: shared focus-trap / return-focus helper for the three
+    # overlay modals (player-remove, trash-empty, trash-delete).
+    response = await client.get("/static/modals.js")
+    assert response.status_code == 200
+    content_type = response.headers["content-type"]
+    assert content_type.startswith(("application/javascript", "text/javascript"))
+    # Gate on the two opt-in attributes and the two slot ids the helper
+    # wires, so the contract between the module and the templates stays
+    # checked in one place.
+    body = response.text
+    assert "data-modal-root" in body
+    assert "data-modal-close" in body
+    assert "player-modal" in body
+    assert "trash-modal" in body
