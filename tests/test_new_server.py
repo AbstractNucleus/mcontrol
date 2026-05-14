@@ -284,3 +284,54 @@ async def test_post_rolls_back_when_mark_scaffolded_raises(
     # Disk-side: scaffold ran successfully, so the dir + files exist —
     # rollback's rmtree must have cleared them.
     assert not (base_dir / "newshire").exists()
+
+
+async def test_post_surfaces_orphan_path_when_rollback_rmtree_fails(
+    app_client, base_dir, fake_db, monkeypatch
+):
+    """Issue #93: rmtree failure during rollback must be loud — the
+    orphan path appears in the 500 detail so the operator can act."""
+    import shutil
+
+    from mcontrol import scaffolding
+
+    def boom(name, variables, base):
+        (base / name).mkdir(parents=True, exist_ok=True)
+        (base / name / "stuck").write_text("oops")
+        raise RuntimeError("simulated scaffold failure")
+
+    def rmtree_fails(path):
+        raise OSError("simulated rmtree failure")
+
+    monkeypatch.setattr(scaffolding, "scaffold", boom)
+    monkeypatch.setattr(shutil, "rmtree", rmtree_fails)
+
+    response = await app_client.post("/servers/new", data=_form())
+
+    assert response.status_code == 500
+    orphan = (base_dir / "newshire").resolve()
+    detail = response.json()["detail"]
+    assert str(orphan) in detail
+    assert "orphan" in detail.lower()
+
+
+# ---- POST host-port probe (issue #124) -----------------------------
+
+
+async def test_post_rejects_when_host_port_already_bound(
+    app_client, fake_db, monkeypatch
+):
+    from mcontrol import server_variables_form
+
+    monkeypatch.setattr(
+        server_variables_form,
+        "check_port_bound",
+        lambda port: f"Port {port} is already bound on this host.",
+    )
+
+    response = await app_client.post("/servers/new", data=_form())
+
+    assert response.status_code == 422
+    assert "25575" in response.text
+    assert "already bound on this host" in response.text
+    assert fake_db["writes"] == []

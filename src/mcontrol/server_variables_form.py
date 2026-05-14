@@ -5,11 +5,14 @@ all of which accept the same (memory_budget_gb, port, server_jar,
 jvm_extra_args) fields with the same rules.
 """
 
+import socket
+
 from mcontrol import db
 
 PORT_MIN = 1024
 PORT_MAX = 65535
 MEMORY_MIN_GB = 2
+_PORT_PROBE_TIMEOUT = 0.5
 
 
 def validate(form: dict) -> dict[str, str]:
@@ -38,3 +41,15 @@ def check_port_collision(exclude_name: str | None, port: int) -> str | None:
         if row_vars.get("port") == port:
             return f"Port {port} is already used by '{row['name']}'."
     return None
+
+
+def check_port_bound(port: int) -> str | None:
+    """Return an error string if something on the host is already
+    listening on *port*. Catches collisions with non-mcontrol services
+    that ``check_port_collision`` can't see (issue #124).
+    """
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=_PORT_PROBE_TIMEOUT):
+            return f"Port {port} is already bound on this host."
+    except OSError:
+        return None

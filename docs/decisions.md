@@ -55,6 +55,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 034 | Operator-triggered discovery via `POST /rescan`              | Accepted | 2026-05-11 |
 | 035 | Topnav tombstone count badge via Jinja global                | Accepted | 2026-05-11 |
 | 036 | Lifespan-scoped aiodocker client, injected via Depends       | Accepted | 2026-05-14 |
+| 037 | new-server hardening: surfaced rollback errors + TCP-probe port collision | Accepted | 2026-05-14 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -659,3 +660,24 @@ Rejected:
 - **Async context-manager per route (`async with get_docker() as docker: ...`).** Reintroduces per-request setup cost. The whole point is to amortise the construction over process lifetime.
 
 Trade-off: `app.state.docker` is mutable and hands the same `aiodocker.Docker` instance to every concurrent caller. `aiodocker.Docker` is built on an `aiohttp.ClientSession` which is safe to share across tasks. If a future migration to a different docker client breaks that assumption, the lifespan setup is the one place to introduce pooling. The migration also moves `aiodocker.Docker` construction out of every test path — `tests/conftest.py` now hands a `MagicMock`-shaped fake into `app.state.docker` once, and unit tests pass `_FakeDocker()` instances directly to the function under test rather than monkeypatching the constructor.
+
+## 037. new-server hardening: surfaced rollback errors + TCP-probe port collision
+
+**Status:** Accepted · 2026-05-14
+
+Two narrow fixes to `routes/new_server.py`, paired because they live in the same handler and ship together.
+
+**Rollback visibility (issue #93).** Pre-decision, the rollback path used `shutil.rmtree(target, ignore_errors=True)`: an `rmtree` failure on a partial scaffold was silently swallowed and the operator only saw a generic 500. The handler now wraps `rmtree` in `try/except OSError`, logs at ERROR with the orphan path and traceback, and appends `; orphan directory left at <path>` to the 500 detail. The operator sees the path that needs manual cleanup; the DB row is still best-effort deleted regardless.
+
+Rejected: a startup reconcile task that scans for orphan dirs / orphan DB rows (issue #93's option A). That's a real feature with its own design surface (what counts as orphan? what's the reconcile cadence? does it run before or after discovery?) and belongs in a separate issue. The cheap fix here just makes the existing failure mode loud; it does not promise atomic cleanup.
+
+**Host-port collision (issue #124).** Pre-decision, `check_port_collision` only compared against other mcontrol-managed rows in the DB. A port bound by anything outside mcontrol — another container, a host service, anything — was invisible until the docker start failed minutes later with an obscure bind error. New `server_variables_form.check_port_bound(port)` does a synchronous `socket.create_connection(("127.0.0.1", port), timeout=0.5)`: if the connect succeeds, something is listening and the form is rejected with `"Port <N> is already bound on this host."`. The new_server route runs this immediately after `check_port_collision`.
+
+Rejected:
+
+- **Shell out to `ss` / `lsof` / `docker port`.** Platform-specific binaries, extra dependencies, more failure surface for marginal coverage. The TCP probe works on every platform Python runs on with zero new deps.
+- **Wrap the probe in `asyncio.to_thread`.** The existing handler already calls sync `db.list_servers()` inline; a 0.5s worst-case socket timeout is comparable to a sync DB round-trip on a slow link. Matching the surrounding style was preferred over introducing the first `to_thread` in this module.
+- **Apply the probe to migrate and variables routes too.** Tempting given the shared validator, but migrate runs only on stopped legacy servers (port should be free) and variables edits often keep the server's own port while it's running (the probe would false-positive against the server's own listener). The collision check already excludes the server's own row; mirroring that exclusion in a host-level probe is non-trivial. Scoped to `new_server` where the question "is anything listening?" has a clean yes/no answer.
+- **Probe IPv6 (`::1` / `::`).** Docker's default port bindings on the target host are IPv4-only (Decision 008 ties this to a Linux host with standard Docker networking). If we later run dual-stack, this entry gets a follow-up; the IPv4 probe catches the realistic collision today.
+
+Trade-off: the probe blocks the event loop for up to 0.5s when nothing is listening (the OS waits the full timeout before giving up). That's the worst case per failed-collision check — happy-path connects refuse instantly, and the form already does a DB round-trip in the same handler. The check is best-effort: a port that becomes bound between probe and docker start still fails late, and a port behind a firewall that drops SYN silently looks free. Acceptable — the goal is "catch the obvious case at form time," not "guarantee container start succeeds."
