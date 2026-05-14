@@ -5,6 +5,10 @@
   </header>
   <pre id="console-stream"
        class="console-pane__stream"
+       role="log"
+       aria-live="polite"
+       aria-atomic="false"
+       aria-label="RCON console output"
        hx-ext="sse"
        sse-connect="/servers/{{ server.name }}/rcon"
        sse-swap="message"
@@ -12,7 +16,7 @@
   <form class="console-pane__input"
         hx-post="/servers/{{ server.name }}/rcon"
         hx-swap="none">
-    <input type="text" name="command" placeholder="say hello" autocomplete="off" required>
+    <input type="text" name="command" aria-label="RCON command" placeholder="say hello" autocomplete="off" required>
     <button type="submit" class="btn btn--primary">Send</button>
   </form>
 </section>

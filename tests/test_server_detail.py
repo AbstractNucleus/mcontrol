@@ -129,10 +129,27 @@ async def test_server_detail_restarting_state_disables_all_no_accent(
         assert 'btn--primary' not in chunk, f"{verb} should not carry accent in restarting state"
 
 
+def _element_chunk(body: str, element_id: str) -> str:
+    """Return the opening-tag substring for the element with `id="<element_id>"`."""
+    needle = f'id="{element_id}"'
+    idx = body.index(needle)
+    open_tag = body.rfind('<', 0, idx)
+    close_tag = body.index('>', idx)
+    return body[open_tag:close_tag + 1]
+
+
 async def test_server_detail_renders_log_pane(client, fake_get_server):
     fake_get_server["atm10"] = _row("atm10")
     response = await client.get("/servers/atm10")
-    assert 'sse-connect="/servers/atm10/logs"' in response.text
+    body = response.text
+    assert 'sse-connect="/servers/atm10/logs"' in body
+
+    # Live, chronological log feed: screen readers need role="log" + a name.
+    log_stream = _element_chunk(body, "log-stream")
+    assert 'role="log"' in log_stream
+    assert 'aria-live="polite"' in log_stream
+    assert 'aria-atomic="false"' in log_stream
+    assert 'aria-label="Server log output"' in log_stream
 
 
 async def test_server_detail_renders_console_pane(client, fake_get_server):
@@ -141,6 +158,14 @@ async def test_server_detail_renders_console_pane(client, fake_get_server):
     body = response.text
     assert 'sse-connect="/servers/atm10/rcon"' in body
     assert 'hx-post="/servers/atm10/rcon"' in body
+
+    # The RCON stream is a live log; the input is a labeled command field.
+    console_stream = _element_chunk(body, "console-stream")
+    assert 'role="log"' in console_stream
+    assert 'aria-live="polite"' in console_stream
+    assert 'aria-atomic="false"' in console_stream
+    assert 'aria-label="RCON console output"' in console_stream
+    assert 'aria-label="RCON command"' in body
 
 
 async def test_server_detail_renders_bindings_card(client, fake_get_server):
