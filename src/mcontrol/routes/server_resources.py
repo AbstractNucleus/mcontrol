@@ -18,11 +18,12 @@ contract relies on ``dir`` being DB-sourced, not URL-sourced.
 from datetime import datetime
 from pathlib import Path
 
+import aiodocker
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol import db, resources
-from mcontrol.routes._dependencies import get_server_or_404
+from mcontrol.routes._dependencies import get_docker, get_server_or_404
 from mcontrol.templates import templates
 
 router = APIRouter()
@@ -35,10 +36,12 @@ _CAPTION_BY_STATUS = {
 
 @router.get("/servers/{name}/resources", response_class=HTMLResponse)
 async def get_card(
-    request: Request, server: dict = Depends(get_server_or_404)
+    request: Request,
+    server: dict = Depends(get_server_or_404),
+    docker: aiodocker.Docker = Depends(get_docker),
 ) -> HTMLResponse:
     container_name = db.container_name_for(server)
-    stats = await resources.read_container_stats(container_name)
+    stats = await resources.read_container_stats(docker, container_name)
     disk_bytes = resources.read_disk_usage(Path(server["dir"]))
 
     context: dict = {

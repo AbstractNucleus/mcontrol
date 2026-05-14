@@ -43,7 +43,7 @@ async def test_run_discovery_skips_when_base_path_missing(tmp_path, db_calls, mo
         AsyncMock(return_value={}),
     )
 
-    count = await discovery.run_discovery(tmp_path / "does-not-exist")
+    count = await discovery.run_discovery(object(),tmp_path / "does-not-exist")
 
     assert count == 0
     assert db_calls["calls"] == []
@@ -57,7 +57,7 @@ async def test_run_discovery_inserts_new_dirs(tmp_path, db_calls, monkeypatch):
         AsyncMock(return_value={"atm10": "running"}),
     )
 
-    count = await discovery.run_discovery(tmp_path)
+    count = await discovery.run_discovery(object(),tmp_path)
 
     assert count == 2
     inserts = [c for c in db_calls["calls"] if c[0] == "insert"]
@@ -85,7 +85,7 @@ async def test_run_discovery_updates_state_only_for_existing_rows(tmp_path, db_c
         AsyncMock(return_value={"atm10-prod": "running"}),
     )
 
-    count = await discovery.run_discovery(tmp_path)
+    count = await discovery.run_discovery(object(),tmp_path)
 
     assert count == 1
     inserts = [c for c in db_calls["calls"] if c[0] == "insert"]
@@ -106,7 +106,7 @@ async def test_run_discovery_falls_back_to_unknown_when_docker_silent(
         AsyncMock(return_value={}),
     )
 
-    count = await discovery.run_discovery(tmp_path)
+    count = await discovery.run_discovery(object(),tmp_path)
 
     assert count == 1
     inserts = [c for c in db_calls["calls"] if c[0] == "insert"]
@@ -122,7 +122,7 @@ async def test_run_discovery_ignores_non_directories(tmp_path, db_calls, monkeyp
         AsyncMock(return_value={}),
     )
 
-    count = await discovery.run_discovery(tmp_path)
+    count = await discovery.run_discovery(object(),tmp_path)
 
     assert count == 1
 
@@ -135,7 +135,7 @@ async def test_run_discovery_processes_dirs_in_sorted_order(tmp_path, db_calls, 
         AsyncMock(return_value={}),
     )
 
-    await discovery.run_discovery(tmp_path)
+    await discovery.run_discovery(object(),tmp_path)
 
     seen = [c[1]["name"] for c in db_calls["calls"]]
     assert seen == ["alpha", "mu", "zeta"]
@@ -156,7 +156,7 @@ async def test_run_discovery_skips_dot_prefixed_directories(
         AsyncMock(return_value={}),
     )
 
-    count = await discovery.run_discovery(tmp_path)
+    count = await discovery.run_discovery(object(),tmp_path)
 
     assert count == 1
     seen = [c[1]["name"] for c in db_calls["calls"]]
@@ -182,7 +182,7 @@ async def test_run_discovery_state_lookup_uses_container_name_override(
         AsyncMock(return_value={"atm10-prod": "running"}),
     )
 
-    await discovery.run_discovery(tmp_path)
+    await discovery.run_discovery(object(),tmp_path)
 
     updates = [c for c in db_calls["calls"] if c[0] == "update_state"]
     assert updates == [("update_state", {"name": "atm10", "state": "running"})]

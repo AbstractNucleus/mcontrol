@@ -36,9 +36,9 @@ def stub_docker(monkeypatch):
     stopped: list[str] = []
     restarted: list[str] = []
 
-    async def fake_start(name): started.append(name)
-    async def fake_stop(name): stopped.append(name)
-    async def fake_restart(name): restarted.append(name)
+    async def fake_start(_docker, name): started.append(name)
+    async def fake_stop(_docker, name): stopped.append(name)
+    async def fake_restart(_docker, name): restarted.append(name)
 
     monkeypatch.setattr(docker_client, "start", fake_start)
     monkeypatch.setattr(docker_client, "stop", fake_stop)
@@ -113,7 +113,7 @@ async def test_start_timeout_returns_flash_and_does_not_update_state(
         "state": "exited",
     }
 
-    async def _timeout(name): raise TimeoutError()
+    async def _timeout(_docker, name): raise TimeoutError()
     monkeypatch.setattr(docker_client, "start", _timeout)
 
     response = await client.post("/servers/atm10/lifecycle/start")
@@ -134,7 +134,7 @@ async def test_stop_timeout_returns_flash_and_does_not_update_state(
         "state": "running",
     }
 
-    async def _timeout(name): raise TimeoutError()
+    async def _timeout(_docker, name): raise TimeoutError()
     monkeypatch.setattr(docker_client, "stop", _timeout)
 
     response = await client.post("/servers/atm10/lifecycle/stop")
@@ -155,7 +155,7 @@ async def test_restart_timeout_returns_flash_and_does_not_update_state(
         "state": "running",
     }
 
-    async def _timeout(name): raise TimeoutError()
+    async def _timeout(_docker, name): raise TimeoutError()
     monkeypatch.setattr(docker_client, "restart", _timeout)
 
     response = await client.post("/servers/atm10/lifecycle/restart")

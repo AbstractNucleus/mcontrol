@@ -47,7 +47,8 @@ def patch_probes(monkeypatch):
         return result
 
     monkeypatch.setattr(healthz, "_probe_db", lambda: _make("db"))
-    monkeypatch.setattr(healthz, "_probe_docker", lambda: _make("docker"))
+    # _probe_docker takes a docker arg post-#98; tests don't care about it.
+    monkeypatch.setattr(healthz, "_probe_docker", lambda _docker: _make("docker"))
     monkeypatch.setattr(healthz, "_probe_base_path", lambda: _make("base_path"))
     return state
 
@@ -288,31 +289,31 @@ async def test_probe_base_path_fails_when_readonly(env, monkeypatch, tmp_path):
 
 
 async def test_build_report_status_code_mapping_all_ok(monkeypatch):
-    async def fake_ok():
+    async def fake_ok(*_args):
         return {"status": "ok", "detail": "fine"}
 
     monkeypatch.setattr(healthz, "_probe_db", fake_ok)
     monkeypatch.setattr(healthz, "_probe_docker", fake_ok)
     monkeypatch.setattr(healthz, "_probe_base_path", fake_ok)
 
-    code, payload = await healthz.build_report()
+    code, payload = await healthz.build_report(object())
 
     assert code == 200
     assert payload["status"] == "ok"
 
 
 async def test_build_report_status_code_mapping_one_fail(monkeypatch):
-    async def fake_ok():
+    async def fake_ok(*_args):
         return {"status": "ok", "detail": "fine"}
 
-    async def fake_fail():
+    async def fake_fail(*_args):
         return {"status": "fail", "detail": "no"}
 
     monkeypatch.setattr(healthz, "_probe_db", fake_ok)
     monkeypatch.setattr(healthz, "_probe_docker", fake_fail)
     monkeypatch.setattr(healthz, "_probe_base_path", fake_ok)
 
-    code, payload = await healthz.build_report()
+    code, payload = await healthz.build_report(object())
 
     assert code == 503
     assert payload["status"] == "degraded"
@@ -322,7 +323,7 @@ async def test_build_report_runs_probes_concurrently(monkeypatch):
     """Total elapsed should be near a single probe's duration, not the sum.
     With three 100ms probes and concurrent execution, we expect well under
     the 300ms serial bound."""
-    async def slow_ok():
+    async def slow_ok(*_args):
         await asyncio.sleep(0.1)
         return {"status": "ok", "detail": "fine"}
 
@@ -332,7 +333,7 @@ async def test_build_report_runs_probes_concurrently(monkeypatch):
 
     import time as _t
     started = _t.monotonic()
-    code, payload = await healthz.build_report()
+    code, payload = await healthz.build_report(object())
     elapsed = _t.monotonic() - started
 
     assert code == 200

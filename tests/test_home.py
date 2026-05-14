@@ -25,7 +25,7 @@ def fake_stats(monkeypatch):
     """
     by_name: dict[str, object] = {}
 
-    async def fake_read(container_name: str):
+    async def fake_read(_docker, container_name: str):
         result = by_name.get(container_name, {"status": "unreachable"})
         if isinstance(result, Exception):
             raise result

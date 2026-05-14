@@ -2,9 +2,21 @@
 
 from uuid import UUID
 
-from fastapi import Depends, HTTPException
+import aiodocker
+from fastapi import Depends, HTTPException, Request
 
 from mcontrol import db
+
+
+def get_docker(request: Request) -> aiodocker.Docker:
+    """Return the lifespan-scoped aiodocker client (decision #98).
+
+    Routes inject this via ``Depends(get_docker)`` and pass it into
+    ``docker_client.*``, ``resources.*``, ``server_rcon.*``, etc. The
+    single client is opened in ``main.lifespan`` startup and closed on
+    shutdown — see ``mcontrol.main.lifespan``.
+    """
+    return request.app.state.docker
 
 
 def get_server_or_404(name: str) -> dict:

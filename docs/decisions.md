@@ -54,6 +54,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 033 | Lifecycle buttons: state-aware disable + accent on next-action  | Accepted | 2026-05-11 |
 | 034 | Operator-triggered discovery via `POST /rescan`              | Accepted | 2026-05-11 |
 | 035 | Topnav tombstone count badge via Jinja global                | Accepted | 2026-05-11 |
+| 036 | Lifespan-scoped aiodocker client, injected via Depends       | Accepted | 2026-05-14 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -642,3 +643,19 @@ Rejected:
 - **Threshold the badge (only show when count > 5).** Premature; single-operator scale, the operator wants to know if anything is in there. The "0 → no badge" case already handles the "nothing to see" surface.
 
 Trade-off: every page render does a `scandir(SERVER_BASE_PATH)`. At single-host scale with a handful of server dirs and tombstones, this is sub-millisecond and well below the noise floor of the rest of the request (DB call, Docker daemon call). If a future deployment ever hosts hundreds of tombstones, the scandir is still O(N) in directory entries (no per-entry stat), so the floor stays low.
+
+## 036. Lifespan-scoped aiodocker client, injected via Depends
+
+**Status:** Accepted · 2026-05-14
+
+Pre-decision, every entry point in `docker_client.py` (lifecycle start/stop/restart, log streaming, network attach/detach, `container_states_by_name`) opened a fresh `aiodocker.Docker(url=...)` on the way in and `await docker.close()` on the way out. Same pattern in `resources.read_container_stats` and `healthz._probe_docker`. The home page renders one client per row to read live container stats; a busy operator pulling logs while toggling state opens several concurrent clients per request. Cheap on a healthy host, wasteful at fleet scale, and structurally awkward to mock — every test had to monkeypatch `aiodocker.Docker` rather than handing a fake to the unit under test.
+
+This entry consolidates the client. `main.lifespan` constructs a single `aiodocker.Docker(url=settings.docker_host)` at startup, stashes it on `app.state.docker`, and `await`s `docker.close()` on shutdown. Route handlers receive it via `Depends(get_docker)` (defined in `routes/_dependencies.py`, returns `request.app.state.docker`) and pass it as the first positional argument into `docker_client.*`, `resources.read_container_stats`, `server_rcon.run_command`. Non-route callers (`discovery.run_discovery` from lifespan, `healthz.build_report` from the `/healthz` route) accept it explicitly too.
+
+Rejected:
+
+- **Module-level singleton mutated by lifespan startup (`docker_client._client`).** Mirrors the `get_settings()` pattern but trades dependency-injection visibility for a hidden global. Tests would still have to patch the singleton rather than hand the unit a fake; route handlers would have no static signature pointing at the dependency. The explicit param costs one keyword in every signature and gains clarity at every call site.
+- **Make `docker_client.*` accept `app: FastAPI` and pull the client off `app.state` internally.** Couples the data-access layer to the framework and to lifespan setup; non-route callers (discovery from lifespan, internal scripts in the future) would have to fake an `app` to invoke it.
+- **Async context-manager per route (`async with get_docker() as docker: ...`).** Reintroduces per-request setup cost. The whole point is to amortise the construction over process lifetime.
+
+Trade-off: `app.state.docker` is mutable and hands the same `aiodocker.Docker` instance to every concurrent caller. `aiodocker.Docker` is built on an `aiohttp.ClientSession` which is safe to share across tasks. If a future migration to a different docker client breaks that assumption, the lifespan setup is the one place to introduce pooling. The migration also moves `aiodocker.Docker` construction out of every test path — `tests/conftest.py` now hands a `MagicMock`-shaped fake into `app.state.docker` once, and unit tests pass `_FakeDocker()` instances directly to the function under test rather than monkeypatching the constructor.

@@ -26,7 +26,7 @@ async def test_run_command_raises_when_rcon_disabled(tmp_path):
     )
 
     with pytest.raises(server_rcon.RconUnavailable, match="not enabled"):
-        await server_rcon.run_command(server, "whitelist add Notch")
+        await server_rcon.run_command(object(), server, "whitelist add Notch")
 
 
 async def test_run_command_raises_when_password_empty(tmp_path):
@@ -35,7 +35,7 @@ async def test_run_command_raises_when_password_empty(tmp_path):
     )
 
     with pytest.raises(server_rcon.RconUnavailable, match="empty"):
-        await server_rcon.run_command(server, "whitelist add Notch")
+        await server_rcon.run_command(object(), server, "whitelist add Notch")
 
 
 async def test_run_command_raises_when_properties_file_missing(tmp_path):
@@ -44,7 +44,7 @@ async def test_run_command_raises_when_properties_file_missing(tmp_path):
     server = {"name": "atm10", "container_name": None, "dir": str(server_dir)}
 
     with pytest.raises(server_rcon.RconUnavailable, match="not enabled"):
-        await server_rcon.run_command(server, "whitelist add Notch")
+        await server_rcon.run_command(object(), server, "whitelist add Notch")
 
 
 async def test_run_command_raises_when_no_docker_network(tmp_path, monkeypatch):
@@ -52,7 +52,7 @@ async def test_run_command_raises_when_no_docker_network(tmp_path, monkeypatch):
         tmp_path, "enable-rcon=true\nrcon.password=secret\n"
     )
 
-    async def fake_find(name):
+    async def fake_find(_docker, name):
         return None
 
     from mcontrol import docker_client
@@ -60,4 +60,4 @@ async def test_run_command_raises_when_no_docker_network(tmp_path, monkeypatch):
     monkeypatch.setattr(docker_client, "find_network_name", fake_find)
 
     with pytest.raises(server_rcon.RconUnavailable, match="No docker network"):
-        await server_rcon.run_command(server, "whitelist add Notch")
+        await server_rcon.run_command(object(), server, "whitelist add Notch")

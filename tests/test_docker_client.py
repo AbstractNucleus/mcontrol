@@ -14,98 +14,42 @@ class _FakeSummary:
         self._container = {"Names": [f"/{name}"], "State": status}
 
 
-class _FakeContainers:
-    def __init__(self, containers: list[_FakeSummary]):
-        self._containers = containers
-
-    async def list(self, all: bool = False) -> list[_FakeSummary]:  # noqa: A002
-        assert all is True, "discovery must list ALL containers, including stopped"
-        return self._containers
+def _docker_with_summaries(summaries: list[_FakeSummary]) -> MagicMock:
+    docker = MagicMock()
+    docker.containers = MagicMock()
+    docker.containers.list = AsyncMock(return_value=summaries)
+    return docker
 
 
-class _FakeDocker:
-    def __init__(self, containers: list[_FakeSummary]):
-        self.containers = _FakeContainers(containers)
-        self.closed = False
+async def test_container_states_by_name_returns_mapping(env):
+    docker = _docker_with_summaries([
+        _FakeSummary("atm10", "running"),
+        _FakeSummary("monifactory", "exited"),
+    ])
 
-    async def close(self) -> None:
-        self.closed = True
+    states = await docker_client.container_states_by_name(docker)
 
-
-@pytest.fixture
-def fake_docker(monkeypatch):
-    containers: list[_FakeSummary] = []
-
-    def factory(*, url: str | None = None) -> _FakeDocker:
-        return _FakeDocker(containers)
-
-    monkeypatch.setattr(docker_client.aiodocker, "Docker", factory)
-    return containers
-
-
-async def test_container_states_by_name_returns_mapping(env, fake_docker):
-    fake_docker.append(_FakeSummary("atm10", "running"))
-    fake_docker.append(_FakeSummary("monifactory", "exited"))
-
-    states = await docker_client.container_states_by_name()
-
+    docker.containers.list.assert_awaited_once_with(all=True)
     assert states == {"atm10": "running", "monifactory": "exited"}
 
 
-async def test_container_states_strips_leading_slash(env, fake_docker):
-    fake_docker.append(_FakeSummary("kobra_kollektivet", "created"))
+async def test_container_states_strips_leading_slash(env):
+    docker = _docker_with_summaries([_FakeSummary("kobra_kollektivet", "created")])
 
-    states = await docker_client.container_states_by_name()
+    states = await docker_client.container_states_by_name(docker)
 
     assert states == {"kobra_kollektivet": "created"}
 
 
-async def test_container_states_returns_empty_when_docker_constructor_fails(env, monkeypatch):
-    class _Boom:
-        def __init__(self, *_, **__):
-            raise RuntimeError("docker daemon is sulking")
+async def test_container_states_returns_empty_when_list_raises(env):
+    """Inner-branch failure: containers.list raises."""
+    docker = MagicMock()
+    docker.containers = MagicMock()
+    docker.containers.list = AsyncMock(side_effect=RuntimeError("kernel said no"))
 
-    monkeypatch.setattr(docker_client.aiodocker, "Docker", _Boom)
-
-    states = await docker_client.container_states_by_name()
-
-    assert states == {}
-
-
-async def test_container_states_returns_empty_when_list_raises(env, monkeypatch):
-    """Inner-branch failure: constructor succeeds but containers.list raises."""
-
-    class _PartiallyBrokenDocker:
-        def __init__(self, *_, **__):
-            self.containers = MagicMock()
-            self.containers.list = AsyncMock(side_effect=RuntimeError("kernel said no"))
-
-        async def close(self):
-            pass
-
-    monkeypatch.setattr(docker_client.aiodocker, "Docker", _PartiallyBrokenDocker)
-
-    states = await docker_client.container_states_by_name()
+    states = await docker_client.container_states_by_name(docker)
 
     assert states == {}
-
-
-async def test_container_states_closes_the_client(env, monkeypatch):
-    closed_flag = {"closed": False}
-
-    class _TrackingDocker:
-        def __init__(self, *_, **__):
-            self.containers = MagicMock()
-            self.containers.list = AsyncMock(return_value=[])
-
-        async def close(self):
-            closed_flag["closed"] = True
-
-    monkeypatch.setattr(docker_client.aiodocker, "Docker", _TrackingDocker)
-
-    await docker_client.container_states_by_name()
-
-    assert closed_flag["closed"] is True
 
 
 # --- Slice 4: lifecycle / logs / network helpers ----------------------------
@@ -140,45 +84,36 @@ class _FakeContainer:
             yield line
 
 
-def _docker_with_named_container(monkeypatch, container: _FakeContainer):
-    """Wire docker_client.aiodocker.Docker to return a fake whose
-    .containers.get(name) yields the given container."""
-
-    class _ContainersWithGet:
-        async def get(self, name):  # noqa: ARG002
-            return container
-
-    class _Docker:
-        def __init__(self, *_, **__):
-            self.containers = _ContainersWithGet()
-
-        async def close(self):
-            pass
-
-    monkeypatch.setattr(docker_client.aiodocker, "Docker", _Docker)
-    return container
+def _docker_with_container(container: _FakeContainer) -> MagicMock:
+    docker = MagicMock()
+    docker.containers = MagicMock()
+    docker.containers.get = AsyncMock(return_value=container)
+    return docker
 
 
-async def test_start_calls_container_start(env, monkeypatch):
-    fake = _docker_with_named_container(monkeypatch, _FakeContainer())
+async def test_start_calls_container_start(env):
+    fake = _FakeContainer()
+    docker = _docker_with_container(fake)
 
-    await docker_client.start("atm10")
+    await docker_client.start(docker, "atm10")
 
     assert fake._started is True
 
 
-async def test_stop_calls_container_stop(env, monkeypatch):
-    fake = _docker_with_named_container(monkeypatch, _FakeContainer())
+async def test_stop_calls_container_stop(env):
+    fake = _FakeContainer()
+    docker = _docker_with_container(fake)
 
-    await docker_client.stop("atm10")
+    await docker_client.stop(docker, "atm10")
 
     assert fake._stopped is True
 
 
-async def test_restart_calls_container_restart(env, monkeypatch):
-    fake = _docker_with_named_container(monkeypatch, _FakeContainer())
+async def test_restart_calls_container_restart(env):
+    fake = _FakeContainer()
+    docker = _docker_with_container(fake)
 
-    await docker_client.restart("atm10")
+    await docker_client.restart(docker, "atm10")
 
     assert fake._restarted is True
 
@@ -190,11 +125,11 @@ async def test_start_raises_timeout_when_container_hangs(env, monkeypatch):
         async def start(self):
             await asyncio.sleep(9999)
 
-    _docker_with_named_container(monkeypatch, _HangingContainer())
+    docker = _docker_with_container(_HangingContainer())
     monkeypatch.setattr(docker_client, "_LIFECYCLE_TIMEOUT_S", 0.01)
 
     with pytest.raises(asyncio.TimeoutError):
-        await docker_client.start("atm10")
+        await docker_client.start(docker, "atm10")
 
 
 async def test_stop_raises_timeout_when_container_hangs(env, monkeypatch):
@@ -204,11 +139,11 @@ async def test_stop_raises_timeout_when_container_hangs(env, monkeypatch):
         async def stop(self):
             await asyncio.sleep(9999)
 
-    _docker_with_named_container(monkeypatch, _HangingContainer())
+    docker = _docker_with_container(_HangingContainer())
     monkeypatch.setattr(docker_client, "_LIFECYCLE_TIMEOUT_S", 0.01)
 
     with pytest.raises(asyncio.TimeoutError):
-        await docker_client.stop("atm10")
+        await docker_client.stop(docker, "atm10")
 
 
 async def test_restart_raises_timeout_when_container_hangs(env, monkeypatch):
@@ -218,14 +153,14 @@ async def test_restart_raises_timeout_when_container_hangs(env, monkeypatch):
         async def restart(self):
             await asyncio.sleep(9999)
 
-    _docker_with_named_container(monkeypatch, _HangingContainer())
+    docker = _docker_with_container(_HangingContainer())
     monkeypatch.setattr(docker_client, "_LIFECYCLE_TIMEOUT_S", 0.01)
 
     with pytest.raises(asyncio.TimeoutError):
-        await docker_client.restart("atm10")
+        await docker_client.restart(docker, "atm10")
 
 
-async def test_logs_stream_yields_lines(env, monkeypatch):
+async def test_logs_stream_yields_lines(env):
     fake = _FakeContainer()
 
     async def fake_log_method(*, stdout, stderr, tail, follow):
@@ -233,28 +168,27 @@ async def test_logs_stream_yields_lines(env, monkeypatch):
         yield "boot line 2"
 
     fake.log = fake_log_method
-    _docker_with_named_container(monkeypatch, fake)
+    docker = _docker_with_container(fake)
 
-    lines = [line async for line in docker_client.logs_stream("atm10", tail=200)]
+    lines = [line async for line in docker_client.logs_stream(docker, "atm10", tail=200)]
 
     assert lines == ["boot line 1", "boot line 2"]
 
 
-async def test_find_network_name_returns_first_network(env, monkeypatch):
-    _docker_with_named_container(
-        monkeypatch,
-        _FakeContainer(networks={"atm10_default": {}, "host": {}}),
+async def test_find_network_name_returns_first_network(env):
+    docker = _docker_with_container(
+        _FakeContainer(networks={"atm10_default": {}, "host": {}})
     )
 
-    name = await docker_client.find_network_name("atm10")
+    name = await docker_client.find_network_name(docker, "atm10")
 
     assert name == "atm10_default"
 
 
-async def test_find_network_name_returns_none_when_no_networks(env, monkeypatch):
-    _docker_with_named_container(monkeypatch, _FakeContainer(networks={}))
+async def test_find_network_name_returns_none_when_no_networks(env):
+    docker = _docker_with_container(_FakeContainer(networks={}))
 
-    name = await docker_client.find_network_name("atm10")
+    name = await docker_client.find_network_name(docker, "atm10")
 
     assert name is None
 
@@ -275,21 +209,12 @@ async def test_attach_self_to_network_calls_connect(env, monkeypatch):
         async def connect(self, *, container):
             connected.append((self.name, container))
 
-    class _Networks:
-        async def get(self, name):
-            return _Network(name)
-
-    class _Docker:
-        def __init__(self, *_, **__):
-            self.networks = _Networks()
-
-        async def close(self):
-            pass
-
-    monkeypatch.setattr(docker_client.aiodocker, "Docker", _Docker)
+    docker = MagicMock()
+    docker.networks = MagicMock()
+    docker.networks.get = AsyncMock(side_effect=lambda name: _Network(name))
     monkeypatch.setenv("HOSTNAME", "selfid")
 
-    await docker_client.attach_self_to_network("atm10_default")
+    await docker_client.attach_self_to_network(docker, "atm10_default")
 
     assert connected == [("atm10_default", "selfid")]
 
@@ -304,20 +229,11 @@ async def test_detach_self_from_network_calls_disconnect(env, monkeypatch):
         async def disconnect(self, *, container):
             disconnected.append((self.name, container))
 
-    class _Networks:
-        async def get(self, name):
-            return _Network(name)
-
-    class _Docker:
-        def __init__(self, *_, **__):
-            self.networks = _Networks()
-
-        async def close(self):
-            pass
-
-    monkeypatch.setattr(docker_client.aiodocker, "Docker", _Docker)
+    docker = MagicMock()
+    docker.networks = MagicMock()
+    docker.networks.get = AsyncMock(side_effect=lambda name: _Network(name))
     monkeypatch.setenv("HOSTNAME", "selfid")
 
-    await docker_client.detach_self_from_network("atm10_default")
+    await docker_client.detach_self_from_network(docker, "atm10_default")
 
     assert disconnected == [("atm10_default", "selfid")]

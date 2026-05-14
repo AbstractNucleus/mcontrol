@@ -47,27 +47,15 @@ async def _probe_db() -> dict[str, str]:
     return {"status": "ok", "detail": "reachable"}
 
 
-async def _probe_docker() -> dict[str, str]:
-    settings = get_settings()
-
-    async def _ping() -> None:
-        docker = aiodocker.Docker(url=settings.docker_host)
-        try:
-            # `docker.version()` is the lightest public round-trip in
-            # aiodocker — `system.ping()` does not exist on this client
-            # version (the `DockerSystem` class only exposes `info()`),
-            # and `_query("_ping")` uses the underscore-prefixed private
-            # API. `version()` hits `/version`, returns a small dict, and
-            # confirms the daemon answers HTTP — exactly what we want.
-            await docker.version()
-        finally:
-            try:
-                await docker.close()
-            except Exception:
-                pass
-
+async def _probe_docker(docker: aiodocker.Docker) -> dict[str, str]:
+    # `docker.version()` is the lightest public round-trip in aiodocker —
+    # `system.ping()` does not exist on this client version (the
+    # `DockerSystem` class only exposes `info()`), and `_query("_ping")`
+    # uses the underscore-prefixed private API. `version()` hits
+    # `/version`, returns a small dict, and confirms the daemon answers
+    # HTTP — exactly what we want.
     try:
-        await asyncio.wait_for(_ping(), _TIMEOUT_S)
+        await asyncio.wait_for(docker.version(), _TIMEOUT_S)
     except TimeoutError:
         return {"status": "fail", "detail": "timeout after 250 ms"}
     except Exception as exc:
@@ -101,7 +89,7 @@ async def _probe_base_path() -> dict[str, str]:
     return {"status": "ok", "detail": str(base)}
 
 
-async def build_report() -> tuple[int, dict[str, Any]]:
+async def build_report(docker: aiodocker.Docker) -> tuple[int, dict[str, Any]]:
     """Run the three probes concurrently and assemble the JSON envelope.
 
     Returns ``(status_code, payload)``. Status code is 200 when every
@@ -112,7 +100,7 @@ async def build_report() -> tuple[int, dict[str, Any]]:
     started = time.monotonic()
     probes = await asyncio.gather(
         _probe_db(),
-        _probe_docker(),
+        _probe_docker(docker),
         _probe_base_path(),
         return_exceptions=True,
     )

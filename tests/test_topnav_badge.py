@@ -75,7 +75,7 @@ def fake_servers(monkeypatch):
 
 @pytest.fixture
 def fake_stats(monkeypatch):
-    async def fake_read(container_name: str):
+    async def fake_read(_docker, container_name: str):
         return {"status": "unreachable"}
     from mcontrol import resources
     monkeypatch.setattr(resources, "read_container_stats", fake_read)
@@ -86,8 +86,12 @@ async def _fresh_client():
     the conftest's client fixture caches a Settings instance at app creation
     time, so we need a new app for these tests."""
     from mcontrol.main import create_app
+    from tests.conftest import make_fake_docker
 
     app = create_app()
+    # ASGITransport doesn't run lifespan, so populate app.state.docker
+    # ourselves — Depends(get_docker) on every route requires it (#98).
+    app.state.docker = make_fake_docker()
     transport = ASGITransport(app=app)
     return AsyncClient(transport=transport, base_url="http://test")
 

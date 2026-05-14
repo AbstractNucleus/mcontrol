@@ -16,11 +16,12 @@ carrying two HTMX swap targets:
 """
 
 
+import aiodocker
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
 from mcontrol import db, docker_client, lifecycle_state
-from mcontrol.routes._dependencies import get_server_or_404
+from mcontrol.routes._dependencies import get_docker, get_server_or_404
 from mcontrol.templates import templates
 
 router = APIRouter()
@@ -44,9 +45,13 @@ def _pill_and_buttons(server: dict, state: str, *, flash: str | None = None) -> 
 
 
 @router.post("/servers/{name}/lifecycle/start", response_class=HTMLResponse)
-async def start(name: str, server: dict = Depends(get_server_or_404)) -> HTMLResponse:
+async def start(
+    name: str,
+    server: dict = Depends(get_server_or_404),
+    docker: aiodocker.Docker = Depends(get_docker),
+) -> HTMLResponse:
     try:
-        await docker_client.start(db.container_name_for(server))
+        await docker_client.start(docker, db.container_name_for(server))
     except TimeoutError:
         return _pill_and_buttons(server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
     db.update_server_state(name=name, state="running")
@@ -54,9 +59,13 @@ async def start(name: str, server: dict = Depends(get_server_or_404)) -> HTMLRes
 
 
 @router.post("/servers/{name}/lifecycle/stop", response_class=HTMLResponse)
-async def stop(name: str, server: dict = Depends(get_server_or_404)) -> HTMLResponse:
+async def stop(
+    name: str,
+    server: dict = Depends(get_server_or_404),
+    docker: aiodocker.Docker = Depends(get_docker),
+) -> HTMLResponse:
     try:
-        await docker_client.stop(db.container_name_for(server))
+        await docker_client.stop(docker, db.container_name_for(server))
     except TimeoutError:
         return _pill_and_buttons(server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
     db.update_server_state(name=name, state="exited")
@@ -64,9 +73,13 @@ async def stop(name: str, server: dict = Depends(get_server_or_404)) -> HTMLResp
 
 
 @router.post("/servers/{name}/lifecycle/restart", response_class=HTMLResponse)
-async def restart(name: str, server: dict = Depends(get_server_or_404)) -> HTMLResponse:
+async def restart(
+    name: str,
+    server: dict = Depends(get_server_or_404),
+    docker: aiodocker.Docker = Depends(get_docker),
+) -> HTMLResponse:
     try:
-        await docker_client.restart(db.container_name_for(server))
+        await docker_client.restart(docker, db.container_name_for(server))
     except TimeoutError:
         return _pill_and_buttons(server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
     db.update_server_state(name=name, state="running")
