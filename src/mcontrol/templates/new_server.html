@@ -59,6 +59,17 @@
     </label>
 
     <label>
+      <span class="t-eyebrow">Loader</span>
+      <select name="loader" required>
+        {% for opt in loaders %}
+          <option value="{{ opt }}"{% if (form.loader or 'vanilla') == opt %} selected{% endif %}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+      <small class="new-server__hint">Mod/server loader. Drives loader-specific defaults in future UI.</small>
+      {% if errors.loader %}<small class="new-server__error">{{ errors.loader }}</small>{% endif %}
+    </label>
+
+    <label>
       <span class="t-eyebrow">JVM extra args (optional)</span>
       <input type="text"
              name="jvm_extra_args"

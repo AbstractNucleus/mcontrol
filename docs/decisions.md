@@ -58,6 +58,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 037 | new-server hardening: surfaced rollback errors + TCP-probe port collision | Accepted | 2026-05-14 |
 | 038 | Shared modal helper: focus trap + return-focus via `data-modal-root` | Accepted | 2026-05-15 |
 | 039 | `db`: route sync supabase-py calls through `asyncio.to_thread`       | Accepted | 2026-05-15 |
+| 042 | server-jar: loader enum surfaced on the new-server form and server detail; new servers pick explicitly, no backfill inference at form submit | Accepted | 2026-05-15 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -759,3 +760,23 @@ Rejected:
 - **Block the request until probe resolves with no fallback.** The probe deadline is 10s precisely so the HTMX request can't hang forever; if the JVM is genuinely slow today, `"starting"` is the honest answer and the operator can hit Rescan once the world is loaded.
 
 Trade-off: the start handler now blocks up to 10s before responding. That is intentional — the alternative is a brief lie on the state pill — but it does mean a slow JVM produces a 10s wait for the HTMX swap. `hx-disabled-elt="this"` (decision 040) already keeps the button disabled in that window so double-clicks don't compound.
+
+## 042. server-jar: loader enum surfaced on the new-server form and server detail; new servers pick explicitly, no backfill inference at form submit
+
+**Status:** Accepted · 2026-05-15
+
+Issue #123 wanted `server_jar` (a free string covering vanilla, Forge, Fabric, Paper, and Quilt) split into two columns: keep `server_jar` for the filename, add a `loader` enum to drive loader-specific UI defaults later. The DB-side migration landed in supabase-server#8 — a new `loader` column on `app_mcontrol.servers` with values `vanilla | forge | fabric | paper | quilt`, defaulted to `'vanilla'`, with an ILIKE backfill over `variables->>'server_jar'` in `forge → fabric → paper → quilt → vanilla` order (first match wins; vanilla is the fallback). This entry is the mcontrol-side companion: read the column, render it, and let the operator pick on the new-server form.
+
+The new-server form gains a `<select name="loader">` with the five enum options, defaulting to `vanilla`. The shared validator (`server_variables_form.validate`) gains a loader-in-enum check, gated on the field being present so `migrate.py` and `variables.py` (which don't submit a loader) stay untouched. `db.insert_scaffolding_server` accepts `loader` as a top-level column (not nested in `variables` JSONB) and writes it on insert. `server_detail.html` renders a small `loader-badge` span next to the state pill when `server.loader` is truthy; rows missing the column (defensive case for hypothetical pre-backfill state) simply skip the badge.
+
+The non-obvious choice worth recording: **new-server submissions do not infer the loader from the jar filename, even though the helper `infer_loader_from_jar` is shipped in the same module.** The dropdown carries the operator's explicit choice; whatever they picked is what gets written, even if the jar filename loudly says otherwise (e.g. operator picks `vanilla`, types `forge-1.20.1.jar`, row stores `vanilla`). The supabase-server backfill rule mirrored by `infer_loader_from_jar` exists for *existing rows without an operator's choice* — at form submit time there is always a choice, so silently overriding it would be a small but real footgun.
+
+Rejected:
+
+- **Store `loader` inside `variables` JSONB.** Mechanically possible — `variables` is already an open-ended bag — but the supabase-server#8 migration deliberately put `loader` at the column level (typed enum, indexable, backfilled by SQL). Mirroring that on the write side keeps the DB and the app aligned on "loader is a first-class column."
+- **Pre-fill the dropdown by running `infer_loader_from_jar` on the jar input as the operator types.** Reasonable HTMX flourish, but it's a separate problem (live form prediction, debounced server round-trips, focus handling) and the issue's stated scope is "store and display the field." A future PR can add a `hx-post`-driven hint without changing the data contract.
+- **Auto-correct the loader on submit if the jar filename strongly disagrees** (e.g. silent `vanilla` → `forge` rewrite when the jar contains `forge`). This is the "infer at submit" footgun above. The dropdown is the operator's intent; if the intent is wrong, that's an operator error, not an inference miss.
+- **Add a loader row to `_variables_card.html`.** Tempting for symmetry with the other variable rows, but `loader` is a top-level column, not a variable — and the issue's scope is the title-bar surface, not the variables card. A future "edit loader after creation" affordance (explicitly out of scope per the issue body's follow-up list) is where the variables card would gain a row, and it would write through `update_variables`-style helper rather than reusing the variables JSONB write path.
+- **Render the badge inline with the jar name in the variables block.** Visible only on legacy/non-scaffolded rows; the title-bar placement is visible regardless of `scaffolded_at` state and matches "small label/badge near the server name" from the issue.
+
+Trade-off: this PR ships the data plumbing — the value flows from form → DB → detail page and has no other consumer yet. JVM-arg presets, loader-specific docs links, mod-folder auto-detect, and "change loader after creation" are all explicitly future scope. The `infer_loader_from_jar` helper is unused by the new-server flow at submit, but is the single source of truth for the rule shared with the supabase-server backfill — future callers (a migrate-flow guess, a one-off backfill script if the DB-side backfill ever has gaps) can reach for it without re-deriving the order.

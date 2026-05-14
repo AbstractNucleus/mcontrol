@@ -6,6 +6,7 @@ jvm_extra_args) fields with the same rules.
 """
 
 import socket
+from typing import Literal
 
 from mcontrol import db_async
 
@@ -13,6 +14,31 @@ PORT_MIN = 1024
 PORT_MAX = 65535
 MEMORY_MIN_GB = 2
 _PORT_PROBE_TIMEOUT = 0.5
+
+# Loader enum, mirroring app_mcontrol.servers.loader in supabase-server.
+# Order is significant for `infer_loader_from_jar`: forge → fabric →
+# paper → quilt → vanilla, first match wins. Vanilla is the fallback
+# and never matches by name (no jar filename contains "vanilla" reliably).
+LOADERS: tuple[str, ...] = ("vanilla", "forge", "fabric", "paper", "quilt")
+Loader = Literal["vanilla", "forge", "fabric", "paper", "quilt"]
+_INFER_ORDER: tuple[str, ...] = ("forge", "fabric", "paper", "quilt")
+
+
+def infer_loader_from_jar(server_jar: str) -> Loader:
+    """Best-effort guess of the loader from the jar filename.
+
+    Mirrors the supabase-server backfill rule (AbstractNucleus/supabase-server#8):
+    case-insensitive substring match in `forge → fabric → paper → quilt`
+    order, vanilla as the fallback. New-server form submissions do NOT
+    call this — the operator's dropdown choice is authoritative there.
+    Kept here so future callers (legacy-row backfill, migrate flow) share
+    one rule with the DB-side backfill.
+    """
+    needle = server_jar.lower()
+    for loader in _INFER_ORDER:
+        if loader in needle:
+            return loader  # type: ignore[return-value]
+    return "vanilla"
 
 
 def validate(form: dict) -> dict[str, str]:
@@ -24,6 +50,8 @@ def validate(form: dict) -> dict[str, str]:
         errors["port"] = f"Port must be between {PORT_MIN} and {PORT_MAX}."
     if not form["server_jar"].strip():
         errors["server_jar"] = "Required."
+    if "loader" in form and form["loader"] not in LOADERS:
+        errors["loader"] = f"Must be one of: {', '.join(LOADERS)}."
     return errors
 
 
