@@ -19,7 +19,7 @@ import aiodocker
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
-from mcontrol import lifecycle_state
+from mcontrol.domain import lifecycle_state
 from mcontrol.routes._dependencies import get_docker, get_server_or_404
 from mcontrol.services import lifecycle_service
 from mcontrol.templates import templates

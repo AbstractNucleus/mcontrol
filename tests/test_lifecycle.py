@@ -8,7 +8,7 @@ def fake_server_row(monkeypatch):
     def fake_get(name):
         return rows.get(name)
 
-    from mcontrol import db
+    from mcontrol.infra import db
 
     monkeypatch.setattr(db, "get_server", fake_get)
     return rows
@@ -17,7 +17,7 @@ def fake_server_row(monkeypatch):
 @pytest.fixture
 def stub_db_writes(monkeypatch):
     seen: list[tuple[str, dict]] = []
-    from mcontrol import db
+    from mcontrol.infra import db
 
     def cap(label):
         def fn(**kwargs):
@@ -30,7 +30,7 @@ def stub_db_writes(monkeypatch):
 
 @pytest.fixture
 def stub_docker(monkeypatch):
-    from mcontrol import docker_client
+    from mcontrol.infra import docker_client
 
     started: list[str] = []
     stopped: list[str] = []
@@ -191,7 +191,7 @@ async def test_start_timeout_returns_flash_and_does_not_update_state(
     client, fake_server_row, stub_db_writes, monkeypatch
 ):
 
-    from mcontrol import docker_client
+    from mcontrol.infra import docker_client
 
     fake_server_row["atm10"] = {
         "name": "atm10", "container_name": None, "dir": "/srv/atm10",
@@ -212,7 +212,7 @@ async def test_stop_timeout_returns_flash_and_does_not_update_state(
     client, fake_server_row, stub_db_writes, monkeypatch
 ):
 
-    from mcontrol import docker_client
+    from mcontrol.infra import docker_client
 
     fake_server_row["atm10"] = {
         "name": "atm10", "container_name": None, "dir": "/srv/atm10",
@@ -233,7 +233,7 @@ async def test_restart_timeout_returns_flash_and_does_not_update_state(
     client, fake_server_row, stub_db_writes, monkeypatch
 ):
 
-    from mcontrol import docker_client
+    from mcontrol.infra import docker_client
 
     fake_server_row["atm10"] = {
         "name": "atm10", "container_name": None, "dir": "/srv/atm10",

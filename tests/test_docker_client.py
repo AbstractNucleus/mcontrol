@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from mcontrol import docker_client
+from mcontrol.infra import docker_client
 
 
 class _FakeSummary:

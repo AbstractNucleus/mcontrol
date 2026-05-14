@@ -20,7 +20,8 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import __version__, tombstones
+from mcontrol import __version__
+from mcontrol.domain import tombstones
 from mcontrol.resources import format_bytes
 from mcontrol.settings import Settings
 from mcontrol.templates import templates

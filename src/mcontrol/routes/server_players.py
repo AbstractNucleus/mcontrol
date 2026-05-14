@@ -29,7 +29,8 @@ import aiodocker
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db_async, membership
+from mcontrol.domain import membership
+from mcontrol.infra import db_async
 from mcontrol.routes._dependencies import (
     get_docker,
     get_server_or_404,

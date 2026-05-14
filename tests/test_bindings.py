@@ -6,7 +6,7 @@ def fake_db(monkeypatch):
     rows: dict[str, dict] = {}
     updates: list[dict] = []
 
-    from mcontrol import db
+    from mcontrol.infra import db
 
     monkeypatch.setattr(db, "get_server", lambda n: rows.get(n))
     monkeypatch.setattr(db, "update_bindings", lambda **kw: updates.append(kw))

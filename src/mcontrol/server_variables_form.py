@@ -8,7 +8,7 @@ jvm_extra_args) fields with the same rules.
 import socket
 from typing import Literal
 
-from mcontrol import db_async
+from mcontrol.infra import db_async
 
 PORT_MIN = 1024
 PORT_MAX = 65535

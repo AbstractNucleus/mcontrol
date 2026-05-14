@@ -5,7 +5,7 @@ import time
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from mcontrol import tombstones
+from mcontrol.domain import tombstones
 
 
 def _make_tombstone(parent, original_name: str, *, age_seconds: int = 0) -> None:
@@ -68,7 +68,7 @@ def env_with_base(monkeypatch, tmp_path):
 @pytest.fixture
 def fake_servers(monkeypatch):
     rows: list[dict] = []
-    from mcontrol import db
+    from mcontrol.infra import db
     monkeypatch.setattr(db, "list_servers", lambda: rows)
     return rows
 

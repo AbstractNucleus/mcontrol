@@ -17,7 +17,7 @@ def env(monkeypatch, tmp_path):
 @pytest.fixture
 def fake_servers(monkeypatch):
     rows: list[dict] = []
-    from mcontrol import db
+    from mcontrol.infra import db
     monkeypatch.setattr(db, "list_servers", lambda: rows)
     return rows
 
@@ -34,7 +34,7 @@ def fake_stats(monkeypatch):
 def stub_discovery(monkeypatch):
     from pathlib import Path
 
-    from mcontrol import discovery
+    from mcontrol.domain import discovery
 
     seen: list[Path] = []
 

@@ -2,13 +2,13 @@
 
 import pytest
 
-from mcontrol import scaffolding
+from mcontrol.domain import scaffolding
 
 
 @pytest.fixture
 def fake_db(monkeypatch):
     state = {"rows": [], "writes": []}
-    from mcontrol import db
+    from mcontrol.infra import db
 
     def fake_list_servers():
         return list(state["rows"])

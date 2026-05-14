@@ -33,7 +33,7 @@ async def app_client(base_dir) -> AsyncIterator[AsyncClient]:
 @pytest.fixture
 def fake_db(monkeypatch):
     state = {"rows": [], "deletes": []}
-    from mcontrol import db
+    from mcontrol.infra import db
 
     def fake_get_server(name):
         for row in state["rows"]:

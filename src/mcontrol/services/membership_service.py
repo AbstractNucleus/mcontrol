@@ -16,7 +16,9 @@ from typing import Any
 
 import aiodocker
 
-from mcontrol import db_async, membership, mojang, server_props, server_rcon
+from mcontrol import mojang, server_props
+from mcontrol.domain import membership
+from mcontrol.infra import db_async, server_rcon
 
 _RCON_VERB = {
     ("whitelist", True): "whitelist add",

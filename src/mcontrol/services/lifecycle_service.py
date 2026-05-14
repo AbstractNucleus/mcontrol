@@ -17,7 +17,7 @@ import time
 
 import aiodocker
 
-from mcontrol import db, db_async, docker_client, server_rcon
+from mcontrol.infra import db, db_async, docker_client, server_rcon
 
 # After docker_client.start() returns, the container process is up but
 # the JVM may still be binding the listener port. Probe 127.0.0.1:port

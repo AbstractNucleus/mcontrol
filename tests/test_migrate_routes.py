@@ -35,7 +35,7 @@ def fake_db(monkeypatch):
         "variables_writes": [],
         "scaffolded_marks": [],
     }
-    from mcontrol import db
+    from mcontrol.infra import db
 
     def fake_get_server(name):
         for row in state["rows"]:

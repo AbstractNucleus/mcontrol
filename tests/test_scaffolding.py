@@ -3,7 +3,7 @@ import os
 import jinja2
 import pytest
 
-from mcontrol import scaffolding
+from mcontrol.domain import scaffolding
 
 _VARS = {
     "memory_budget_gb": 8,

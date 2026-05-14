@@ -5,7 +5,7 @@ import pytest
 def fake_get_server(monkeypatch):
     rows: dict[str, dict | None] = {}
 
-    from mcontrol import db
+    from mcontrol.infra import db
     monkeypatch.setattr(db, "get_server", rows.get)
     return rows
 
@@ -277,7 +277,7 @@ async def test_server_detail_legacy_row_has_no_variables_card_or_banner(
 async def test_server_detail_scaffolded_row_renders_variables_card(
     client, fake_get_server, tmp_path
 ):
-    from mcontrol import scaffolding
+    from mcontrol.domain import scaffolding
 
     server_dir = tmp_path / "newshire"
     variables = {"memory_budget_gb": 8, "port": 25575, "server_jar": "paper.jar"}

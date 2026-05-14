@@ -8,7 +8,7 @@ def fake_servers(monkeypatch):
     def fake_list_servers():
         return rows
 
-    from mcontrol import db
+    from mcontrol.infra import db
 
     monkeypatch.setattr(db, "list_servers", fake_list_servers)
     return rows

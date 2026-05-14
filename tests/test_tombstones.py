@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from mcontrol import tombstones
+from mcontrol.domain import tombstones
 
 # ---------------------------------------------------------------------------
 # Name parsing

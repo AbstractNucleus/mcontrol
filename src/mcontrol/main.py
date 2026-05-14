@@ -8,7 +8,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from mcontrol import __version__, discovery, healthz, tombstones
+from mcontrol import __version__, healthz
+from mcontrol.domain import discovery, tombstones
 from mcontrol.routes import (
     bindings,
     console,

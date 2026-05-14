@@ -6,7 +6,9 @@ import aiodocker
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from mcontrol import __version__, db, db_async, discovery, resources
+from mcontrol import __version__, resources
+from mcontrol.domain import discovery
+from mcontrol.infra import db, db_async
 from mcontrol.routes._dependencies import get_docker
 from mcontrol.settings import Settings
 from mcontrol.templates import templates

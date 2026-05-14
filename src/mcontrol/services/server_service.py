@@ -12,7 +12,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from mcontrol import db_async, migration, scaffolding
+from mcontrol.domain import migration, scaffolding
+from mcontrol.infra import db_async
 
 logger = logging.getLogger("mcontrol.services.server")
 

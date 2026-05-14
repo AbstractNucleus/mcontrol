@@ -41,7 +41,7 @@ def fake_db(monkeypatch):
         "raise_on_mark": False,
     }
 
-    from mcontrol import db
+    from mcontrol.infra import db
 
     def fake_list_servers():
         return list(state["rows"])
@@ -312,7 +312,7 @@ async def test_post_rejects_when_port_collides_with_other_server(
 async def test_post_rolls_back_disk_and_db_when_scaffold_raises(
     app_client, base_dir, fake_db, monkeypatch
 ):
-    from mcontrol import scaffolding
+    from mcontrol.domain import scaffolding
 
     def boom(name, variables, base):
         # Make a partial mess so we can verify rmtree cleans it up.
@@ -354,7 +354,7 @@ async def test_post_surfaces_orphan_path_when_rollback_rmtree_fails(
     orphan path appears in the 500 detail so the operator can act."""
     import shutil
 
-    from mcontrol import scaffolding
+    from mcontrol.domain import scaffolding
 
     def boom(name, variables, base):
         (base / name).mkdir(parents=True, exist_ok=True)

@@ -2,7 +2,7 @@
 
 import pytest
 
-from mcontrol import lifecycle_state
+from mcontrol.domain import lifecycle_state
 
 
 @pytest.mark.parametrize("state", ["created", "exited", "dead"])

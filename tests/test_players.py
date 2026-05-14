@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from mcontrol import db, membership, mojang
+from mcontrol import mojang
+from mcontrol.domain import membership
+from mcontrol.infra import db
 
 _NOTCH_UUID = "069a79f4-44e9-4726-a5be-fca90e38aaf5"
 _HEROBRINE_UUID = "ec561538-f3fd-461d-aff5-086b22154bce"
@@ -496,7 +498,7 @@ async def test_post_scope_all_running_uses_rcon(
     membership.add_whitelist_entry(Path(atm["dir"]), uuid=_NOTCH_UUID, name="Notch")
     membership.add_op_entry(Path(atm["dir"]), uuid=_NOTCH_UUID, name="Notch")
 
-    from mcontrol import server_rcon
+    from mcontrol.infra import server_rcon
 
     commands: list[str] = []
 

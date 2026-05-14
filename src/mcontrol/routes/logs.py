@@ -8,7 +8,7 @@ import aiodocker
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from mcontrol import db, docker_client
+from mcontrol.infra import db, docker_client
 from mcontrol.routes._dependencies import get_docker, get_server_or_404
 
 router = APIRouter()
