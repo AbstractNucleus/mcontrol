@@ -718,3 +718,25 @@ Rejected:
 - **Convert the FastAPI sync `Depends` (`get_server_or_404`, `get_player_or_404`) by leaving them sync.** FastAPI runs sync dependencies on a threadpool already, so they aren't strictly blocking the event loop — but they'd be the only sync `db.*` call sites left in the route layer, and the "every async path goes through `db_async`" invariant is easier to keep when there are no exceptions. They become `async def` and await through the shim like everything else.
 
 Trade-off: every DB call now pays for one threadpool hop (Python's default thread pool, default size ~min(32, cpus+4)). At single-host scale with a handful of concurrent requests, the hop cost is negligible compared to the PostgREST round-trip itself. The shim adds one module and a 1:1 wrapper per helper — small surface to maintain and a clear seam to delete when `postgrest-py` async lands.
+
+## 040. Lifecycle buttons: aria-busy on click + aria-live state announcement
+
+**Status:** Accepted · 2026-05-15
+
+Issue #110's audit also flagged the three lifecycle buttons (Start / Stop / Restart, `_lifecycle_buttons.html`). The buttons were already native `<button>` elements with text content, so keyboard activation and a base accessible name were already there. What was missing: a screen reader operator clicking Start got no in-flight signal and no announcement of the resulting state change. This is the lifecycle-buttons slice of #110 (flash + console slices follow as their own issues).
+
+This entry wires three small additions:
+
+- `static/lifecycle.js` (~50 LOC) — opts in via `[data-lifecycle-button]`. On `htmx:beforeRequest` it sets `aria-busy="true"` on the clicked button; on `htmx:afterRequest` it clears it. On `htmx:oobAfterSwap` against `#lifecycle-buttons` it reads the new `data-state` off the freshly-swapped wrapper and writes a short sentence into `#lifecycle-status`.
+- `hx-disabled-elt="this"` on each button — htmx disables the clicked element while the request is in flight, preventing double-clicks. htmx restores the prior `disabled` state when the request resolves, so this composes cleanly with the existing state-aware disable from decision 033.
+- `aria-label="{Verb} {server name}"` per button + a visually-hidden `#lifecycle-status` `aria-live="polite"` region rendered by `server_detail.html`. The label gives screen readers the server context the visible label omits; the live region carries the post-action state announcement.
+
+Rejected:
+
+- **Polite-toast the new state via the existing flash stack.** The flash region is `aria-live="polite"` already, but it's tied to error and notice toasts the operator may have dismissed. Lifecycle-state announcements have a different cadence (one per action, always, even on success) and belong in their own region scoped to the lifecycle row.
+- **Add the `aria-busy` toggle inside `_lifecycle_buttons.html` via Jinja.** The button is busy only between click and response; the template renders a single static snapshot per request. The client-side toggle is the only place that knows the in-flight window.
+- **Re-use `static/modals.js` for the busy-toggle.** Different opt-in attribute (`[data-modal-root]` is a whole modal, not a button), different events (`htmx:afterSwap` against modal slots, not `htmx:beforeRequest` against buttons), different concerns (focus trap vs. busy indication). The helpers are small enough that "one file per concern" reads cleaner than a shared `a11y.js` that grows by accretion.
+- **Announce via the state pill's text alone.** The pill is in the DOM but isn't `aria-live`; updating it doesn't fire an SR announcement. Adding `aria-live` to the pill would announce every transient state the pill ever shows (including initial render), which would be noisier than the per-action announcement.
+- **Use `aria-disabled="true"` instead of the native `disabled` attribute.** Native `disabled` is what `lifecycle_state.view` already produces for the state-aware mapping (decision 033); `hx-disabled-elt="this"` augments that on click. Mixing in `aria-disabled` would mean reconciling two sources of truth for the same condition.
+
+Trade-off: `static/lifecycle.js` is a second small a11y JS file, after `modals.js`. The trade is "one file per concern" vs. "one a11y.js." At three files in `static/` already specific to a UI surface (`flash.js`, `theme.js`, `modals.js`), per-concern is the established posture; lifecycle.js follows it. If a future audit ever wants to consolidate, the merge target is `a11y.js` and each helper's IIFE drops in as a section without cross-talk.

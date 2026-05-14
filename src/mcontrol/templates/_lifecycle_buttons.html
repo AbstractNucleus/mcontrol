@@ -5,24 +5,51 @@
   - `server`: the server row (uses `server.name`).
   - `lifecycle`: dict from `mcontrol.lifecycle_state.view(state)` —
     `start_disabled`, `stop_disabled`, `restart_disabled`, `accent`.
+  - `state` (optional): the server state string. Surfaced on the wrapper
+    as `data-state` so `static/lifecycle.js` can announce the post-action
+    state via the `#lifecycle-status` aria-live region (decision 039).
   - `oob` (optional bool, default false): when true, the wrapper carries
     `hx-swap-oob="true"` so a lifecycle-action response can swap it
     alongside the primary state-pill swap.
+
+  A11y (decision 039):
+  - `data-lifecycle-button` opts each button into `static/lifecycle.js`
+    (toggles `aria-busy` during the request).
+  - `hx-disabled-elt="this"` disables the clicked button while its request
+    is in flight, preventing double-clicks. htmx restores the prior
+    `disabled` state when the request resolves.
+  - Each button carries `aria-label="{Verb} {server name}"` so screen
+    readers get the server context (the visible label is just the verb).
 #}
-<div id="lifecycle-buttons" class="lifecycle-row__buttons"{% if oob %} hx-swap-oob="true"{% endif %}>
+<div id="lifecycle-buttons"
+     class="lifecycle-row__buttons"
+     data-state="{{ state or '' }}"
+     {% if oob %}hx-swap-oob="true"{% endif %}>
   <button class="btn btn--sm{% if lifecycle.accent == 'start' %} btn--primary{% endif %}"
+          type="button"
+          data-lifecycle-button
+          aria-label="Start {{ server.name }}"
           hx-post="/servers/{{ server.name }}/lifecycle/start"
           hx-target="#state-pill"
           hx-swap="outerHTML"
+          hx-disabled-elt="this"
           {% if lifecycle.start_disabled %}disabled{% endif %}>Start{% include "_spinner.html" %}</button>
   <button class="btn btn--sm{% if lifecycle.accent == 'stop' %} btn--primary{% endif %}"
+          type="button"
+          data-lifecycle-button
+          aria-label="Stop {{ server.name }}"
           hx-post="/servers/{{ server.name }}/lifecycle/stop"
           hx-target="#state-pill"
           hx-swap="outerHTML"
+          hx-disabled-elt="this"
           {% if lifecycle.stop_disabled %}disabled{% endif %}>Stop{% include "_spinner.html" %}</button>
   <button class="btn btn--sm"
+          type="button"
+          data-lifecycle-button
+          aria-label="Restart {{ server.name }}"
           hx-post="/servers/{{ server.name }}/lifecycle/restart"
           hx-target="#state-pill"
           hx-swap="outerHTML"
+          hx-disabled-elt="this"
           {% if lifecycle.restart_disabled %}disabled{% endif %}>Restart{% include "_spinner.html" %}</button>
 </div>

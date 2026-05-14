@@ -34,6 +34,7 @@ def _pill_and_buttons(server: dict, state: str, *, flash: str | None = None) -> 
     buttons = templates.get_template("_lifecycle_buttons.html").render(
         {
             "server": server,
+            "state": state,
             "lifecycle": lifecycle_state.view(state),
             "oob": True,
         }

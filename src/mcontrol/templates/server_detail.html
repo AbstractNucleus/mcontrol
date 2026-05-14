@@ -60,6 +60,17 @@
     <p class="t-eyebrow">Lifecycle</p>
     {% include "_lifecycle_buttons.html" %}
   </div>
+  {#
+    Visually-hidden aria-live region for lifecycle state announcements
+    (decision 039). `static/lifecycle.js` writes the new state here on
+    htmx:afterSwap of `#lifecycle-buttons`, so a screen-reader user gets
+    the action's outcome announced without an extra visual flash.
+  #}
+  <div id="lifecycle-status"
+       class="visually-hidden"
+       role="status"
+       aria-live="polite"
+       aria-atomic="true"></div>
   {% include "_lifecycle_flash.html" %}
 
   <section id="server-resources"

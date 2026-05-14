@@ -192,6 +192,14 @@ def _button_chunk(body: str, verb: str) -> str:
     return body[open_tag:close_tag]
 
 
+def _is_disabled(chunk: str) -> bool:
+    """Match the standalone `disabled` attribute, not `hx-disabled-elt`.
+    Decision 039 added `hx-disabled-elt="this"` to every lifecycle button
+    for in-flight htmx-driven disable, so a naive `'disabled' in chunk`
+    matches both."""
+    return " disabled>" in chunk or " disabled " in chunk
+
+
 async def test_stop_response_carries_oob_buttons_for_stopped_state(
     client, fake_server_row, stub_db_writes, stub_docker
 ):
@@ -215,15 +223,33 @@ async def test_stop_response_carries_oob_buttons_for_stopped_state(
 
     start = _button_chunk(body, "start")
     assert 'btn--primary' in start
-    assert 'disabled' not in start
+    assert not _is_disabled(start)
 
     stop = _button_chunk(body, "stop")
-    assert 'disabled' in stop
+    assert _is_disabled(stop)
     assert 'btn--primary' not in stop
 
     restart = _button_chunk(body, "restart")
-    assert 'disabled' in restart
+    assert _is_disabled(restart)
     assert 'btn--primary' not in restart
+
+
+async def test_stop_response_carries_data_state_for_announcement(
+    client, fake_server_row, stub_db_writes, stub_docker
+):
+    """Decision 039: the OOB-swapped lifecycle-buttons wrapper carries
+    `data-state` reflecting the new state, so `static/lifecycle.js` can
+    announce it into the aria-live region without re-deriving from CSS
+    classes."""
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "running",
+    }
+
+    response = await client.post("/servers/atm10/lifecycle/stop")
+    body = response.text
+    wrapper_open = body.split('id="lifecycle-buttons"', 1)[1].split('>', 1)[0]
+    assert 'data-state="exited"' in wrapper_open
 
 
 async def test_start_response_carries_oob_buttons_for_running_state(
@@ -242,12 +268,12 @@ async def test_start_response_carries_oob_buttons_for_running_state(
     assert 'hx-swap-oob="true"' in body
 
     start = _button_chunk(body, "start")
-    assert 'disabled' in start
+    assert _is_disabled(start)
     assert 'btn--primary' not in start
 
     stop = _button_chunk(body, "stop")
     assert 'btn--primary' in stop
-    assert 'disabled' not in stop
+    assert not _is_disabled(stop)
 
     restart = _button_chunk(body, "restart")
-    assert 'disabled' not in restart
+    assert not _is_disabled(restart)
