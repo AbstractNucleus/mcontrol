@@ -13,8 +13,9 @@ is the only entry point in the UI.
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db_async, server_variables_form
+from mcontrol import server_variables_form
 from mcontrol.routes._dependencies import get_server_or_404
+from mcontrol.services import server_service
 from mcontrol.templates import render_variables_card, templates
 
 router = APIRouter()
@@ -74,16 +75,8 @@ async def post(
     if errors:
         return _form(request, server, form=form, errors=errors, status_code=422)
 
-    # Preserve any non-UI keys already present in the JSONB.
-    existing = server.get("variables") or {}
-    updated = {**existing, "memory_budget_gb": memory_budget_gb, "port": port,
-               "server_jar": form["server_jar"]}
-    if form["jvm_extra_args"]:
-        updated["jvm_extra_args"] = form["jvm_extra_args"]
-    else:
-        updated.pop("jvm_extra_args", None)
-
-    await db_async.update_variables(name=name, variables=updated)
-
+    updated = await server_service.update_server_variables(
+        name=name, server=server, new_values=form
+    )
     refreshed = {**server, "variables": updated}
     return render_variables_card(request, refreshed)

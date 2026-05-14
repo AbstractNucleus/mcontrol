@@ -7,20 +7,17 @@
 The Delete button on the detail page is disabled when state='running'.
 The POST endpoint re-checks state at request time (returns 409) so a
 race where the operator starts the server in another tab between
-page render and confirm-click still refuses cleanly. Files aren't
-removed — the dir is renamed to `<base>/.deleted-<name>-<unix-ts>/`
-and discovery's dot-prefix filter (PR 5 also lands that) keeps the
-tombstone invisible to subsequent scans.
+page render and confirm-click still refuses cleanly. The tombstone +
+DB delete sequence lives in ``services.server_service``.
 """
 
-import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db_async
 from mcontrol.routes._dependencies import get_server_or_404
+from mcontrol.services import server_service
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
@@ -84,13 +81,8 @@ async def post(
 
     settings: Settings = request.app.state.settings
     base = Path(settings.server_base_path).resolve()
-    server_dir = Path(server["dir"]).resolve()
-    tomb_path = base / f".deleted-{name}-{int(time.time())}"
 
-    if server_dir.exists():
-        server_dir.rename(tomb_path)
-
-    await db_async.delete_server(name)
+    await server_service.delete_server_with_tombstone(server, base)
 
     response = HTMLResponse("", status_code=200)
     # HTMX picks up this header and navigates the browser to /. The
