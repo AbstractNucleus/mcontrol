@@ -1,4 +1,4 @@
-<div class="player-remove-modal" role="dialog" aria-modal="true" aria-labelledby="player-remove-title">
+<div class="player-remove-modal" role="dialog" aria-modal="true" aria-labelledby="player-remove-title" data-modal-root tabindex="-1">
   <div class="player-remove-modal__panel">
     <h3 id="player-remove-title" class="t-h3">Remove {{ player.name }} from roster?</h3>
 
@@ -44,7 +44,7 @@
 
       <button type="button"
               class="player-remove-modal__btn"
-              onclick="this.closest('.player-remove-modal').remove()">
+              data-modal-close>
         Cancel
       </button>
     </div>

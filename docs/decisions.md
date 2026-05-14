@@ -56,6 +56,7 @@ Architectural and operational decisions for `mcontrol`. Each entry captures **wh
 | 035 | Topnav tombstone count badge via Jinja global                | Accepted | 2026-05-11 |
 | 036 | Lifespan-scoped aiodocker client, injected via Depends       | Accepted | 2026-05-14 |
 | 037 | new-server hardening: surfaced rollback errors + TCP-probe port collision | Accepted | 2026-05-14 |
+| 038 | Shared modal helper: focus trap + return-focus via `data-modal-root` | Accepted | 2026-05-15 |
 
 ## 001. Base image: `eclipse-temurin:21-jre`
 
@@ -681,3 +682,21 @@ Rejected:
 - **Probe IPv6 (`::1` / `::`).** Docker's default port bindings on the target host are IPv4-only (Decision 008 ties this to a Linux host with standard Docker networking). If we later run dual-stack, this entry gets a follow-up; the IPv4 probe catches the realistic collision today.
 
 Trade-off: the probe blocks the event loop for up to 0.5s when nothing is listening (the OS waits the full timeout before giving up). That's the worst case per failed-collision check — happy-path connects refuse instantly, and the form already does a DB round-trip in the same handler. The check is best-effort: a port that becomes bound between probe and docker start still fails late, and a port behind a firewall that drops SYN silently looks free. Acceptable — the goal is "catch the obvious case at form time," not "guarantee container start succeeds."
+
+## 038. Shared modal helper: focus trap + return-focus via `data-modal-root`
+
+**Status:** Accepted · 2026-05-15
+
+Issue #110's audit flagged that mcontrol's three overlay modals — `_player_remove_modal.html` (Players: remove player), `_trash_delete_confirm.html` (Trash: delete one tombstone), `_trash_empty_confirm.html` (Trash: empty all) — already carried `role="dialog"` + `aria-modal="true"` + `aria-labelledby`, but had no behavioural a11y. A keyboard-only operator opening the player-remove modal could Tab out of it onto background controls; the Escape key did nothing; closing the modal dropped focus on `document.body` rather than the row's "Remove…" button. This is the modals-only first slice of #110 (lifecycle-button + flash + console slices follow as their own issues).
+
+This entry adds `static/modals.js`, a small (~150 LOC) module loaded once from `base.html`. Modals opt in by marking their root with `[data-modal-root tabindex="-1"]`; close-only buttons opt in with `[data-modal-close]`. On `htmx:beforeRequest` for a request targeting `#player-modal` or `#trash-modal`, the script captures the trigger element. On `htmx:afterSwap` for the same targets, it focuses the first focusable inside the modal (or the labelled title as a fallback), installs an Escape-and-Tab `keydown` handler that cycles focus inside the modal, and a `click` handler that closes via `[data-modal-close]`. When the modal is removed (Cancel, Escape, or an htmx swap that empties the slot), focus returns to the captured trigger — or `document.body` if the trigger is gone (e.g. a tombstone row whose `Delete…` button was swapped out by the same form submit).
+
+Rejected:
+
+- **A11y dialog library (a11y-dialog, micromodal).** Either would mean shipping a third-party dependency plus a build step or a vendored copy, for three modals and one keyboard-only operator. The bespoke module is ~150 LOC, no dependencies, and reads in one sitting.
+- **Per-modal inline scripts** (a `<script>` tag inside each modal template). Three near-identical copies of the same focus-trap, plus the existing `onclick="this.closest(...).remove()"` pattern would stay sprawled across templates. The shared helper is the single registration point; templates only declare `data-modal-root` / `data-modal-close` and the behaviour follows.
+- **Move the modals into a native `<dialog>` element.** Closer to the platform, but `<dialog>` styling and HTMX swap targeting both gain surface area (the `::backdrop` pseudo-element, `showModal()` lifecycle vs. the existing "swap into a slot" htmx pattern, return-value semantics). The current overlay rendering is decision 029 and decision 031's design; this slice is "wire behaviour into what's already there," not "rewrite the modal substrate."
+- **Capture the trigger from `document.activeElement` at `htmx:afterSwap`.** By that point the activeElement has already moved (htmx focuses the swapped node, or focus lands on body). `htmx:beforeRequest` fires while the trigger still owns focus, so the capture is reliable.
+- **Server-render a focus-target attribute (`hx-focus="#…"`).** Would mean every route handler that returns a modal partial knows the id of the calling button. The button doesn't have a stable id today, and giving each tombstone-row Delete button a unique id just so the modal can return focus is busywork; the client-side capture is one map keyed by slot id.
+
+Trade-off: `static/modals.js` is the first piece of bespoke a11y JS in the panel. The other surfaces flagged by #110 (lifecycle buttons, flash, console) need different handling (button labelling, `aria-live` regions, console scroll-into-view) and are not lumped into this helper. If a future surface ever needs the same overlay pattern, it opts in with `data-modal-root` + a `#…-modal` slot id added to the two `if (target.id !== …)` guards in the helper — small, local, and a deliberate gate so the helper doesn't accumulate unrelated behaviour.
