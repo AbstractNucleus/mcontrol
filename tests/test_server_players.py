@@ -233,6 +233,9 @@ async def test_add_from_roster_running_surfaces_rcon_unavailable_as_error_flash(
     assert response.status_code == 200
     assert "RCON is not enabled" in response.text
     assert "flash-msg--error" in response.text
+    # Error flashes carry role="alert" so screen readers announce them
+    # assertively; the polite #flash-stack live region wouldn't.
+    assert 'role="alert"' in response.text
 
 
 # ---------------------------------------------------------------------------

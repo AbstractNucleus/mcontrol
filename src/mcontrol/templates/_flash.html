@@ -1,4 +1,12 @@
-<div class="flash-msg flash-msg--{{ flash.kind }}" role="alert">
+{#
+  Per-message flash partial appended into #flash-stack (which carries
+  `aria-live="polite"`). Errors carry `role="alert"` to upgrade to
+  assertive announcement; ok / info / other kinds use `role="status"`
+  so the container's polite live region drives them. Dismiss removes
+  the node so screen readers don't keep referencing a hidden element.
+#}
+<div class="flash-msg flash-msg--{{ flash.kind }}"
+     role="{% if flash.kind == 'error' %}alert{% else %}status{% endif %}">
   <span class="flash-msg__text">{{ flash.message }}</span>
   <button class="flash-msg__dismiss" type="button" aria-label="Dismiss"
           onclick="this.closest('.flash-msg').remove()">×</button>
