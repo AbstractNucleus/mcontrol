@@ -4,7 +4,7 @@ and `dir`. Decision 021 — the operator's safety valve against drift."""
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db
+from mcontrol import db_async
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.templates import templates
 
@@ -46,7 +46,7 @@ async def post(
 ) -> HTMLResponse:
     # Empty string means "clear the override and fall back to name".
     cn_value: str | None = container_name.strip() or None
-    db.update_bindings(name=name, container_name=cn_value, dir=dir)
+    await db_async.update_bindings(name=name, container_name=cn_value, dir=dir)
 
     refreshed = {**server, "container_name": cn_value, "dir": dir}
     return _card(request, refreshed)

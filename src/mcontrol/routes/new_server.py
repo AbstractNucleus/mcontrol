@@ -18,7 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from mcontrol import db, scaffolding, server_variables_form
+from mcontrol import db_async, scaffolding, server_variables_form
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
@@ -97,13 +97,13 @@ async def new_submit(
             errors["name"] = "Invalid path."
 
     if not errors:
-        servers = db.list_servers()
+        servers = await db_async.list_servers()
         if any(row["name"] == form["name"] for row in servers):
             errors["name"] = "Server name already in use."
         elif target is not None and target.exists():
             errors["name"] = "Directory already exists."
         else:
-            collision = server_variables_form.check_port_collision(None, form["port"])
+            collision = await server_variables_form.check_port_collision(None, form["port"])
             if collision:
                 errors["port"] = collision
             else:
@@ -124,10 +124,12 @@ async def new_submit(
     if form["jvm_extra_args"]:
         variables["jvm_extra_args"] = form["jvm_extra_args"]
 
-    db.insert_scaffolding_server(name=form["name"], dir=str(target), variables=variables)
+    await db_async.insert_scaffolding_server(
+        name=form["name"], dir=str(target), variables=variables
+    )
     try:
         scaffolding.scaffold(form["name"], variables, base)
-        db.mark_scaffolded(name=form["name"])
+        await db_async.mark_scaffolded(name=form["name"])
     except Exception:
         logger.exception("scaffold failed for %r — rolling back", form["name"])
         orphan: Path | None = None
@@ -142,7 +144,7 @@ async def new_submit(
                 )
                 orphan = target
         try:
-            db.delete_server(form["name"])
+            await db_async.delete_server(form["name"])
         except Exception:
             logger.exception("rollback delete_server failed for %r", form["name"])
         detail = "failed to scaffold server"

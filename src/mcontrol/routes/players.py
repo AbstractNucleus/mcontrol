@@ -33,7 +33,7 @@ import aiodocker
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import __version__, db, membership, mojang, server_props, server_rcon
+from mcontrol import __version__, db_async, membership, mojang, server_props, server_rcon
 from mcontrol.routes._dependencies import get_docker, get_player_or_404
 from mcontrol.templates import templates
 
@@ -59,9 +59,9 @@ def _whitelist_disabled_by_server(servers: list[dict]) -> dict[str, bool]:
     return out
 
 
-def _build_view() -> dict:
-    roster = db.list_players()
-    server_rows = db.list_servers()
+async def _build_view() -> dict:
+    roster = await db_async.list_players()
+    server_rows = await db_async.list_servers()
     memberships = membership.scan_memberships(server_rows)
     whitelist_disabled_for = _whitelist_disabled_by_server(server_rows)
 
@@ -131,7 +131,7 @@ def _partial(request: Request, ctx: dict, *, status_code: int = 200) -> HTMLResp
 
 @router.get("/players", response_class=HTMLResponse)
 async def get_page(request: Request) -> HTMLResponse:
-    return _page(request, _ctx(_build_view()))
+    return _page(request, _ctx(await _build_view()))
 
 
 @router.post("/players", response_class=HTMLResponse)
@@ -141,7 +141,7 @@ async def add_to_roster(request: Request, name: str = Form(...)) -> HTMLResponse
         return _partial(
             request,
             _ctx(
-                _build_view(),
+                await _build_view(),
                 form={"name": name},
                 errors={
                     "name": (
@@ -158,7 +158,7 @@ async def add_to_roster(request: Request, name: str = Form(...)) -> HTMLResponse
         return _partial(
             request,
             _ctx(
-                _build_view(),
+                await _build_view(),
                 form={"name": name},
                 errors={"name": "Mojang lookup failed; try again."},
             ),
@@ -169,14 +169,14 @@ async def add_to_roster(request: Request, name: str = Form(...)) -> HTMLResponse
         return _partial(
             request,
             _ctx(
-                _build_view(),
+                await _build_view(),
                 form={"name": name},
                 errors={"name": f"No Minecraft account with that name: {name!r}."},
             ),
             status_code=422,
         )
 
-    upsert = db.upsert_player_from_mojang(uuid=result["uuid"], name=result["name"])
+    upsert = await db_async.upsert_player_from_mojang(uuid=result["uuid"], name=result["name"])
     if upsert["created"]:
         flash = {"kind": "ok", "message": f"Added {result['name']} to the roster."}
     elif upsert["previous_name"] == result["name"]:
@@ -193,12 +193,12 @@ async def add_to_roster(request: Request, name: str = Form(...)) -> HTMLResponse
             ),
         }
 
-    return _partial(request, _ctx(_build_view(), flash=flash))
+    return _partial(request, _ctx(await _build_view(), flash=flash))
 
 
 @router.post("/players/import", response_class=HTMLResponse)
 async def import_unknown(request: Request) -> HTMLResponse:
-    server_rows = db.list_servers()
+    server_rows = await db_async.list_servers()
     memberships = membership.scan_memberships(server_rows)
 
     # Per decision 027, Import takes the JSON's name at face value — those
@@ -210,19 +210,19 @@ async def import_unknown(request: Request) -> HTMLResponse:
         uuid = record["uuid"]
         if uuid in seen_new:
             continue
-        if db.get_player(uuid) is not None:
+        if await db_async.get_player(uuid) is not None:
             continue
         seen_new.add(uuid)
         new_rows.append({"uuid": uuid, "name": record["name"]})
 
     if new_rows:
-        db.insert_players_bulk(new_rows)
+        await db_async.insert_players_bulk(new_rows)
 
     flash = {
         "kind": "ok",
         "message": f"Imported {len(new_rows)} new player(s) from disk.",
     }
-    return _partial(request, _ctx(_build_view(), flash=flash))
+    return _partial(request, _ctx(await _build_view(), flash=flash))
 
 
 # ---------------------------------------------------------------------------
@@ -230,9 +230,9 @@ async def import_unknown(request: Request) -> HTMLResponse:
 # ---------------------------------------------------------------------------
 
 
-def _memberships_for(uuid: str) -> list[dict]:
+async def _memberships_for(uuid: str) -> list[dict]:
     """Pre-scan every server for memberships matching ``uuid``."""
-    server_rows = db.list_servers()
+    server_rows = await db_async.list_servers()
     return [m for m in membership.scan_memberships(server_rows) if m["uuid"] == uuid]
 
 
@@ -240,7 +240,7 @@ def _memberships_for(uuid: str) -> list[dict]:
 async def remove_modal(
     request: Request, player: dict = Depends(get_player_or_404)
 ) -> HTMLResponse:
-    memberships = _memberships_for(player["uuid"])
+    memberships = await _memberships_for(player["uuid"])
     return templates.TemplateResponse(
         request=request,
         name="_player_remove_modal.html",
@@ -264,7 +264,7 @@ async def _cascade_remove(
     uuid = player["uuid"]
     name = player["name"]
 
-    server_rows = db.list_servers()
+    server_rows = await db_async.list_servers()
     server_by_name = {s["name"]: s for s in server_rows}
     memberships = [
         m for m in membership.scan_memberships(server_rows) if m["uuid"] == uuid
@@ -354,7 +354,7 @@ async def remove(
     uuid = player["uuid"]
 
     if scope == "roster":
-        db.delete_player(uuid)
+        await db_async.delete_player(uuid)
         flash = {
             "kind": "ok",
             "message": (
@@ -363,12 +363,12 @@ async def remove(
                 "'unknown UUIDs' on this page until you Import or remove them."
             ),
         }
-        return _partial(request, _ctx(_build_view(), flash=flash))
+        return _partial(request, _ctx(await _build_view(), flash=flash))
 
     if scope == "all":
         removed, failures = await _cascade_remove(docker, player)
-        db.delete_player(uuid)
+        await db_async.delete_player(uuid)
         flash = _cascade_flash(player["name"], removed, failures)
-        return _partial(request, _ctx(_build_view(), flash=flash))
+        return _partial(request, _ctx(await _build_view(), flash=flash))
 
     raise HTTPException(status_code=400, detail="scope must be 'roster' or 'all'")

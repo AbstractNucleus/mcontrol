@@ -5,7 +5,7 @@ from uuid import UUID
 import aiodocker
 from fastapi import Depends, HTTPException, Request
 
-from mcontrol import db
+from mcontrol import db_async
 
 
 def get_docker(request: Request) -> aiodocker.Docker:
@@ -19,8 +19,8 @@ def get_docker(request: Request) -> aiodocker.Docker:
     return request.app.state.docker
 
 
-def get_server_or_404(name: str) -> dict:
-    server = db.get_server(name)
+async def get_server_or_404(name: str) -> dict:
+    server = await db_async.get_server(name)
     if server is None:
         raise HTTPException(status_code=404, detail="Server not found")
     return server
@@ -33,8 +33,8 @@ def validate_uuid(uuid: str) -> str:
         raise HTTPException(status_code=400, detail="invalid uuid") from exc
 
 
-def get_player_or_404(uuid: str = Depends(validate_uuid)) -> dict:
-    player = db.get_player(uuid)
+async def get_player_or_404(uuid: str = Depends(validate_uuid)) -> dict:
+    player = await db_async.get_player(uuid)
     if player is None:
         raise HTTPException(status_code=404, detail="Player not found")
     return player

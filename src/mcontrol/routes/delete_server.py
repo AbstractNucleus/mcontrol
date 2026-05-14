@@ -19,7 +19,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import db
+from mcontrol import db_async
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
@@ -90,7 +90,7 @@ async def post(
     if server_dir.exists():
         server_dir.rename(tomb_path)
 
-    db.delete_server(name)
+    await db_async.delete_server(name)
 
     response = HTMLResponse("", status_code=200)
     # HTMX picks up this header and navigates the browser to /. The
