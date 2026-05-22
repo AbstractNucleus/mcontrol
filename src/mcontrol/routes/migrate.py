@@ -19,7 +19,6 @@ idempotent migration converges. The migration + DB writes live in
 ``services.server_service.migrate_legacy_server``.
 """
 
-import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -33,8 +32,6 @@ from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
 router = APIRouter()
-
-_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,31}$")
 
 
 def _initial_form(server: dict) -> dict:
@@ -105,9 +102,6 @@ async def run_migration(
         raise HTTPException(status_code=409, detail="Server is already scaffolded.")
     if server.get("state") == "running":
         raise HTTPException(status_code=409, detail="Stop the server before migrating.")
-
-    if not _NAME_RE.match(name):
-        raise HTTPException(status_code=400, detail="Invalid server name.")
 
     form = {
         "memory_budget_gb": memory_budget_gb,

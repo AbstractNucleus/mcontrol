@@ -377,6 +377,32 @@ async def test_post_returns_404_for_unknown_server(app_client, fake_db):
     assert response.status_code == 404
 
 
+async def test_post_accepts_legacy_name_with_underscore(
+    app_client, fake_db, base_dir
+):
+    """Legacy servers discovered with names that don't match the new-server
+    slug shape (e.g. underscores) must still be migratable. The slug regex
+    in routes/new_server.py gates *creation*, not operations on existing
+    rows; migrate already trusts get_server_or_404 + path-traversal
+    containment."""
+    _legacy_layout(base_dir, name="kobra_kollektivet", host_port=25572)
+    fake_db["rows"].append(_legacy_row(base_dir, name="kobra_kollektivet"))
+
+    response = await app_client.post(
+        "/servers/kobra_kollektivet/migrate",
+        data={
+            "memory_budget_gb": "14",
+            "port": "25572",
+            "server_jar": "fabric-server-launch.jar",
+            "jvm_extra_args": "",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers.get("HX-Redirect") == "/servers/kobra_kollektivet"
+    assert fake_db["scaffolded_marks"] == ["kobra_kollektivet"]
+
+
 # ---- detail page wires the card shell -----------------------------
 
 
