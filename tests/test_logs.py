@@ -44,6 +44,12 @@ async def test_logs_endpoint_streams_sse_with_each_line(client, fake_get_server,
 
     assert "data: [INFO] starting" in text
     assert "data: [INFO] done" in text
+    # Each event must carry a trailing-newline data payload (via the
+    # two-"data:"-line trick) so lines don't run together in the <pre>
+    # under hx-swap="beforeend". Per the SSE spec, two data lines in one
+    # event are joined with \n on the client.
+    assert "data: [INFO] starting\ndata: \n\n" in text
+    assert "data: [INFO] done\ndata: \n\n" in text
 
 
 async def test_logs_endpoint_uses_container_name_override(client, fake_get_server, monkeypatch):

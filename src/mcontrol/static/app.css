@@ -1090,6 +1090,14 @@ small {
   line-height: 1.5;
 }
 
+/* Server logs are full of long mod-loader and stack-trace lines; wrapping
+   them turns one logical entry into a hard-to-scan ragged block. Keep
+   each line intact and let the pane scroll horizontally. */
+.log-pane__stream {
+  white-space: pre;
+  overflow-x: auto;
+}
+
 .console-pane__input {
   display: flex;
   gap: var(--space-2);
