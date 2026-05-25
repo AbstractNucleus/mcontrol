@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from mcontrol import __version__, healthz
 from mcontrol.domain import discovery, tombstones
+from mcontrol.infra import db
 from mcontrol.routes import (
     bindings,
     console,
@@ -78,6 +79,18 @@ def create_app() -> FastAPI:
             return 0
 
     templates.env.globals["tombstone_count"] = _tombstone_count
+
+    # Jinja global for the sidebar server list. Called from _sidebar.html on
+    # every page — keeps the navigator in sync across detail pages without
+    # threading `servers` through every route's context. Same defensive
+    # try/except as tombstone_count so a DB blip can't take the chrome down.
+    def _sidebar_servers(_request: Request) -> list[dict]:
+        try:
+            return db.list_servers()
+        except Exception:
+            return []
+
+    templates.env.globals["sidebar_servers"] = _sidebar_servers
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(home.router)

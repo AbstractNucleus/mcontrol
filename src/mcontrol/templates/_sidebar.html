@@ -1,0 +1,100 @@
+{#
+  Sidebar — Claude Code-style left rail. Persistent across pages, resizable
+  via the right-edge handle, collapsible to a 56px icon rail via the
+  collapse button at the bottom. State (width + collapsed) persists in
+  localStorage; the inline bootstrap in base.html applies it before first
+  paint so the rail doesn't flash a default size.
+
+  The .topnav__badge class is preserved (on the Trash link) so the existing
+  tombstone-badge tests keep passing — the badge is conceptually the same,
+  just relocated from the topnav row into the sidebar.
+#}
+{% set _path = request.url.path if request is defined else "" %}
+{% set _tomb_n = tombstone_count(request) if request is defined else 0 %}
+{% set _sidebar_rows = sidebar_servers(request) if request is defined else [] %}
+<aside class="sidebar" aria-label="Primary">
+  <a class="sidebar__brand" href="/" title="mcontrol">
+    <span class="sidebar__logo-mark" aria-hidden="true"></span>
+    <span class="sidebar__brand-name">mcontrol</span>
+    <span class="sidebar__brand-version">v{{ version }}</span>
+  </a>
+
+  <nav class="sidebar__nav" aria-label="Sections">
+    <a class="sidebar__nav-link"
+       href="/"
+       title="Servers"
+       {% if _path == "/" %}aria-current="page"{% endif %}>
+      <svg class="sidebar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="6" rx="1.5"></rect>
+        <rect x="3" y="14" width="18" height="6" rx="1.5"></rect>
+        <path d="M7 7h.01M7 17h.01"></path>
+      </svg>
+      <span class="sidebar__nav-label">Servers</span>
+    </a>
+    <a class="sidebar__nav-link"
+       href="/players"
+       title="Players"
+       {% if _path == "/players" %}aria-current="page"{% endif %}>
+      <svg class="sidebar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="9" cy="9" r="3.2"></circle>
+        <path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path>
+        <circle cx="16.5" cy="10" r="2.2"></circle>
+        <path d="M14.5 19a4.5 4.5 0 0 1 6.5-4"></path>
+      </svg>
+      <span class="sidebar__nav-label">Players</span>
+    </a>
+    <a class="sidebar__nav-link"
+       href="/trash"
+       title="Trash{% if _tomb_n %} ({{ _tomb_n }}){% endif %}"
+       {% if _path == "/trash" %}aria-current="page"{% endif %}>
+      <svg class="sidebar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"></path>
+      </svg>
+      <span class="sidebar__nav-label">Trash</span>
+      {% if _tomb_n %}
+        <span class="topnav__badge" aria-label="{{ _tomb_n }} tombstone{{ 's' if _tomb_n != 1 else '' }}">{{ _tomb_n }}</span>
+      {% endif %}
+    </a>
+  </nav>
+
+  <div class="sidebar__section">
+    <p class="sidebar__section-label t-eyebrow">Servers</p>
+    {% if _sidebar_rows %}
+      <ul class="sidebar__servers">
+        {% for row in _sidebar_rows %}
+          {% set _is_current = _path.startswith("/servers/") and _path.split("/")[2] == row.name %}
+          <li>
+            <a class="sidebar__server"
+               href="/servers/{{ row.name }}"
+               title="{{ row.name }} ({{ row.state }})"
+               {% if _is_current %}aria-current="page"{% endif %}>
+              <span class="sidebar__server-dot sidebar__server-dot--{{ row.state }}" aria-hidden="true"></span>
+              <span class="sidebar__server-name">{{ row.name }}</span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="sidebar__empty t-caption">No servers yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="sidebar__footer">
+    {% include "_theme_toggle.html" %}
+    <button class="sidebar__collapse"
+            type="button"
+            data-sidebar-collapse
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M15 18l-6-6 6-6"></path>
+      </svg>
+    </button>
+  </div>
+
+  <button class="sidebar__resize-handle"
+          type="button"
+          data-sidebar-resize
+          aria-label="Resize sidebar"
+          tabindex="-1"></button>
+</aside>

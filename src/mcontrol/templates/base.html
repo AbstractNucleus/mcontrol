@@ -23,6 +23,23 @@
       } catch (_) { /* localStorage blocked → CSS @media kicks in */ }
     })();
   </script>
+  {#
+    Sidebar bootstrap. Same shape as the theme bootstrap above — synchronous,
+    inline, runs before stylesheets so the rail comes up at the user's saved
+    width and collapsed state without a flash. Keys: "sidebar-width" (px
+    string with units), "sidebar-collapsed" ("1" when collapsed).
+  #}
+  <script>
+    (function () {
+      try {
+        var w = localStorage.getItem("sidebar-width");
+        if (w) document.documentElement.style.setProperty("--sidebar-width", w);
+        if (localStorage.getItem("sidebar-collapsed") === "1") {
+          document.documentElement.setAttribute("data-sidebar", "collapsed");
+        }
+      } catch (_) {}
+    })();
+  </script>
   <title>{% block title %}mcontrol{% endblock %}</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/favicon.svg">
@@ -32,6 +49,7 @@
   <script src="/static/htmx.min.js" defer></script>
   <script src="/static/htmx-ext-sse.js" defer></script>
   <script src="/static/theme.js?v={{ version }}" defer></script>
+  <script src="/static/sidebar.js?v={{ version }}" defer></script>
   <script src="/static/flash.js?v={{ version }}" defer></script>
   <script src="/static/modals.js?v={{ version }}" defer></script>
   <script src="/static/lifecycle.js?v={{ version }}" defer></script>
@@ -48,19 +66,12 @@
   </script>
 </head>
 <body>
-  <header class="page-header">
-    <a class="page-header__brand" href="/">
-      <span class="page-header__logo">
-        <span class="page-header__logo-mark" aria-hidden="true"></span>
-        mcontrol
-      </span>
-      <span class="page-header__version">v{{ version }}</span>
-    </a>
-    {% include "_theme_toggle.html" %}
-  </header>
-  <main class="page-main">
-    {% block main %}{% endblock %}
-  </main>
+  <div class="app-shell">
+    {% include "_sidebar.html" %}
+    <main class="page-main">
+      {% block main %}{% endblock %}
+    </main>
+  </div>
   <div id="flash-stack" class="flash-stack" aria-live="polite" aria-atomic="false"></div>
 </body>
 </html>

@@ -95,9 +95,11 @@ def _row_block(html: str, name: str) -> str:
 
     Cards are rendered in db-row order; we slice from the row's name
     anchor to the next card start (or list end) so per-row assertions
-    can target the right block.
+    can target the right block. Anchors on ``class="server-card__name"``
+    rather than the bare ``href`` because the sidebar (rendered into
+    every page) also links each server by ``href="/servers/{name}"``.
     """
-    anchor = f'href="/servers/{name}"'
+    anchor = f'class="server-card__name" href="/servers/{name}"'
     start = html.index(anchor)
     list_start = html.rfind("<li", 0, start)
     next_li = html.find("<li", start)

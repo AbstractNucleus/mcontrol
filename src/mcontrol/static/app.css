@@ -92,49 +92,80 @@
 }
 
 
-/* ---- Page chrome ------------------------------------------------------- */
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-5) var(--space-12);
-  border-bottom: 1px solid var(--border-soft);
-  background: var(--bg-page);
+/* ---- App shell + sidebar (Claude Code-style left rail) ----------------
+   App shell is a flex row: sidebar on the left (resizable), main content
+   on the right (fills remaining space). Sidebar width lives in a CSS
+   custom property so JS can update it during drag and persist to
+   localStorage; the inline bootstrap in base.html restores it before
+   first paint. Collapsed state is a data attribute on <html>.
+   ----------------------------------------------------------------------- */
+
+:root {
+  --sidebar-width: 248px;
+  --sidebar-width-collapsed: 56px;
+  --sidebar-width-min: 200px;
+  --sidebar-width-max: 420px;
 }
 
-.page-header__brand {
+.app-shell {
   display: flex;
-  align-items: baseline;
+  align-items: stretch;
+  min-height: 100vh;
+}
+
+.sidebar {
+  flex: 0 0 var(--sidebar-width);
+  width: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5) var(--space-3) var(--space-3);
+  border-right: 1px solid var(--border-soft);
+  background: var(--bg-page);
+  /* Lock sidebar height to the viewport so internal scroll regions
+     (the server list) stay within their own pane rather than scrolling
+     the page. Sticky positions it against scroll, and provides a
+     containing block for the absolutely-positioned resize handle. */
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  gap: var(--space-4);
+}
+
+[data-sidebar="collapsed"] .sidebar {
+  flex-basis: var(--sidebar-width-collapsed);
+  width: var(--sidebar-width-collapsed);
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+}
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
   gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
   text-decoration: none;
   color: var(--fg-primary);
-}
-
-.page-header__brand:hover {
-  color: var(--fg-primary);
-}
-
-.page-header__logo {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-family: var(--font-sans);
-  font-size: var(--fs-lg);
+  font-size: var(--fs-md);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
-.page-header__logo-mark {
-  display: inline-block;
-  width: 18px;
-  height: 18px;
+.sidebar__brand:hover {
+  background: var(--bg-sunken);
+  color: var(--fg-primary);
+}
+
+.sidebar__logo-mark {
+  flex: none;
+  width: 16px;
+  height: 16px;
   border-radius: var(--radius-xs);
   background: var(--accent);
   position: relative;
 }
 
-.page-header__logo-mark::after {
+.sidebar__logo-mark::after {
   content: "";
   position: absolute;
   inset: 4px;
@@ -142,30 +173,282 @@
   background: var(--bg-page);
 }
 
-.page-header__version {
+.sidebar__brand-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar__brand-version {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
+  font-weight: 400;
   color: var(--fg-muted);
 }
 
+[data-sidebar="collapsed"] .sidebar__brand-name,
+[data-sidebar="collapsed"] .sidebar__brand-version {
+  display: none;
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar__nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 7px var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--fg-secondary);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  text-decoration: none;
+  transition: color var(--motion-fast) var(--ease),
+              background var(--motion-fast) var(--ease);
+}
+
+.sidebar__nav-link:hover {
+  color: var(--fg-primary);
+  background: var(--bg-sunken);
+}
+
+.sidebar__nav-link[aria-current="page"] {
+  color: var(--fg-primary);
+  background: var(--bg-surface);
+}
+
+.sidebar__icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--fg-muted);
+}
+
+.sidebar__nav-link[aria-current="page"] .sidebar__icon {
+  color: var(--accent);
+}
+
+.sidebar__nav-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-sidebar="collapsed"] .sidebar__nav-link {
+  justify-content: center;
+  padding: 7px;
+}
+
+[data-sidebar="collapsed"] .sidebar__nav-label,
+[data-sidebar="collapsed"] .sidebar__section-label,
+[data-sidebar="collapsed"] .sidebar__servers,
+[data-sidebar="collapsed"] .sidebar__empty,
+[data-sidebar="collapsed"] .theme-toggle,
+[data-sidebar="collapsed"] .sidebar__nav-link .topnav__badge {
+  display: none;
+}
+
+.sidebar__section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow: hidden;
+}
+
+.sidebar__section-label {
+  padding: 0 var(--space-3);
+  margin: var(--space-2) 0 var(--space-1);
+}
+
+.sidebar__servers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow-y: auto;
+  /* Hide scrollbar chrome unless the list overflows. */
+  scrollbar-width: thin;
+}
+
+.sidebar__server {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  transition: color var(--motion-fast) var(--ease),
+              background var(--motion-fast) var(--ease);
+}
+
+.sidebar__server:hover {
+  color: var(--fg-primary);
+  background: var(--bg-sunken);
+}
+
+.sidebar__server[aria-current="page"] {
+  color: var(--fg-primary);
+  background: var(--bg-surface);
+}
+
+.sidebar__server-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--fg-muted);
+}
+
+/* State-coloured dots — mirror the state-pill colour mapping but as a
+   plain swatch so the row stays a single line of mono. */
+.sidebar__server-dot--running    { background: var(--success-fg); }
+.sidebar__server-dot--exited,
+.sidebar__server-dot--dead       { background: var(--danger-fg); }
+.sidebar__server-dot--restarting,
+.sidebar__server-dot--starting,
+.sidebar__server-dot--pending,
+.sidebar__server-dot--removing   { background: var(--warning-fg); }
+.sidebar__server-dot--paused     { background: var(--info-fg); }
+
+.sidebar__server-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar__empty {
+  padding: 0 var(--space-3);
+}
+
+.sidebar__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-soft);
+}
+
+[data-sidebar="collapsed"] .sidebar__footer {
+  justify-content: center;
+}
+
+.sidebar__collapse {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease),
+              background var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease);
+}
+
+.sidebar__collapse:hover {
+  color: var(--fg-primary);
+  background: var(--bg-sunken);
+}
+
+[data-sidebar="collapsed"] .sidebar__collapse svg {
+  transform: rotate(180deg);
+}
+
+.sidebar__resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: col-resize;
+  z-index: 5;
+}
+
+.sidebar__resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 2px;
+  width: 1px;
+  height: 100%;
+  background: transparent;
+  transition: background var(--motion-fast) var(--ease);
+}
+
+.sidebar__resize-handle:hover::after,
+[data-sidebar-resizing="true"] .sidebar__resize-handle::after {
+  background: var(--accent);
+}
+
+[data-sidebar="collapsed"] .sidebar__resize-handle {
+  pointer-events: none;
+}
+
+/* Disable text selection while a drag is in progress so highlight doesn't
+   flicker as the user drags. JS toggles data-sidebar-resizing on <html>. */
+[data-sidebar-resizing="true"] {
+  user-select: none;
+  cursor: col-resize;
+}
+
 .page-main {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: var(--space-8) var(--space-12);
+  flex: 1;
+  min-width: 0;
+  max-width: 1100px;
+  padding: var(--space-8) var(--space-10);
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
 }
 
 @media (max-width: 768px) {
-  .page-header,
+  /* Below 768px, auto-collapse the rail to icons unless the user has
+     explicitly expanded it. The drag handle is disabled in collapsed
+     mode (above) so phone users don't accidentally enter resize mode. */
+  :root:not([data-sidebar="expanded"]) {
+    --sidebar-width: var(--sidebar-width-collapsed);
+  }
+  :root:not([data-sidebar="expanded"]) .sidebar__brand-name,
+  :root:not([data-sidebar="expanded"]) .sidebar__brand-version,
+  :root:not([data-sidebar="expanded"]) .sidebar__nav-label,
+  :root:not([data-sidebar="expanded"]) .sidebar__section-label,
+  :root:not([data-sidebar="expanded"]) .sidebar__servers,
+  :root:not([data-sidebar="expanded"]) .sidebar__empty,
+  :root:not([data-sidebar="expanded"]) .theme-toggle {
+    display: none;
+  }
+  :root:not([data-sidebar="expanded"]) .sidebar__nav-link {
+    justify-content: center;
+    padding: 7px;
+  }
   .page-main {
     padding-left: var(--space-5);
     padding-right: var(--space-5);
-  }
-  .page-header {
-    flex-wrap: wrap;
-    gap: var(--space-3);
   }
 }
 
@@ -243,40 +526,8 @@
 }
 
 
-/* ---- Top nav ----------------------------------------------------------- */
-.topnav {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-full);
-  margin-bottom: var(--space-3);
-  width: fit-content;
-}
-
-.topnav__link {
-  padding: 6px 14px;
-  border-radius: var(--radius-full);
-  color: var(--fg-secondary);
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  text-decoration: none;
-  transition: color var(--motion-fast) var(--ease),
-              background var(--motion-fast) var(--ease);
-}
-
-.topnav__link:hover {
-  color: var(--fg-primary);
-  background: var(--bg-surface);
-}
-
-.topnav__link[aria-current="page"] {
-  background: var(--bg-surface);
-  color: var(--fg-primary);
-  box-shadow: var(--shadow-sm);
-}
-
+/* ---- Sidebar count badge (kept from the retired topnav so the Trash
+   tombstone-count chip in _sidebar.html keeps the same look + tests) -- */
 .topnav__badge {
   display: inline-flex;
   align-items: center;
