@@ -5,7 +5,7 @@ from mcontrol.routes import home, server
 
 
 def test_shared_templates_object_is_used_by_home_and_server():
-    # Both route modules consume the shared instance — not a per-module instance.
+    # Both route modules consume the shared instance. not a per-module instance.
     assert home.templates is templates_module.templates
     assert server.templates is templates_module.templates
 
@@ -17,7 +17,7 @@ def test_templates_directory_resolves_to_packaged_templates():
 
 
 def test_flash_partial_uses_alert_role_for_errors():
-    # Error flashes need assertive announcement — the polite #flash-stack
+    # Error flashes need assertive announcement. the polite #flash-stack
     # container won't drive that, so the individual message carries
     # role="alert" to upgrade.
     html = templates_module.templates.get_template("_flash.html").render(
@@ -30,7 +30,7 @@ def test_flash_partial_uses_alert_role_for_errors():
 
 def test_flash_partial_uses_status_role_for_ok_and_info():
     # Success / info should announce politely via the live region, not
-    # interrupt the user — so role="status", never role="alert".
+    # interrupt the user. so role="status", never role="alert".
     for kind in ("ok", "info"):
         html = templates_module.templates.get_template("_flash.html").render(
             flash={"kind": kind, "message": "hello"}

@@ -3,13 +3,13 @@
 Issue #99: ``supabase-py`` is a sync HTTP client, so every direct
 ``db.*`` call from an async route blocks the event loop on the
 Supabase round-trip. ``healthz._probe_db`` already routes its
-``db.ping`` through ``asyncio.to_thread`` — this module is the same
+``db.ping`` through ``asyncio.to_thread``: this module is the same
 pattern for every other PostgREST-hitting helper, so async callers
 can ``await db_async.<fn>(...)`` and stop serializing the app on
 database I/O.
 
 Pure-Python helpers like ``db.container_name_for`` stay sync and are
-called directly — wrapping them in ``to_thread`` would only add a
+called directly. wrapping them in ``to_thread`` would only add a
 threadpool hop for no benefit.
 
 Each wrapper resolves ``db.<fn>`` at call time, so test monkeypatches

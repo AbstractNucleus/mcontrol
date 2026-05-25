@@ -16,7 +16,7 @@ from mcontrol.domain import tombstones
     "name,expected",
     [
         (".deleted-atm10-1700000000", ("atm10", 1700000000)),
-        # slug-with-hyphens — backtrack pins the unix-ts to the rightmost run
+        # slug-with-hyphens. backtrack pins the unix-ts to the rightmost run
         (".deleted-kobra-2022-1700000000", ("kobra-2022", 1700000000)),
         (".deleted-monifactory-1234567890", ("monifactory", 1234567890)),
     ],

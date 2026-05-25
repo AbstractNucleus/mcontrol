@@ -1,13 +1,12 @@
-"""Tombstone listing + purge (slice 11, decision 031).
+"""Tombstone listing + purge.
 
-Closes the "Empty trash" affordance that decision 026 named in its
-trade-off line. The producer side is ``routes/delete_server.py``: a
+Closes the "Empty trash" affordance. The producer side is ``routes/delete_server.py``: a
 deleted server's directory is renamed to ``<base>/.deleted-<name>-<ts>/``
-and the row is removed. This module is the missing purge half — it
+and the row is removed. This module is the missing purge half. it
 parses those directory names back into structured records and removes
 them from disk.
 
-Read side reuses ``resources.read_disk_usage`` for the bytes column —
+Read side reuses ``resources.read_disk_usage`` for the bytes column -
 the walk is the same primitive, already path-safe with
 ``follow_symlinks=False``.
 
@@ -57,11 +56,11 @@ def count(base: Path) -> int:
     """Cheap count of tombstones under ``base``. Single ``os.scandir`` pass,
     no recursion into each tombstone (and so no disk-usage walk).
 
-    Intended for the topnav badge (decision 035), which is rendered on
+    Intended for the topnav badge, which is rendered on
     every page and needs to be cheap. Callers that need bytes / age use
     ``list_tombstones`` instead.
 
-    Returns 0 when ``base`` doesn't exist — same posture as
+    Returns 0 when ``base`` doesn't exist. same posture as
     ``list_tombstones``.
     """
     base = Path(base).resolve()
@@ -84,7 +83,7 @@ def list_tombstones(base: Path) -> list[Tombstone]:
     a list of ``Tombstone`` records, oldest first.
 
     Malformed dot-dirs (``.git``, ``.lost+found``, ``.deleted-foo``
-    without the trailing ``-<unix-ts>``) are silently skipped — this
+    without the trailing ``-<unix-ts>``) are silently skipped. this
     list is "tombstones I produced," not "every dot-dir under ``<base>``."
     Symlinks with tombstone-shaped names are skipped to avoid following
     them on the bytes-read or on later purge.

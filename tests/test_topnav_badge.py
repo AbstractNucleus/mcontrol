@@ -1,4 +1,4 @@
-"""Tests for the topnav tombstone count badge (slice 15, decision 035)."""
+"""Tests for the topnav tombstone count badge."""
 
 import time
 
@@ -31,7 +31,7 @@ def test_count_counts_only_tombstones(tmp_path):
     # tombstones
     _make_tombstone(tmp_path, "atm10")
     _make_tombstone(tmp_path, "monifactory")
-    # non-tombstones — must NOT count
+    # non-tombstones. must NOT count
     (tmp_path / "regular-server").mkdir()
     (tmp_path / ".git").mkdir()
     (tmp_path / ".deleted-incomplete").mkdir()  # no trailing -<ts>
@@ -59,7 +59,7 @@ def test_count_skips_symlinks_with_tombstone_names(tmp_path):
 def env_with_base(monkeypatch, tmp_path):
     """Override the conftest env so SERVER_BASE_PATH is a real tmp dir
     we can populate with tombstone-shaped directories."""
-    monkeypatch.setenv("SUPABASE_URL", "https://api.noelkleen.com")
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
     monkeypatch.setenv("SERVER_BASE_PATH", str(tmp_path))
     return tmp_path
@@ -82,7 +82,7 @@ def fake_stats(monkeypatch):
 
 
 async def _fresh_client():
-    """Build a fresh client AFTER the env fixture has set SERVER_BASE_PATH —
+    """Build a fresh client AFTER the env fixture has set SERVER_BASE_PATH -
     the conftest's client fixture caches a Settings instance at app creation
     time, so we need a new app for these tests."""
     from mcontrol.main import create_app
@@ -90,7 +90,7 @@ async def _fresh_client():
 
     app = create_app()
     # ASGITransport doesn't run lifespan, so populate app.state.docker
-    # ourselves — Depends(get_docker) on every route requires it (#98).
+    # ourselves. Depends(get_docker) on every route requires it (#98).
     app.state.docker = make_fake_docker()
     transport = ASGITransport(app=app)
     return AsyncClient(transport=transport, base_url="http://test")
@@ -120,7 +120,7 @@ async def test_topnav_renders_badge_with_count(
     body = response.text
     assert response.status_code == 200
     assert "topnav__badge" in body
-    # Badge contains the count text — pull just the span to assert.
+    # Badge contains the count text. pull just the span to assert.
     badge_open = body.index('class="topnav__badge"')
     badge_close = body.index("</span>", badge_open)
     badge_chunk = body[badge_open:badge_close]

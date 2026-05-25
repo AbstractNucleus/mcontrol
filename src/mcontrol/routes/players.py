@@ -4,7 +4,7 @@
                                      summary, plus the "N memberships on disk
                                      for unknown UUIDs" Import affordance.
   POST /players                    → form: name → Mojang lookup → upsert.
-                                     Decision 027 outcomes:
+                                     Outcomes:
                                        204            → "no Minecraft account with that name"
                                        5xx / timeout  → "Mojang lookup failed; try again"
                                        200, new UUID  → "Added <Name> to the roster"
@@ -44,7 +44,7 @@ from mcontrol.templates import templates
 
 router = APIRouter()
 
-# Minecraft handles are 3–16 chars from [A-Za-z0-9_]. Mojang would 204 on
+# Minecraft handles are 3-16 chars from [A-Za-z0-9_]. Mojang would 204 on
 # any other input, but rejecting structurally invalid names without
 # burning a Mojang lookup keeps the UX faster + avoids retry noise on
 # obvious typos.
@@ -99,7 +99,7 @@ async def add_to_roster(request: Request, name: str = Form(...)) -> HTMLResponse
                 form={"name": name},
                 errors={
                     "name": (
-                        "3–16 characters; letters, digits, and underscores only."
+                        "3-16 characters; letters, digits, and underscores only."
                     )
                 },
             ),
@@ -180,7 +180,7 @@ async def remove(
             "kind": "ok",
             "message": (
                 f"Removed {player['name']} from the roster. "
-                "On-disk memberships were not touched — they'll resurface as "
+                "On-disk memberships were not touched; they'll resurface as "
                 "'unknown UUIDs' on this page until you Import or remove them."
             ),
         }

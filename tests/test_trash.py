@@ -11,7 +11,7 @@ from httpx import ASGITransport, AsyncClient
 @pytest.fixture
 async def trash_client(monkeypatch, tmp_path: Path) -> AsyncIterator[tuple[AsyncClient, Path]]:
     """Test client whose SERVER_BASE_PATH is the per-test tmp_path."""
-    monkeypatch.setenv("SUPABASE_URL", "https://api.noelkleen.com")
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
     monkeypatch.setenv("SERVER_BASE_PATH", str(tmp_path))
 
@@ -44,7 +44,7 @@ async def test_get_trash_renders_empty_state_when_no_tombstones(trash_client):
     assert "Trash" in body
     # Slice 12 reshaped the empty copy: "Trash is empty" / "Deleted
     # servers land here automatically." The "Deleted servers"
-    # phrase is the stable signal — present in both old and new copy.
+    # phrase is the stable signal. present in both old and new copy.
     assert "Trash is empty" in body
     assert "Deleted servers land here" in body
 
@@ -84,7 +84,7 @@ async def test_get_trash_button_enabled_when_sweepable_tombstones_exist(trash_cl
     response = await client.get("/trash")
 
     body = response.text
-    assert "Empty trash — 1 tombstone" in body
+    assert "Empty trash: 1 tombstone" in body
     assert "older than 7 days" in body
 
 
@@ -135,9 +135,9 @@ async def test_get_delete_confirm_renders_for_valid_tombstone_name(trash_client)
 
 
 async def test_empty_confirm_carries_a11y_dialog_markup(trash_client):
-    # Decision 037: the shared focus-trap helper triggers on
-    # role=dialog + aria-modal + aria-labelledby + data-modal-root.
-    # Same contract for both trash modals.
+    # The shared focus-trap helper triggers on role=dialog + aria-modal
+    # + aria-labelledby + data-modal-root. Same contract for both trash
+    # modals.
     client, base = trash_client
     now = int(time.time())
     _make_tombstone(base, "stale", now - 8 * 86400)
@@ -153,7 +153,7 @@ async def test_empty_confirm_carries_a11y_dialog_markup(trash_client):
 
 
 async def test_delete_confirm_carries_a11y_dialog_markup(trash_client):
-    # Decision 037: same hooks on the per-tombstone delete modal.
+    # Same hooks on the per-tombstone delete modal.
     client, _base = trash_client
     response = await client.get("/trash/.deleted-atm10-1700000000/confirm")
 

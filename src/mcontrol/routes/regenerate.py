@@ -1,9 +1,9 @@
 """Regenerate scaffold scripts with a diff-preview checkpoint.
 
-Decision 025: the diff endpoint captures both files' mtimes; the
-confirm endpoint re-stats them and aborts on drift. atomic_write_text
-keeps partial writes impossible. There is no merge logic — the diff
-is the operator's checkpoint for clobbering hand-edits.
+The diff endpoint captures both files' mtimes; the confirm endpoint
+re-stats them and aborts on drift. atomic_write_text keeps partial
+writes impossible. There is no merge logic. the diff is the operator's
+checkpoint for clobbering hand-edits.
 
 Flow:
 
@@ -93,7 +93,7 @@ def _render_diff_partial(
 async def get(
     request: Request, server: dict = Depends(get_server_or_404)
 ) -> HTMLResponse:
-    # If variables don't render, there is nothing meaningful to diff —
+    # If variables don't render, there is nothing meaningful to diff -
     # send the operator back to the card; the health banner on the
     # detail page already explains the variables-incomplete cause.
     if health.variables_render_error(server) is not None:

@@ -1,6 +1,6 @@
 """Files-routes package.
 
-`routes/files.py` was split into per-concern submodules (decision 044).
+`routes/files.py` was split into per-concern submodules.
 Each submodule owns its own `APIRouter`; this package merges them into
 a single `router` so `from mcontrol.routes.files import router` keeps
 working in `main.create_app`.
@@ -8,7 +8,7 @@ working in `main.create_app`.
 Path-safety contract (mirrors slice 5 plan; applies to every endpoint):
 
 1. Resolve `(<dir>) / operator_path` and refuse `..` traversal.
-2. Walk every component with `Path.is_symlink()` — refuse to follow
+2. Walk every component with `Path.is_symlink()`: refuse to follow
    any segment that is a symlink. Symlinks are still rendered in
    listings (with a marker) but never traversed for read or write.
 3. Sub-path check: the resolved target must live inside the resolved
@@ -18,7 +18,7 @@ Path-safety contract (mirrors slice 5 plan; applies to every endpoint):
 5. Upload + mkdir filenames are operator-controlled; refuse `/`, `\\`,
    `..`, `.`, empty, and null-byte names before anything touches disk.
 6. Delete refuses `path=""` (the server's bind-mount root is sacred)
-   and refuses to follow symlinks — `os.unlink` removes the link entry,
+   and refuses to follow symlinks. `os.unlink` removes the link entry,
    never the target.
 """
 

@@ -1,4 +1,4 @@
-// Lifecycle-button a11y helpers (issue #110, decision 039).
+// Lifecycle-button a11y helpers (issue #110).
 //
 // Two small responsibilities, both keyed off the `data-lifecycle-button`
 // opt-in attribute that `_lifecycle_buttons.html` puts on each of the

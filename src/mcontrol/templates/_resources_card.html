@@ -26,7 +26,7 @@
           <span class="resources-card__memory-pct">({{ "%.0f"|format(mem_percent) }} %)</span>
         </span>
       {% else %}
-        <span class="resources-card__memory-text resources-card__memory-text--empty">—</span>
+        <span class="resources-card__memory-text resources-card__memory-text--empty">-</span>
       {% endif %}
     </div>
     <div class="resources-card__bar">
@@ -44,7 +44,7 @@
         {% if ok %}
           {{ "%.1f"|format(cpu_percent) }} %
         {% else %}
-          <span class="t-muted">—</span>
+          <span class="t-muted">-</span>
         {% endif %}
       </dd>
     </div>

@@ -1,22 +1,22 @@
 {#
-  Lifecycle buttons (slice 13, decision 033).
+  Lifecycle buttons.
 
   Context:
   - `server`: the server row (uses `server.name`).
-  - `lifecycle`: dict from `mcontrol.lifecycle_state.view(state)` —
+  - `lifecycle`: dict from `mcontrol.lifecycle_state.view(state)` -
     `start_disabled`, `stop_disabled`, `restart_disabled`, `accent`.
   - `state` (optional): the server state string. Surfaced on the wrapper
     as `data-state` so `static/lifecycle.js` can announce the post-action
-    state via the `#lifecycle-status` aria-live region (decision 039).
+    state via the `#lifecycle-status` aria-live region.
   - `oob` (optional bool, default false): when true, the wrapper carries
     `hx-swap-oob="true"` so a lifecycle-action response can swap it
     alongside the primary state-pill swap.
 
-  A11y (decision 039):
+  A11y:
   - `data-lifecycle-button` opts each button into `static/lifecycle.js`
     (toggles `aria-busy` during the request).
   - `hx-disabled-elt="this"` disables the clicked button while its request
-    is in flight, preventing double-clicks. htmx restores the prior
+    is in flight, preventing double-clicks; htmx restores the prior
     `disabled` state when the request resolves.
   - Each button carries `aria-label="{Verb} {server name}"` so screen
     readers get the server context (the visible label is just the verb).

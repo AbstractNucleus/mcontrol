@@ -19,7 +19,7 @@ async def _sse(docker: aiodocker.Docker, container_name: str) -> AsyncIterator[b
         # Strip Docker's trailing newline (and any \r), defensively flatten
         # any *internal* newlines so they don't fracture the SSE event.
         text = line.rstrip("\r\n").replace("\r", "").replace("\n", " ")
-        # Two "data:" lines per SSE event — the EventSource parser joins
+        # Two "data:" lines per SSE event. the EventSource parser joins
         # them with \n, so the swap payload ends with a newline and each
         # log line lands on its own row in the <pre>. Single-data-line
         # payloads concatenate end-to-end under hx-swap="beforeend".

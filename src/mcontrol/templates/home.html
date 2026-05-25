@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}mcontrol — servers{% endblock %}
+{% block title %}mcontrol: servers{% endblock %}
 
 {% block main %}
 <section>
@@ -24,7 +24,7 @@
       {% for server in servers %}
         <li class="server-card">
           <a class="server-card__name" href="/servers/{{ server.name }}">{{ server.name }}</a>
-          <span class="server-card__memory">{{ server.memory or "—" }}</span>
+          <span class="server-card__memory">{{ server.memory or "-" }}</span>
           <span class="state-pill state-pill--{{ server.state }}">{{ server.state }}</span>
         </li>
       {% endfor %}

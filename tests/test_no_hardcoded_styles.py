@@ -18,7 +18,7 @@ def test_app_css_has_no_hardcoded_hex_colors():
 
 def test_app_css_font_family_uses_tokens_only():
     """Font stacks are owned by tokens.css. Components in app.css may
-    set `font-family` only to `var(--font-*)` or `inherit` — never a
+    set `font-family` only to `var(--font-*)` or `inherit`: never a
     literal font name. Slice 12 swap relaxed slice 1's
     "no font-family in app.css at all" invariant once mono surfaces
     (logs, code, file tree) needed an explicit deviation from the

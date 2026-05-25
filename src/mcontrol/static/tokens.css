@@ -1,6 +1,6 @@
 /* =========================================================================
-   mcontrol — design tokens
-   Slice 12 / decision 032: Claude-flavoured theme. Two-layer system:
+   mcontrol: design tokens
+   Claude-flavoured theme. Two-layer system:
    primitives (raw hex) and semantic tokens (consumed by components).
    Components MUST consume the semantic layer only.
 
@@ -13,11 +13,11 @@
    ========================================================================= */
 
 
-/* ---- Fonts (Inter Tight, variable weight 100–900, latin + latin-ext) ---- */
+/* ---- Fonts (Inter Tight, variable weight 100-900, latin + latin-ext) ---- */
 /* Self-hosted under /static/fonts/. Without these declarations the
-   --font-sans stack falls all the way through to system sans — the
+   --font-sans stack falls all the way through to system sans; the
    "Inter Tight" name only resolves if a user happens to have it installed
-   locally. Mirrors D:\code\design\tokens.css. OFL 1.1 — see fonts/OFL.txt. */
+   locally. Mirrors D:\code\design\tokens.css. OFL 1.1; see fonts/OFL.txt. */
 
 @font-face {
   font-family: 'Inter Tight';
@@ -94,7 +94,7 @@
 }
 
 
-/* ---- Semantic tokens — light (default) --------------------------------- */
+/* ---- Semantic tokens: light (default) --------------------------------- */
 :root {
   /* Surface */
   --bg-page:        var(--hex-cream);
@@ -108,7 +108,7 @@
   --fg-muted:       var(--hex-ink-mute);
   --fg-inverse:     var(--hex-paper);
 
-  /* Borders — translucent so they pick up surface tint */
+  /* Borders: translucent so they pick up surface tint */
   --border-soft:    rgba(31, 30, 29, 0.15);
   --border-medium:  rgba(31, 30, 29, 0.30);
   --border-strong:  rgba(31, 30, 29, 0.40);
@@ -119,7 +119,7 @@
   --accent-soft:    var(--hex-orange-soft);
   --accent-fg:      var(--hex-paper);
 
-  /* Semantic — info, success, warning, danger */
+  /* Semantic: info, success, warning, danger */
   --info-bg:        var(--hex-info-bg-l);
   --info-fg:        var(--hex-info-fg-l);
   --info-border:    var(--hex-info-br-l);
@@ -136,10 +136,10 @@
   --danger-fg:      var(--hex-danger-fg-l);
   --danger-border:  var(--hex-danger-br-l);
 
-  /* Focus ring — neutral, never orange */
+  /* Focus ring: neutral, never orange */
   --ring:           rgba(20, 20, 19, 0.70);
 
-  /* Shadows — reserved for popovers / dialogs only */
+  /* Shadows: reserved for popovers / dialogs only */
   --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.10), 0 1px 2px -1px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 10px 20px -4px rgba(0, 0, 0, 0.15), 0 4px 8px -4px rgba(0, 0, 0, 0.10);
@@ -149,7 +149,7 @@
 }
 
 
-/* ---- Semantic tokens — dark (explicit) --------------------------------- */
+/* ---- Semantic tokens: dark (explicit) --------------------------------- */
 /* Mirrors the Claude Code desktop app: flat coal-pit page, narrowly-lifted
    surfaces (~7-unit step from page), neutral bone-alpha hairline borders,
    terracotta accent used scarcely. No glow, no texture, no glass. */
@@ -198,7 +198,7 @@
 /* ---- JS-off fallback: prefers-color-scheme dark ------------------------ */
 /* Applies the dark token set when no explicit data-theme has been set
    (e.g. JS disabled, localStorage blocked, first paint racing the
-   inline bootstrap). The :not([data-theme]) selector is load-bearing —
+   inline bootstrap). The :not([data-theme]) selector is load-bearing;
    without it, an explicit data-theme="light" would be overridden by an
    OS-level dark preference. */
 @media (prefers-color-scheme: dark) {

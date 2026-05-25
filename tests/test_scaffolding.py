@@ -20,14 +20,14 @@ def test_render_compose_substitutes_name_memory_and_port():
     assert "image: eclipse-temurin:21-jre" in rendered
     assert "mem_limit: 8g" in rendered
     assert '- "25565:25565"' in rendered
-    # Bind mount + entrypoint stay verbatim from decision 023.
+    # Bind mount + entrypoint stay verbatim.
     assert "./server:/data" in rendered
     assert 'command: ["./start_server.sh"]' in rendered
 
 
 def test_render_start_script_derives_xmx_from_memory_budget():
     rendered = scaffolding.render_start_script(_VARS)
-    # 8 GB budget − 2 GB headroom (decision 009) = -Xmx6g.
+    # 8 GB budget − 2 GB headroom = -Xmx6g.
     assert "-Xmx6g" in rendered
     assert "-jar paper-1.21.4.jar" in rendered
     assert "-XX:+UseG1GC" in rendered
@@ -57,7 +57,7 @@ def test_render_start_script_raises_on_missing_server_jar():
 
 
 def test_render_compose_raises_on_undefined_template_var(monkeypatch):
-    """StrictUndefined is in force — a typo in the template would raise
+    """StrictUndefined is in force. a typo in the template would raise
     rather than silently inject an empty string. Verified by rendering
     against an explicitly stripped context."""
     template = scaffolding._env.from_string("{{ ghost }}")
@@ -81,7 +81,7 @@ def test_scaffold_writes_both_files_under_base_name(tmp_path):
 
 def test_scaffold_creates_intermediate_directories(tmp_path):
     """Calling scaffold against a base where <base>/<name>/server doesn't
-    yet exist must create both levels — no pre-mkdir required."""
+    yet exist must create both levels. no pre-mkdir required."""
     scaffolding.scaffold("brand-new", _VARS, tmp_path)
     assert (tmp_path / "brand-new" / "server").is_dir()
 

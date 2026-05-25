@@ -289,7 +289,7 @@ async def test_import_inserts_unknown_uuids_in_one_call(client, fake_db, tmp_pat
 
     assert response.status_code == 200
     assert "Imported 2 new player(s)" in response.text
-    # One bulk call, not three (decision 027: one DB transaction).
+    # One bulk call, not three (one DB transaction).
     assert len(fake_db["inserted_bulk"]) == 1
     inserted_uuids = {r["uuid"] for r in fake_db["inserted_bulk"][0]}
     assert inserted_uuids == {_NOTCH_UUID, _HEROBRINE_UUID}
@@ -422,11 +422,11 @@ async def test_remove_modal_hides_remove_all_when_no_memberships(
 async def test_remove_modal_carries_a11y_dialog_markup(
     client, fake_db_with_delete, tmp_path
 ):
-    # Decision 037 contract: the modal opts into the shared focus-trap
-    # helper by carrying role=dialog + aria-modal + aria-labelledby +
-    # data-modal-root, and the Cancel button opts into the helper's
-    # click-to-close by carrying data-modal-close. The shared script
-    # only touches modal roots that declare these hooks.
+    # The modal opts into the shared focus-trap helper by carrying
+    # role=dialog + aria-modal + aria-labelledby + data-modal-root, and
+    # the Cancel button opts into the helper's click-to-close by carrying
+    # data-modal-close. The shared script only touches modal roots that
+    # declare these hooks.
     fake_db_with_delete["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
     fake_db_with_delete["servers"] = [_server_row(tmp_path, "atm10")]
 
@@ -514,7 +514,7 @@ async def test_post_scope_all_running_uses_rcon(
 
     assert response.status_code == 200
     assert sorted(commands) == ["deop Notch", "whitelist remove Notch"]
-    # Disk on a running server is owned by the JVM — RCON path leaves it
+    # Disk on a running server is owned by the JVM. RCON path leaves it
     # to the server to update.
     assert _NOTCH_UUID in fake_db_with_delete["deleted"]
 
@@ -549,7 +549,7 @@ async def test_post_scope_all_partial_failure_surfaces_in_flash(
     body = response.text
     assert "Removed Notch from atm10 (whitelist)." in body
     assert "Remove Notch from monifactory (whitelist) failed" in body
-    # Per decision 027, the row is still hard-deleted; partial state
+    # The row is still hard-deleted; partial state
     # surfaces as an unknown-UUID affordance on the next page render.
     assert _NOTCH_UUID in fake_db_with_delete["deleted"]
 

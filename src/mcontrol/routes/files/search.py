@@ -1,6 +1,6 @@
 """Basename search endpoint.
 
-The index itself lives in `mcontrol.file_search` (decision 044). This
+The index itself lives in `mcontrol.file_search`. This
 module owns the request shape (`q`, `include_chunks`), the result cap,
 and the htmx template choice. The skip-set rules apply at index-build
 time inside `file_search`, not here.
@@ -34,7 +34,7 @@ async def search(
 
     Consults a per-server in-memory index (built lazily, invalidated on
     mutation, TTL-refreshed) rather than re-walking on every keystroke
-    — see issue #49. Symlinked directories are not descended at index
+   . see issue #49. Symlinked directories are not descended at index
     build time; their link entries can still match by name. Special
     files are filtered at build time too. Capped at `_SEARCH_LIMIT` hits
     to keep render bounded on large trees.

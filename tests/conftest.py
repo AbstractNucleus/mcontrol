@@ -14,8 +14,8 @@ def _clear_settings_cache():
 
 @pytest.fixture
 def env(monkeypatch):
-    """Default test environment — required Settings fields populated."""
-    monkeypatch.setenv("SUPABASE_URL", "https://api.noelkleen.com")
+    """Default test environment with required Settings fields populated."""
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
     monkeypatch.setenv("SERVER_BASE_PATH", "/tmp/mcontrol-test-servers")
 

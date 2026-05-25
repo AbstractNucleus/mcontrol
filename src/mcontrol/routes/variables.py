@@ -5,7 +5,7 @@
   POST /servers/{name}/variables          → write-back JSONB, re-render card
 
 The card is gated on `server.scaffolded_at is not null` at the
-template level, but these endpoints don't enforce that — a non-
+template level, but these endpoints don't enforce that. a non-
 scaffolded row's edit POST would still write JSONB. The detail page
 is the only entry point in the UI.
 """

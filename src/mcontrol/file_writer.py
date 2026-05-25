@@ -7,7 +7,7 @@ sibling tempfile, then `os.replace()` over the target so a partial
 write can never leave a half-baked file on disk visible to the running
 container.
 
-Files land as root, same as slice 4's env_writer — no chown step.
+Files land as root, same as slice 4's env_writer. No chown step.
 """
 
 import asyncio
@@ -49,7 +49,7 @@ def atomic_write_stream(path: Path, src: BinaryIO) -> None:
 
     Same atomicity contract as `atomic_write_text`: sibling tempfile +
     `os.replace`. If the target is a symlink, `os.replace` swaps the
-    symlink itself for the new file — it does not write through.
+    symlink itself for the new file; it does not write through.
     """
     fd, tmp_str = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
     tmp = Path(tmp_str)
@@ -67,7 +67,7 @@ def atomic_write_stream(path: Path, src: BinaryIO) -> None:
 
 
 async def atomic_write_text_async(path: Path, content: str) -> None:
-    """Async wrapper around `atomic_write_text` — runs in a worker thread.
+    """Async wrapper around `atomic_write_text`. Runs in a worker thread.
 
     Multi-megabyte writes would otherwise stall every other in-flight
     request under the single-worker uvicorn posture.
@@ -76,7 +76,7 @@ async def atomic_write_text_async(path: Path, content: str) -> None:
 
 
 async def atomic_write_stream_async(path: Path, src: BinaryIO) -> None:
-    """Async wrapper around `atomic_write_stream` — runs in a worker thread.
+    """Async wrapper around `atomic_write_stream`. Runs in a worker thread.
 
     Upload bodies can be arbitrarily large (mod jars, world backups);
     streaming them inline would block the event loop for the duration

@@ -33,9 +33,9 @@ def test_transient_states_disable_all_no_accent(state):
 
 
 def test_starting_state_keeps_stop_and_restart_reachable():
-    """Decision 041: 'starting' means the container is up but the
-    listener hasn't bound. Operator can Stop a stuck-start or Restart
-    it; Start would be a no-op."""
+    """'starting' means the container is up but the listener hasn't
+    bound. Operator can Stop a stuck-start or Restart it; Start would
+    be a no-op."""
     view = lifecycle_state.view("starting")
     assert view["start_disabled"] is True
     assert view["stop_disabled"] is False

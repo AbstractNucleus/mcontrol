@@ -30,7 +30,7 @@ def test_client_constructed_with_settings(env, monkeypatch):
 
     db._client()
 
-    assert captured == {"url": "https://api.noelkleen.com", "key": "test-key"}
+    assert captured == {"url": "https://example.supabase.co", "key": "test-key"}
 
 
 def test_client_is_cached(env, monkeypatch):

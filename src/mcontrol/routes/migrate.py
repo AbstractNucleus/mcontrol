@@ -1,8 +1,8 @@
 """Per-server legacy-to-scaffold migration card + run endpoint (slice 8 PR 1).
 
-Decision 028: one-shot, opt-in, one-way. Once `scaffolded_at` is stamped
-the row is treated identically to a slice-6 scaffolded row. The card
-disappears, the form is gone, no rollback button.
+One-shot, opt-in, one-way. Once `scaffolded_at` is stamped the row is
+treated identically to a slice-6 scaffolded row. The card disappears,
+the form is gone, no rollback button.
 
   GET  /servers/{name}/migrate    → form partial (lazy-loaded by the
                                     detail page so the parse stays off

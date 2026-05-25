@@ -20,7 +20,7 @@ def resolve_within(base_dir: str, operator_path: str) -> Path:
 
     Returns an absolute path that is guaranteed to live inside the
     resolved base_dir, with no symlink in any intermediate component.
-    The returned path may not exist — callers handle 404 themselves.
+    The returned path may not exist; callers handle 404 themselves.
     """
     base = Path(base_dir).resolve()
     cleaned = operator_path.replace("\\", "/").lstrip("/")

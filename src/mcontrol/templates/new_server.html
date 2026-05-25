@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}mcontrol — new server{% endblock %}
+{% block title %}New server | mcontrol{% endblock %}
 
 {% block main %}
 <section class="new-server">
@@ -17,7 +17,7 @@
              value="{{ form.name or '' }}"
              autocomplete="off"
              required>
-      <small class="new-server__hint">3–32 chars; lowercase letters, digits, hyphens; must start with a letter.</small>
+      <small class="new-server__hint">3-32 chars; lowercase letters, digits, hyphens; must start with a letter.</small>
       {% if errors.name %}<small class="new-server__error">{{ errors.name }}</small>{% endif %}
     </label>
 
@@ -40,7 +40,7 @@
              max="65535"
              value="{{ form.port or '' }}"
              required>
-      <small class="new-server__hint">Host-side TCP port for Minecraft (1024–65535).</small>
+      <small class="new-server__hint">Host-side TCP port for Minecraft (1024-65535).</small>
       {% if errors.port %}<small class="new-server__error">{{ errors.port }}</small>{% endif %}
     </label>
 

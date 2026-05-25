@@ -16,7 +16,7 @@
           hx-target="#players-main"
           hx-swap="outerHTML">
       <button class="players-page__import-btn" type="submit">
-        {{ unknown_count }} membership(s) on disk for unknown UUID(s) — Import
+        {{ unknown_count }} membership(s) on disk for unknown UUID(s). Click to Import
       </button>
     </form>
   {% endif %}
@@ -57,14 +57,14 @@
               {% if p.whitelist_servers %}
                 {% for s in p.whitelist_servers %}<a href="/servers/{{ s.name }}">{{ s.name }}</a>{% if s.whitelist_disabled %} <span class="t-muted players-page__wl-off">(whitelist disabled)</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
               {% else %}
-                <span class="t-muted">—</span>
+                <span class="t-muted">-</span>
               {% endif %}
             </td>
             <td>
               {% if p.op_servers %}
                 {% for s in p.op_servers %}<a href="/servers/{{ s }}">{{ s }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
               {% else %}
-                <span class="t-muted">—</span>
+                <span class="t-muted">-</span>
               {% endif %}
             </td>
             <td>
@@ -87,8 +87,8 @@
       </svg>
       <h3 class="empty-state__title">Roster is empty</h3>
       <p class="empty-state__body">
-        Add a player by Minecraft name above, or — if any servers already have
-        whitelist/ops entries on disk — use Import.
+        Add a player by Minecraft name above, or, if any servers already have
+        whitelist/ops entries on disk, use Import.
       </p>
     </div>
   {% endif %}

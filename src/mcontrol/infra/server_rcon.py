@@ -2,7 +2,7 @@
 
 The slice-4 console (``routes/console.py``) keeps a long-lived RCON
 connection open per active SSE stream. Slice 7's add/remove flips are
-infrequent and don't need a persistent connection — each call opens a
+infrequent and don't need a persistent connection. each call opens a
 connection, runs one command, and closes.
 
 The docker-network attach/detach dance mirrors what the SSE handler
@@ -49,7 +49,7 @@ def record_authed_password(server_name: str, password: str) -> None:
 
 
 def forget_authed_password(server_name: str) -> None:
-    """Drop the cached password — the JVM that knew it is gone.
+    """Drop the cached password. the JVM that knew it is gone.
 
     Called from the stop and restart lifecycle handlers so the next
     successful auth re-establishes the baseline against the fresh JVM.
@@ -84,7 +84,7 @@ class RconUnavailable(Exception):
     """RCON couldn't be reached for a reason the operator can act on
     (rcon disabled in server.properties, no docker network, auth
     failure, etc.). Distinct from a successful command that returns an
-    error string — those flow back to the caller verbatim."""
+    error string. those flow back to the caller verbatim."""
 
 
 async def run_command(docker: aiodocker.Docker, server: dict, command: str) -> str:

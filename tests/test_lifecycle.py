@@ -279,9 +279,8 @@ def _button_chunk(body: str, verb: str) -> str:
 
 def _is_disabled(chunk: str) -> bool:
     """Match the standalone `disabled` attribute, not `hx-disabled-elt`.
-    Decision 039 added `hx-disabled-elt="this"` to every lifecycle button
-    for in-flight htmx-driven disable, so a naive `'disabled' in chunk`
-    matches both."""
+    Every lifecycle button carries `hx-disabled-elt="this"` for in-flight
+    htmx-driven disable, so a naive `'disabled' in chunk` matches both."""
     return " disabled>" in chunk or " disabled " in chunk
 
 
@@ -322,10 +321,9 @@ async def test_stop_response_carries_oob_buttons_for_stopped_state(
 async def test_stop_response_carries_data_state_for_announcement(
     client, fake_server_row, stub_db_writes, stub_docker
 ):
-    """Decision 039: the OOB-swapped lifecycle-buttons wrapper carries
-    `data-state` reflecting the new state, so `static/lifecycle.js` can
-    announce it into the aria-live region without re-deriving from CSS
-    classes."""
+    """The OOB-swapped lifecycle-buttons wrapper carries `data-state`
+    reflecting the new state, so `static/lifecycle.js` can announce it
+    into the aria-live region without re-deriving from CSS classes."""
     fake_server_row["atm10"] = {
         "name": "atm10", "container_name": None, "dir": "/srv/atm10",
         "state": "running",

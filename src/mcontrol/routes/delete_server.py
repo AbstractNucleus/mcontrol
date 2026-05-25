@@ -1,4 +1,4 @@
-"""Delete-server flow with type-name confirm + tombstone (decision 026).
+"""Delete-server flow with type-name confirm + tombstone.
 
   GET  /servers/{name}/delete   → confirm partial (type-name input)
   POST /servers/{name}/delete   → re-checks state, tombstones <dir>,
@@ -62,7 +62,7 @@ async def post(
     server: dict = Depends(get_server_or_404),
     confirm_name: str = Form(""),
 ) -> HTMLResponse:
-    # Re-check state at request time — protects against the operator
+    # Re-check state at request time. protects against the operator
     # starting the server in another tab between page render and click.
     if server.get("state") == "running":
         raise HTTPException(

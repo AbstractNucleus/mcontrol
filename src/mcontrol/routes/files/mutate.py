@@ -27,7 +27,7 @@ async def delete(
     """Delete a file, symlink, or directory.
 
     Files and symlinks delete one-shot. Directories are recursive and
-    require `confirm_name` to match the directory's basename — the slice
+    require `confirm_name` to match the directory's basename. the slice
     plan's "type-name confirmation" guard against accidental rmrf.
 
     The bind-mount root (`path=""`) is sacred and cannot be deleted.
@@ -56,7 +56,7 @@ async def delete(
                 detail=f"confirm_name must equal {target.name!r}",
             )
         # shutil.rmtree refuses to descend through symlinked subdirs by
-        # design — child symlinks are unlinked as entries, never followed.
+        # design. child symlinks are unlinked as entries, never followed.
         shutil.rmtree(target)
     else:
         os.unlink(target)
@@ -95,7 +95,7 @@ async def rename(
     file_safety.validate_upload_filename(new_name)
 
     if new_name == target.name:
-        # No-op rename — pretend success without touching disk so the
+        # No-op rename. pretend success without touching disk so the
         # client sees a coherent listing without any extra error path.
         _, entries = _parent_listing(server["dir"], target)
         return templates.TemplateResponse(
@@ -155,7 +155,7 @@ async def move(
     if dst_parent == src.parent:
         raise HTTPException(status_code=400, detail="destination is the source's current parent")
 
-    # Refuse moving a directory into itself or any of its descendants —
+    # Refuse moving a directory into itself or any of its descendants -
     # the resulting structure would be unreachable / cyclic.
     src_resolved = src.resolve(strict=False)
     dst_resolved = dst_parent.resolve(strict=False)
@@ -188,7 +188,7 @@ async def move(
 async def bulk_delete(
     name: str,
     server: dict = Depends(get_server_or_404),
-    paths: list[str] = Form(...),  # noqa: B008 — FastAPI dep-injection idiom
+    paths: list[str] = Form(...),  # noqa: B008  (FastAPI dep-injection idiom)
     confirm: str = Form(""),
 ) -> Response:
     """Delete every entry in `paths` (regular files, symlinks, or recursive
@@ -209,7 +209,7 @@ async def bulk_delete(
         raise HTTPException(status_code=400, detail="cannot delete server root")
 
     # Resolve + classify everything first so we can refuse the whole batch
-    # if any single entry is illegal — partial deletes with a 400 mid-way
+    # if any single entry is illegal. partial deletes with a 400 mid-way
     # would leave the operator with mystery state.
     resolved: list[tuple[Path, int]] = []
     for p in cleaned:
@@ -238,7 +238,7 @@ async def bulk_delete(
 async def bulk_move(
     name: str,
     server: dict = Depends(get_server_or_404),
-    sources: list[str] = Form(...),  # noqa: B008 — FastAPI dep-injection idiom
+    sources: list[str] = Form(...),  # noqa: B008  (FastAPI dep-injection idiom)
     dest_dir: str = Form(""),
 ) -> Response:
     """Move every `sources` entry into `dest_dir`, keeping each basename.
@@ -247,7 +247,7 @@ async def bulk_move(
     destination, any cyclic move (dest inside source), any no-op
     (dest == source.parent), missing source, root source, or a non-dir
     destination. Once validated, performs every os.rename without rolling
-    back if a later one trips an OS-level error — that's a system fault,
+    back if a later one trips an OS-level error. that's a system fault,
     not an operator-recoverable one.
     """
     if not sources:

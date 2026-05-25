@@ -1,9 +1,9 @@
-"""Server scaffolding — render docker-compose.yml + start_server.sh.
+"""Server scaffolding. render docker-compose.yml + start_server.sh.
 
-Decision 023: no per-server Dockerfile / entrypoint / .dockerignore.
-The generated docker-compose.yml references eclipse-temurin:21-jre
-directly; start_server.sh lives inside the bind-mounted server/
-directory alongside the operator's jars and configs.
+No per-server Dockerfile / entrypoint / .dockerignore. The generated
+docker-compose.yml references eclipse-temurin:21-jre directly;
+start_server.sh lives inside the bind-mounted server/ directory
+alongside the operator's jars and configs.
 
 Pure file IO. PR 2 wraps this with the new-server endpoint's DB-first
 ordering and path-safety contract.
@@ -17,7 +17,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from mcontrol.file_writer import atomic_write_text
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
-# Decision 009: -Xmx = mem_limit - 2 GB headroom (JIT, native libs, mod metadata).
+# -Xmx = mem_limit - 2 GB headroom (JIT, native libs, mod metadata).
 _HEADROOM_GB = 2
 
 _env = Environment(

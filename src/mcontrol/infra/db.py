@@ -56,7 +56,7 @@ def get_server(name: str) -> dict[str, Any] | None:
 
 
 def insert_server(*, name: str, dir: str, state: str) -> None:
-    """Create a new row. Used by discovery on first encounter only —
+    """Create a new row. Used by discovery on first encounter only -
     subsequent scans use update_server_state so operator edits to dir
     and container_name survive."""
     _table().insert({"name": name, "dir": dir, "state": state}).execute()
@@ -86,7 +86,7 @@ def container_name_for(server: dict[str, Any]) -> str:
     """Resolve the docker container name for a server row.
 
     Returns the explicit container_name override when set, otherwise
-    falls back to the row's `name`. Decision 021.
+    falls back to the row's `name`.
     """
     override = server.get("container_name")
     if override:
@@ -99,13 +99,13 @@ def insert_scaffolding_server(
 ) -> None:
     """Create a new mcontrol-scaffolded row in state='scaffolding'.
 
-    Slice 6 PR 2 — first of the two DB writes that bracket the
+    Slice 6 PR 2. first of the two DB writes that bracket the
     on-disk scaffold. mark_scaffolded transitions the row to 'created'
     once the files are written.
 
     `loader` is the operator's explicit choice from the new-server form
     (issue #123). Stored as a top-level column on `servers`, not inside
-    `variables` — the DB enforces the enum via the supabase-server#8
+    `variables`: the DB enforces the enum via the supabase-server#8
     migration.
     """
     _table().insert(
@@ -122,7 +122,7 @@ def insert_scaffolding_server(
 def mark_scaffolded(*, name: str) -> None:
     """Transition a row from state='scaffolding' to 'created' and stamp
     scaffolded_at=now(). Presence of scaffolded_at is the canonical
-    'this row is mcontrol-scaffolded' signal (decision 023)."""
+    'this row is mcontrol-scaffolded' signal."""
     _table().update(
         {"state": "created", "scaffolded_at": datetime.now(UTC).isoformat()}
     ).eq("name", name).execute()
@@ -145,7 +145,7 @@ def upsert_server(*, name: str, dir: str, state: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Player roster (slice 7, decision 027). Per-server whitelist/ops
+# Player roster. Per-server whitelist/ops
 # membership lives on disk; this table is identity-only.
 # ---------------------------------------------------------------------------
 
@@ -167,9 +167,9 @@ def insert_player(*, uuid: str, name: str) -> None:
 
 
 def insert_players_bulk(rows: list[dict[str, Any]]) -> None:
-    """Insert many roster rows in a single PostgREST request — which
+    """Insert many roster rows in a single PostgREST request. which
     PostgREST executes as a single SQL transaction. Used by slice 7
-    PR 3's Import flow (decision 027). Empty list is a no-op."""
+    PR 3's Import flow. Empty list is a no-op."""
     if not rows:
         return
     _players_table().insert(rows).execute()
@@ -188,8 +188,8 @@ def upsert_player_from_mojang(*, uuid: str, name: str) -> dict[str, Any]:
     Returns a dict describing the outcome so the caller can render the
     flash message:
 
-      ``{"created": True,  "previous_name": None}``  — new row inserted.
-      ``{"created": False, "previous_name": "<old>"}`` — UUID already
+      ``{"created": True,  "previous_name": None}`` . new row inserted.
+      ``{"created": False, "previous_name": "<old>"}``: UUID already
         present; ``previous_name`` is the value recorded *before* this
         call (equal to ``name`` when nothing changed).
 

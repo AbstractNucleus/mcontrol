@@ -54,14 +54,14 @@ async def scaffold_new_server(
         scaffolding.scaffold(name, variables, base)
         await db_async.mark_scaffolded(name=name)
     except Exception:
-        logger.exception("scaffold failed for %r — rolling back", name)
+        logger.exception("scaffold failed for %r. rolling back", name)
         orphan: Path | None = None
         if target.exists():
             try:
                 shutil.rmtree(target)
             except OSError:
                 logger.exception(
-                    "rollback rmtree failed for %r at %s — operator must remove manually",
+                    "rollback rmtree failed for %r at %s. operator must remove manually",
                     name,
                     target,
                 )
@@ -79,7 +79,7 @@ async def scaffold_new_server(
 async def delete_server_with_tombstone(server: dict, base: Path) -> None:
     """Rename ``<server.dir>`` to ``<base>/.deleted-<name>-<ts>/`` and delete row.
 
-    Idempotent on a missing directory — the DB row is still removed so
+    Idempotent on a missing directory. the DB row is still removed so
     a hand-deleted dir converges. State-check (refuses ``running``) is
     the route layer's job because it's a 409 surface.
     """
@@ -115,7 +115,7 @@ async def update_server_variables(
     Returns the merged dict so the route can re-render the card without
     a fresh DB round-trip. ``new_values`` must contain
     ``memory_budget_gb``, ``port``, ``server_jar``, and an optional
-    ``jvm_extra_args`` — an empty/missing value drops the key from the
+    ``jvm_extra_args``: an empty/missing value drops the key from the
     merged JSONB (matches the slice 6 contract).
     """
     existing = server.get("variables") or {}

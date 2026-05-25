@@ -100,7 +100,7 @@ def test_stale_password_true_when_disk_differs_from_cache(tmp_path):
 
 
 def test_stale_password_false_when_not_running(tmp_path):
-    """An exited server has no JVM to be stale — operator restart will pick up disk anyway."""
+    """An exited server has no JVM to be stale. operator restart will pick up disk anyway."""
     server = _server_with_props(tmp_path, "enable-rcon=true\nrcon.password=new-secret\n")
     server["state"] = "exited"
     server_rcon.record_authed_password(server["name"], "old-secret")
@@ -108,7 +108,7 @@ def test_stale_password_false_when_not_running(tmp_path):
 
 
 def test_stale_password_false_when_disk_password_empty(tmp_path):
-    """Empty disk password isn't 'stale' — it's the operator-managed-disable path."""
+    """Empty disk password isn't 'stale'. it's the operator-managed-disable path."""
     server = _running_server(tmp_path, "enable-rcon=true\nrcon.password=\n")
     server_rcon.record_authed_password(server["name"], "old-secret")
     assert server_rcon.stale_password_detected(server) is False

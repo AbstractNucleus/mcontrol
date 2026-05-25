@@ -63,7 +63,7 @@ async def read_container_stats(
 def _cpu_percent(snapshot: dict[str, Any]) -> float:
     """`docker stats`-style aggregated CPU percent across cores.
 
-    Returns 0.0 on the zero-delta first-tick edge — matches the
+    Returns 0.0 on the zero-delta first-tick edge, matching the
     daemon's own behaviour when precpu_stats is empty."""
     cpu = snapshot.get("cpu_stats", {}) or {}
     pre = snapshot.get("precpu_stats", {}) or {}
@@ -101,7 +101,7 @@ def read_disk_usage(server_dir: Path) -> int:
     """Recursive byte total of server_dir.
 
     Walks with ``follow_symlinks=False`` on both ``scandir`` and
-    ``stat`` — an operator-introduced symlink contributes only its own
+    ``stat``. An operator-introduced symlink contributes only its own
     link-inode bytes, and a symlink to a directory is not recursed
     into. Missing root returns 0.
 
@@ -150,7 +150,7 @@ def read_disk_usage(server_dir: Path) -> int:
 
 
 def format_bytes(n: int) -> str:
-    """Base-1024 byte formatter — KiB/MiB/GiB/TiB with one decimal."""
+    """Base-1024 byte formatter. KiB/MiB/GiB/TiB with one decimal."""
     if n < 1024:
         return f"{n} B"
     val = float(n)

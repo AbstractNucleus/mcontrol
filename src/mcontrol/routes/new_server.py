@@ -1,4 +1,4 @@
-"""GET + POST /servers/new — scaffold a new server.
+"""GET + POST /servers/new. scaffold a new server.
 
 DB-first ordering (slice 6 plan):
 
@@ -50,7 +50,7 @@ def _validate_static(form: dict) -> dict[str, str]:
 
     if not _NAME_RE.match(form["name"]):
         errors["name"] = (
-            "3–32 chars; lowercase letters, digits, and hyphens; must start with a letter."
+            "3-32 chars; lowercase letters, digits, and hyphens; must start with a letter."
         )
     if not form["accept_eula"]:
         errors["accept_eula"] = "You must accept the Minecraft EULA to create a server."
@@ -91,7 +91,7 @@ async def new_submit(
     target: Path | None = None
     if not errors:
         # Belt-and-suspenders containment per the slice 6 path-safety
-        # contract — slug regex already forbids `/` and `.`, so this is
+        # contract. slug regex already forbids `/` and `.`, so this is
         # defence in depth, not load-bearing.
         target = (base / form["name"]).resolve()
         try:

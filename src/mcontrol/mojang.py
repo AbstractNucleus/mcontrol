@@ -4,7 +4,7 @@ Used by the slice 7 roster-add path: operator types a Minecraft
 handle, mcontrol resolves it to a canonical UUID via the Minecraft
 profile API and upserts into ``app_mcontrol.players``.
 
-Contract (decision 027 / slice 7 plan):
+Contract:
 
   - 200  → ``{"uuid": "<dashed>", "name": "<canonical-case>"}``
   - 204  → ``None`` (no Minecraft account with that name)

@@ -36,7 +36,7 @@ async def test_server_detail_renders_known_server(client, fake_get_server):
     fake_get_server["atm10"] = {
         "name": "atm10",
         "container_name": None,
-        "dir": "/home/abstract/servers/minecraft/atm10",
+        "dir": "/srv/minecraft/atm10",
         "state": "running",
         "variables": {"memory_budget_gb": 12, "port": 25565},
         "created_at": "2026-04-29T10:00:00Z",
@@ -48,7 +48,7 @@ async def test_server_detail_renders_known_server(client, fake_get_server):
     assert response.status_code == 200
     body = response.text
     assert "atm10" in body
-    assert "/home/abstract/servers/minecraft/atm10" in body
+    assert "/srv/minecraft/atm10" in body
     assert "running" in body
     assert "memory_budget_gb" in body
     assert "25565" in body
@@ -76,7 +76,7 @@ def _button_chunk(body: str, verb: str) -> str:
 
 def _is_disabled(chunk: str) -> bool:
     """Standalone `disabled` attribute (not `hx-disabled-elt`, which
-    decision 039 added to every lifecycle button)."""
+    is added to every lifecycle button)."""
     return " disabled>" in chunk or " disabled " in chunk
 
 
@@ -147,10 +147,10 @@ def _element_chunk(body: str, element_id: str) -> str:
 async def test_server_detail_lifecycle_buttons_carry_a11y_attrs(
     client, fake_get_server
 ):
-    """Decision 039: each lifecycle button opts into static/lifecycle.js
-    via `data-lifecycle-button`, carries a server-scoped `aria-label`,
-    uses `hx-disabled-elt="this"` so htmx disables on click, and is a
-    native `<button>` (keyboard-activatable for free)."""
+    """Each lifecycle button opts into static/lifecycle.js via
+    `data-lifecycle-button`, carries a server-scoped `aria-label`, uses
+    `hx-disabled-elt="this"` so htmx disables on click, and is a native
+    `<button>` (keyboard-activatable for free)."""
     fake_get_server["atm10"] = _row("atm10", state="running")
     response = await client.get("/servers/atm10")
     body = response.text
@@ -179,7 +179,7 @@ async def test_server_detail_renders_aria_live_lifecycle_status(
     client, fake_get_server
 ):
     """A visually-hidden aria-live region sits next to the lifecycle row
-    so screen readers get post-action state announcements (decision 039)."""
+    so screen readers get post-action state announcements."""
     fake_get_server["atm10"] = _row("atm10")
     response = await client.get("/servers/atm10")
     body = response.text
@@ -251,7 +251,7 @@ async def test_server_detail_omits_loader_badge_when_absent(client, fake_get_ser
     """A row missing the loader field (legacy rows pre-supabase-server#8
     backfill, defensive case) should not render the badge."""
     row = _row("atm10")
-    # _row() does not set 'loader' — keep it that way.
+    # _row() does not set 'loader'. keep it that way.
     fake_get_server["atm10"] = row
 
     response = await client.get("/servers/atm10")

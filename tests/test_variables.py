@@ -1,4 +1,4 @@
-"""Tests for routes/variables.py — the Variables card on the detail page."""
+"""Tests for routes/variables.py. the Variables card on the detail page."""
 
 import pytest
 
@@ -150,8 +150,8 @@ async def test_post_drops_jvm_extra_args_when_blank(client, fake_db, tmp_path):
 
 async def test_post_preserves_unknown_jsonb_keys(client, fake_db, tmp_path):
     """motd / rcon_enabled aren't surfaced in the UI but live in the
-    same JSONB. Decision 013 + slice-6 plan — write-back must merge,
-    not replace, so any pre-existing keys survive."""
+    same JSONB. Write-back must merge, not replace, so any pre-existing
+    keys survive."""
     row = _row(tmp_path, variables={
         "memory_budget_gb": 8,
         "port": 25575,
@@ -245,7 +245,7 @@ async def test_post_rejects_port_collision_with_other_server(
 
 
 async def test_post_allows_keeping_own_port(client, fake_db, tmp_path):
-    """The collision check excludes the row being edited — the operator
+    """The collision check excludes the row being edited. the operator
     can save without changing the port."""
     row = _row(tmp_path)
     scaffolding.scaffold(row["name"], row["variables"], tmp_path)

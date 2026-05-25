@@ -8,9 +8,9 @@ command=...) finds the live connection by server name and submits the
 command; the response flows back through the SSE stream.
 
 The RCON password is read from `<dir>/server/server.properties` at
-SSE connect time (decision 024). If `enable-rcon=false`, the line is
+SSE connect time. If `enable-rcon=false`, the line is
 empty, or the file is missing, the stream yields a friendly info
-message and ends — lifecycle, logs, and the rest of the panel stay
+message and ends. lifecycle, logs, and the rest of the panel stay
 working when RCON is disabled.
 
 If no SSE is open for a server, POST returns 409.

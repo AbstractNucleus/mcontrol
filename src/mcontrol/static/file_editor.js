@@ -21,7 +21,7 @@ import { json } from "@codemirror/lang-json";
 import { xml } from "@codemirror/lang-xml";
 import { yaml } from "@codemirror/lang-yaml";
 
-// Minimal SNBT (stringified-NBT) tokenizer — JSON-like with type
+// Minimal SNBT (stringified-NBT) tokenizer. JSON-like with type
 // suffixes on numbers and unquoted keys/values. Good enough for syntax
 // colour; not a parser.
 const snbtParser = {

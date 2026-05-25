@@ -1,10 +1,10 @@
-"""Deep readiness probe for /healthz (slice 11, decision 030).
+"""Deep readiness probe for /healthz.
 
-Three subsystem probes — Supabase reachability, Docker socket
-reachability, and the bind-mount base path being a writable directory
-— run concurrently with a 250 ms per-probe budget. The endpoint
+Three subsystem probes (Supabase reachability, Docker socket
+reachability, and the bind-mount base path being a writable directory)
+run concurrently with a 250 ms per-probe budget. The endpoint
 returns 200 when all three pass and 503 when any one fails so the
-upstream nginx terminator (decision 019) can react.
+upstream nginx terminator can react.
 
 Distinct from ``mcontrol.health`` (per-server scaffold-integrity for
 the detail-page banner). Different question, different consumer,
@@ -48,12 +48,12 @@ async def _probe_db() -> dict[str, str]:
 
 
 async def _probe_docker(docker: aiodocker.Docker) -> dict[str, str]:
-    # `docker.version()` is the lightest public round-trip in aiodocker —
+    # `docker.version()` is the lightest public round-trip in aiodocker.
     # `system.ping()` does not exist on this client version (the
     # `DockerSystem` class only exposes `info()`), and `_query("_ping")`
     # uses the underscore-prefixed private API. `version()` hits
     # `/version`, returns a small dict, and confirms the daemon answers
-    # HTTP — exactly what we want.
+    # HTTP, which is exactly what we want.
     try:
         await asyncio.wait_for(docker.version(), _TIMEOUT_S)
     except TimeoutError:

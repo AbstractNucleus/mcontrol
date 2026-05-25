@@ -1,4 +1,4 @@
-"""Tests for migration.py — pure parse/render/atomic-write primitives.
+"""Tests for migration.py: pure parse/render/atomic-write primitives.
 
 Slice 8 PR 0. No DB; no UI. Fixtures synthesise an `atm10`-shaped
 legacy layout under tmp_path: Dockerfile + entrypoint.sh + .dockerignore +
@@ -98,7 +98,7 @@ def test_parse_legacy_variables_extracts_full_atm10_shape(tmp_path):
     server_dir = _legacy_layout(tmp_path)
     parsed = migration.parse_legacy_variables(server_dir)
 
-    # Decision 009: budget = parsed -Xmx + 2 GB headroom.
+    # Budget = parsed -Xmx + 2 GB headroom.
     assert parsed["memory_budget_gb"] == 14
     assert parsed["server_jar"] == "neoforge-21.1.86-server.jar"
     assert parsed["jvm_extra_args"] == "-XX:+UseG1GC"
@@ -229,7 +229,7 @@ def test_migrate_raises_before_any_io_when_variables_incomplete(tmp_path):
     with pytest.raises(KeyError):
         migration.migrate("atm10", incomplete, tmp_path)
 
-    # Legacy files still present — render failed before any unlink.
+    # Legacy files still present; render failed before any unlink.
     assert (server_dir / "Dockerfile").exists()
     assert (server_dir / "entrypoint.sh").exists()
     # Original compose untouched.

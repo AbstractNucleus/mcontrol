@@ -1,6 +1,5 @@
-/* mcontrol — component CSS. All colour, type, spacing, and motion values
-   come from tokens.css. Slice 12 / decision 032: Claude-flavoured theme,
-   semantic-token-only consumption.
+/* mcontrol: component CSS. All colour, type, spacing, and motion values
+   come from tokens.css. Claude-flavoured theme, semantic-token-only consumption.
    ========================================================================= */
 
 
@@ -314,7 +313,7 @@
   background: var(--fg-muted);
 }
 
-/* State-coloured dots — mirror the state-pill colour mapping but as a
+/* State-coloured dots: mirror the state-pill colour mapping but as a
    plain swatch so the row stays a single line of mono. */
 .sidebar__server-dot--running    { background: var(--success-fg); }
 .sidebar__server-dot--exited,

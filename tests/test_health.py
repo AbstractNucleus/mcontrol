@@ -37,7 +37,7 @@ def _scaffold_files(tmp_path: Path, row: dict) -> None:
 def test_compute_issues_returns_empty_for_legacy_row(tmp_path):
     row = _scaffolded_row(tmp_path, scaffolded_at=None)
     # Legacy rows skip the scaffold-only checks (decision: those don't apply).
-    # The membership-file checks DO run on legacy rows (slice 7 / decision 027),
+    # The membership-file checks DO run on legacy rows,
     # but with no whitelist.json/ops.json on disk they're no-ops.
     Path(row["dir"]).mkdir(parents=True, exist_ok=True)
     assert health.compute_issues(row) == []

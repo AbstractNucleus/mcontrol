@@ -161,7 +161,7 @@ async def test_add_from_roster_offline_writes_to_whitelist_and_returns_card(
     assert response.status_code == 200
     entries, _ = membership.read_whitelist(Path(server["dir"]))
     assert entries == [{"uuid": _NOTCH_UUID, "name": "Notch"}]
-    # Op was NOT touched — picker defaults to whitelist-only.
+    # Op was NOT touched. picker defaults to whitelist-only.
     ops, _ = membership.read_ops(Path(server["dir"]))
     assert ops == []
     assert "added to the whitelist" in response.text

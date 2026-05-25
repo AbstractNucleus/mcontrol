@@ -42,7 +42,7 @@ def _list_dir(target: Path, base: Path) -> list[dict]:
 def _parent_listing(server_dir: str, target: Path) -> tuple[Path, list[dict]]:
     """Return (parent_dir, listing) for use as the action response.
 
-    Delete and mkdir both refresh the parent of their target — the JS
+    Delete and mkdir both refresh the parent of their target. the JS
     swaps that listing into the closest matching `<ul.file-tree__children>`.
     """
     base = Path(server_dir).resolve()

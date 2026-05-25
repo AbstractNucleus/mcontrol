@@ -3,7 +3,7 @@
   {% if confirm %}
     <p class="delete-zone__hint">
       Renames <code>{{ server.dir }}</code> to a tombstone in the same parent and
-      deletes the row. Files are not removed — recover by renaming the tombstone
+      deletes the row. Files are not removed. Recover by renaming the tombstone
       back from a shell.
     </p>
     <form class="delete-zone__form"
@@ -33,7 +33,7 @@
     {% set is_running = server.state == 'running' %}
     <p class="delete-zone__hint">
       Renames the server's directory to a tombstone and deletes the database row.
-      Reversible from a shell — files are not removed.
+      Reversible from a shell; files are not removed.
     </p>
     <div class="delete-zone__actions">
       <button type="button"

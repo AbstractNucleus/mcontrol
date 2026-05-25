@@ -134,14 +134,14 @@ async def test_home_renders_dash_when_container_not_running(
 
     assert response.status_code == 200
     block = _row_block(response.text, "atm10")
-    assert "—" in block
+    assert ">-<" in block
     assert "GiB" not in block
 
 
 async def test_home_tolerates_stats_failure_on_one_row(
     client, fake_servers, fake_stats
 ):
-    """A stats call that raises must not 500 the page — that row shows
+    """A stats call that raises must not 500 the page. That row shows
     a dash, the other rows render their live numbers."""
     fake_servers.append({"name": "atm10", "state": "running"})
     fake_servers.append({"name": "monifactory", "state": "running"})
@@ -159,7 +159,7 @@ async def test_home_tolerates_stats_failure_on_one_row(
     assert response.status_code == 200
     atm10_block = _row_block(response.text, "atm10")
     moni_block = _row_block(response.text, "monifactory")
-    assert "—" in atm10_block
+    assert ">-<" in atm10_block
     assert "GiB" not in atm10_block
     assert "4.0 GiB / 8.0 GiB" in moni_block
     assert "(50 %)" in moni_block
@@ -168,7 +168,7 @@ async def test_home_tolerates_stats_failure_on_one_row(
 async def test_home_resolves_container_name_override(
     client, fake_servers, fake_stats
 ):
-    """Decision 021: the stats lookup goes through container_name_for."""
+    """The stats lookup goes through container_name_for."""
     fake_servers.append(
         {"name": "atm10", "state": "running", "container_name": "mc-atm10-prod"}
     )

@@ -1,6 +1,6 @@
-"""Tests for routes/regenerate.py — diff preview + mtime-checked confirm.
+"""Tests for routes/regenerate.py. diff preview + mtime-checked confirm.
 
-Decision 025 contract:
+Contract:
   - Diff captures both files' mtimes; modal carries them as hidden fields.
   - Confirm re-stats both files; mtime drift → re-show diff with 409.
   - On match, atomic-write both files via file_writer.
@@ -83,7 +83,7 @@ async def test_get_returns_diff_and_mtimes(client, fake_db, tmp_path):
 
 
 async def test_get_returns_card_when_render_fails(client, fake_db, tmp_path):
-    """Variables incomplete — bail back to the card; the health banner
+    """Variables incomplete. bail back to the card; the health banner
     on the detail page already explains the cause."""
     row = _row(tmp_path)
     _scaffold(tmp_path, row)
@@ -158,7 +158,7 @@ async def test_confirm_returns_409_with_diff_when_compose_mtime_drifts(
     assert "Files changed" in body
     assert "@@" in body
     assert f'value="{compose.stat().st_mtime_ns}"' in body
-    # Concurrent edit was preserved — confirm did not write.
+    # Concurrent edit was preserved. confirm did not write.
     assert "# concurrent edit" in compose.read_text()
 
 
@@ -170,7 +170,7 @@ async def test_confirm_returns_409_when_start_script_disappears(
     fake_db["rows"].append(row)
 
     stale_start_mtime = start.stat().st_mtime_ns
-    start.unlink()  # File-not-found counts as drift per decision 025.
+    start.unlink()  # File-not-found counts as drift.
 
     response = await client.post(
         "/servers/newshire/regenerate/confirm",
@@ -200,7 +200,7 @@ async def test_variables_card_shows_regenerate_button_when_stale(
     client, fake_db, tmp_path
 ):
     """The card adds a Regenerate link when health.compute_scripts_stale
-    returns True — the affordance is gated on stale, not always-shown."""
+    returns True. the affordance is gated on stale, not always-shown."""
     row = _row(tmp_path)
     compose, _ = _scaffold(tmp_path, row)
     compose.write_text(compose.read_text() + "\n# drift\n")

@@ -1,15 +1,15 @@
 """Legacy itzg → scaffold-shape migration (slice 8).
 
-Pure file IO + small regex parsing. No DB writes — those happen in
+Pure file IO + small regex parsing. No DB writes. those happen in
 `routes/migrate.py`, which brackets the call to `migrate(...)` with
 `db.update_variables` and `db.mark_scaffolded` for symmetry with
 `routes/new_server.py`.
 
-Decision 023 fixes the target shape: a generated `docker-compose.yml`
+The target shape is a generated `docker-compose.yml`
 referencing `eclipse-temurin:21-jre` directly + a re-rendered
 `server/start_server.sh`. The migration deletes the four legacy build
 files (Dockerfile, entrypoint.sh, .dockerignore, .env) and is
-intentionally one-way (decision 028, ratified on PR 1).
+intentionally one-way.
 """
 
 import re
@@ -20,7 +20,7 @@ from mcontrol.domain import scaffolding
 from mcontrol.file_writer import atomic_write_text
 
 _LEGACY_FILENAMES = ("Dockerfile", "entrypoint.sh", ".dockerignore", ".env")
-_HEADROOM_GB = 2  # decision 009; mirrored from scaffolding._HEADROOM_GB.
+_HEADROOM_GB = 2  # mirrored from scaffolding._HEADROOM_GB.
 
 _XMX_RE = re.compile(r"-Xmx(\d+)[gG]\b")
 _JAR_RE = re.compile(r"-jar\s+(\S+)")
@@ -30,7 +30,7 @@ _PORT_RE = re.compile(r'"(\d+):25565"')
 def legacy_files(server_dir: Path) -> list[Path]:
     """Return paths of the legacy build files that exist under <dir>.
 
-    Order matches `_LEGACY_FILENAMES`. A file's absence is fine — the
+    Order matches `_LEGACY_FILENAMES`. A file's absence is fine. the
     migration is idempotent and `migrate()` unlinks with `missing_ok=True`
     regardless. This helper exists for the migration card preview.
     """
@@ -89,7 +89,7 @@ def migrate(name: str, variables: dict[str, Any], base: Path) -> None:
       4. Unlink each legacy file with `missing_ok=True`.
 
     No DB writes; no rollback. Re-running after a partial success
-    converges on the same end state — every step is idempotent.
+    converges on the same end state. every step is idempotent.
     """
     rendered_compose = scaffolding.render_compose(name, variables)
     rendered_start = scaffolding.render_start_script(variables)

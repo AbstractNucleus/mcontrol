@@ -1,13 +1,13 @@
 """Membership service: whitelist / ops flips, cascade-remove, roster view.
 
-Decision 027: disk files are the source of truth for per-server
-membership; the DB roster holds identities only. Running servers route
-writes through RCON; stopped servers go through ``membership.*`` direct
-file edits. This module owns the routing rule and the cross-server
-scan used by the central Players page.
+Disk files are the source of truth for per-server membership; the DB
+roster holds identities only. Running servers route writes through RCON;
+stopped servers go through ``membership.*`` direct file edits. This
+module owns the routing rule and the cross-server scan used by the
+central Players page.
 
 Flash messages return as ``{"kind": "ok"|"error"|"info", "message": str}``
-dicts — primitive enough that the route layer can hand them straight
+dicts. primitive enough that the route layer can hand them straight
 to the template without an adapter.
 """
 
@@ -65,7 +65,7 @@ def _apply_offline(
     server: dict, *, kind: str, uuid: str, name: str, enabled: bool
 ) -> dict[str, str]:
     """Direct file edit. Raises :class:`membership.StaleWriteError` on
-    drift so the route can map it to a 409 — the running path swallows
+    drift so the route can map it to a 409. the running path swallows
     upstream errors into a flash, the offline path lets file-level
     errors propagate."""
     server_dir = Path(server["dir"])
@@ -99,7 +99,7 @@ async def apply_membership(
     """Route to RCON (state='running') or offline file edit.
 
     Returns the flash dict. ``StaleWriteError`` from the offline path is
-    intentionally not caught here — the route maps it to 409.
+    intentionally not caught here. the route maps it to 409.
     """
     if server.get("state") == "running":
         return await _apply_running(
@@ -111,10 +111,10 @@ async def apply_membership(
 async def resolve_player_name(server: dict, uuid: str) -> str | None:
     """Best-effort player-name lookup for an RCON command.
 
-    Roster takes precedence (decision 027). Falls back to whichever name
+    Roster takes precedence. Falls back to whichever name
     appears in the on-disk files (handles the pre-Import case where a
     UUID is on a server but isn't in the roster yet). Returns ``None``
-    when no source has a name — the route maps that to 404.
+    when no source has a name. the route maps that to 404.
     """
     player = await db_async.get_player(uuid)
     if player is not None:
@@ -226,7 +226,7 @@ async def add_player_to_roster(name: str) -> dict[str, Any]:
 
 async def import_unknown_uuids() -> int:
     """Walk every server's whitelist + ops, upsert UUIDs not yet in the
-    roster (first-encountered name wins per decision 027). Returns the
+    roster (first-encountered name wins). Returns the
     number of new rows inserted."""
     server_rows = await db_async.list_servers()
     memberships = membership.scan_memberships(server_rows)
@@ -264,7 +264,7 @@ async def cascade_remove_player(
 
     Best-effort: a failure on one leg doesn't abort the rest. The caller
     composes the flash and hard-deletes the roster row regardless of
-    failures (decision 027).
+    failures.
     """
     uuid = player["uuid"]
     name = player["name"]
@@ -314,7 +314,7 @@ async def cascade_remove_player(
                 {
                     "server_name": record["server_name"],
                     "kind": kind,
-                    "reason": "file changed mid-write — retry",
+                    "reason": "file changed mid-write; retry",
                 }
             )
         except membership.MalformedFileError as exc:

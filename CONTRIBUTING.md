@@ -8,7 +8,7 @@ cp .env.example .env   # fill in SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SERVER
 uv run uvicorn mcontrol.main:app --reload --port 8000
 ```
 
-The app expects a reachable Supabase instance and Docker socket at runtime, but tests mock both out — you can run the full test suite without either.
+The app expects a reachable Supabase instance and Docker socket at runtime, but tests mock both out, so you can run the full test suite without either.
 
 ## Dev loop
 
@@ -39,7 +39,7 @@ uv run ruff check . --fix
        return templates.TemplateResponse(request=request, name="example.html", context={})
    ```
 
-2. Add the template at `src/mcontrol/templates/example.html`. Extend `base.html` and consume only semantic tokens from `tokens.css` (decision 032 — no inline colours or raw hex values).
+2. Add the template at `src/mcontrol/templates/example.html`. Extend `base.html` and consume only semantic tokens from `src/mcontrol/static/tokens.css`. No inline colours or raw hex values.
 
 3. Register the router in `src/mcontrol/main.py`:
 
@@ -76,4 +76,4 @@ See `tests/test_home.py` or `tests/test_server_detail.py` for worked examples of
 - **Surgical changes only.** Touch what the issue requires; don't clean up adjacent code.
 - **No inline styles.** Components consume `--token-name` variables; new colours go in the semantic layer of `src/mcontrol/static/tokens.css`.
 - **Route modules are thin.** Business logic lives in domain modules (`db.py`, `discovery.py`, etc.); routes wire HTTP to those modules.
-- **Architecture decisions** are recorded in `docs/decisions.md` — read relevant entries before touching the area they govern.
+- **Comments are sparse.** Default to no comments. Add one only when the *why* is non-obvious: a hidden constraint, a workaround, a surprising invariant.

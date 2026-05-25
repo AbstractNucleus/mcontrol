@@ -1,12 +1,12 @@
 {#
-  Sidebar — Claude Code-style left rail. Persistent across pages, resizable
+  Sidebar: Claude Code-style left rail. Persistent across pages, resizable
   via the right-edge handle, collapsible to a 56px icon rail via the
   collapse button at the bottom. State (width + collapsed) persists in
   localStorage; the inline bootstrap in base.html applies it before first
   paint so the rail doesn't flash a default size.
 
   The .topnav__badge class is preserved (on the Trash link) so the existing
-  tombstone-badge tests keep passing — the badge is conceptually the same,
+  tombstone-badge tests keep passing; the badge is conceptually the same,
   just relocated from the topnav row into the sidebar.
 #}
 {% set _path = request.url.path if request is defined else "" %}

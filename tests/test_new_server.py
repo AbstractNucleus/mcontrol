@@ -1,4 +1,4 @@
-"""Tests for routes/new_server.py — the /servers/new form + POST flow.
+"""Tests for routes/new_server.py: the /servers/new form + POST flow.
 
 DB and the scaffolding module are mocked at the boundary; tests drive
 real disk under tmp_path so the rollback path can rmtree real files.
@@ -200,7 +200,7 @@ async def test_post_persists_loader_at_top_level_not_in_variables(
 async def test_post_defaults_loader_to_vanilla_when_field_absent(
     app_client, base_dir, fake_db
 ):
-    """Form omitting the loader field falls back to the route default —
+    """Form omitting the loader field falls back to the route default,
     matching the dropdown's default and the supabase-server column default."""
     body = _form()
     body.pop("loader", None)
@@ -216,7 +216,7 @@ async def test_post_does_not_silently_override_loader_from_jar_filename(
     app_client, base_dir, fake_db
 ):
     """Issue #123 (decision): the operator's explicit dropdown choice is
-    authoritative — even when the jar filename screams a different
+    authoritative. Even when the jar filename screams a different
     loader, the row stores what the form said."""
     response = await app_client.post(
         "/servers/new",
@@ -342,7 +342,7 @@ async def test_post_rolls_back_when_mark_scaffolded_raises(
     assert response.status_code == 500
     ops = [op for op, _ in fake_db["writes"]]
     assert ops == ["insert", "mark", "delete"]
-    # Disk-side: scaffold ran successfully, so the dir + files exist —
+    # Disk-side: scaffold ran successfully, so the dir + files exist;
     # rollback's rmtree must have cleared them.
     assert not (base_dir / "newshire").exists()
 
@@ -350,7 +350,7 @@ async def test_post_rolls_back_when_mark_scaffolded_raises(
 async def test_post_surfaces_orphan_path_when_rollback_rmtree_fails(
     app_client, base_dir, fake_db, monkeypatch
 ):
-    """Issue #93: rmtree failure during rollback must be loud — the
+    """Issue #93: rmtree failure during rollback must be loud. The
     orphan path appears in the 500 detail so the operator can act."""
     import shutil
 

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   {#
-    Theme bootstrap (slice 12, decision 032). Synchronous so it runs
+    Theme bootstrap. Synchronous so it runs
     before stylesheets evaluate, eliminating flash-of-wrong-theme on
     first paint. Reads "theme" from localStorage; resolves "system" /
     null via prefers-color-scheme. Sets data-theme on <html>. The CSS
@@ -24,7 +24,7 @@
     })();
   </script>
   {#
-    Sidebar bootstrap. Same shape as the theme bootstrap above — synchronous,
+    Sidebar bootstrap. Same shape as the theme bootstrap above: synchronous,
     inline, runs before stylesheets so the rail comes up at the user's saved
     width and collapsed state without a flash. Keys: "sidebar-width" (px
     string with units), "sidebar-collapsed" ("1" when collapsed).

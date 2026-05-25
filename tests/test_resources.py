@@ -17,7 +17,7 @@ import pytest
 from mcontrol import resources
 
 # ---------------------------------------------------------------------------
-# read_container_stats — faked aiodocker
+# read_container_stats. faked aiodocker
 # ---------------------------------------------------------------------------
 
 
@@ -217,7 +217,7 @@ def test_read_disk_usage_includes_dot_prefixed_files(tmp_path):
 
 @pytest.mark.skipif(sys.platform == "win32", reason="symlinks need privileges on Windows")
 def test_read_disk_usage_does_not_follow_file_symlinks(tmp_path):
-    """A symlink contributes only its own inode bytes — the target's
+    """A symlink contributes only its own inode bytes. the target's
     payload is not double-counted."""
     target = tmp_path / "target.bin"
     target.write_bytes(b"x" * 1000)
@@ -262,7 +262,7 @@ def test_read_disk_usage_cache_invalidated_on_root_mtime_change(tmp_path):
 
 @pytest.mark.skipif(sys.platform == "win32", reason="symlinks need privileges on Windows")
 def test_read_disk_usage_does_not_recurse_into_directory_symlinks(tmp_path):
-    """A symlink-to-directory is treated as a leaf — the target's
+    """A symlink-to-directory is treated as a leaf. the target's
     contents are not walked. This is what stops an operator-introduced
     backup-dir symlink from inflating the number."""
     outside = tmp_path.parent / "outside"

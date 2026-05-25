@@ -1,9 +1,9 @@
 """Lifecycle service: start / stop / restart with post-start listener probe.
 
-Decision 041: after ``docker_client.start()`` returns, probe
-``127.0.0.1:port`` until either the connect succeeds (state="running")
-or the deadline elapses (state="starting"). Stop and Restart commit a
-flat state — the JVM-up-but-port-not-bound window only applies to start.
+After ``docker_client.start()`` returns, probe ``127.0.0.1:port`` until
+either the connect succeeds (state="running") or the deadline elapses
+(state="starting"). Stop and Restart commit a flat state. the
+JVM-up-but-port-not-bound window only applies to start.
 
 Routes call into here for the post-Docker state transition. The
 "docker timed out" path raises ``TimeoutError`` straight through so
@@ -22,7 +22,7 @@ from mcontrol.infra import db, db_async, docker_client, server_rcon
 # After docker_client.start() returns, the container process is up but
 # the JVM may still be binding the listener port. Probe 127.0.0.1:port
 # briefly so the DB state is honest: "running" only when the listener
-# is up, otherwise "starting" (decision 041).
+# is up, otherwise "starting".
 _LISTENER_PROBE_DEADLINE_S = 10.0
 _LISTENER_PROBE_INTERVAL_S = 0.25
 _LISTENER_PROBE_CONNECT_TIMEOUT_S = 0.5
@@ -31,7 +31,7 @@ _LISTENER_PROBE_CONNECT_TIMEOUT_S = 0.5
 async def probe_listener(port: int) -> bool:
     """Return True if a TCP connect to 127.0.0.1:port succeeds within
     the probe deadline. Connects are run in a thread to avoid blocking
-    the event loop (decision 041)."""
+    the event loop."""
     deadline = time.monotonic() + _LISTENER_PROBE_DEADLINE_S
 
     def _connect_once() -> bool:

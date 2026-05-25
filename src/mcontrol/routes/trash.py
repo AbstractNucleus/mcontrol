@@ -1,4 +1,4 @@
-"""Trash listing + purge (slice 11, decision 031).
+"""Trash listing + purge.
 
   GET  /trash                       → list every .deleted-<name>-<ts>/
                                        directory under <base> with parsed
@@ -32,7 +32,7 @@ router = APIRouter()
 def _humanize_age(seconds: int) -> str:
     """Render an age in seconds as a short human string: '5d 3h',
     '2h 14m', '47s'. Two granularities maximum, smallest unit first
-    becomes lossy fast — we render largest unit + the next one."""
+    becomes lossy fast. we render largest unit + the next one."""
     if seconds < 60:
         return f"{seconds}s"
     if seconds < 3600:
@@ -83,7 +83,7 @@ async def get_page(request: Request) -> HTMLResponse:
 
 @router.get("/trash/empty/confirm", response_class=HTMLResponse)
 async def empty_confirm(request: Request) -> HTMLResponse:
-    """Modal partial — the count + bytes preview before the operator
+    """Modal partial. the count + bytes preview before the operator
     types 'EMPTY' to confirm."""
     base = _base(request)
     cutoff = tombstones.DEFAULT_PURGE_AGE_DAYS * 86400
@@ -123,7 +123,7 @@ async def empty(request: Request, confirm: str = Form("")) -> HTMLResponse:
 
 @router.get("/trash/{dir_name}/confirm", response_class=HTMLResponse)
 async def delete_confirm(request: Request, dir_name: str) -> HTMLResponse:
-    """Modal partial — type-name confirm for a single tombstone delete."""
+    """Modal partial. type-name confirm for a single tombstone delete."""
     parsed = tombstones.parse(dir_name)
     if parsed is None:
         raise HTTPException(status_code=404, detail="Not a tombstone")

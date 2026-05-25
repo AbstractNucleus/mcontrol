@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Trash — mcontrol{% endblock %}
+{% block title %}Trash | mcontrol{% endblock %}
 
 {% block main %}
 <section class="trash-page">
@@ -22,12 +22,12 @@
           hx-swap="innerHTML">
       {% if sweep_count > 0 %}
         <button type="submit" class="trash-page__empty-btn">
-          Empty trash — {{ sweep_count }} tombstone{% if sweep_count != 1 %}s{% endif %}
+          Empty trash: {{ sweep_count }} tombstone{% if sweep_count != 1 %}s{% endif %}
           older than {{ purge_age_days }} days, {{ sweep_bytes_human }}
         </button>
       {% else %}
         <button type="submit" class="trash-page__empty-btn" disabled>
-          Empty trash — nothing older than {{ purge_age_days }} days
+          Empty trash: nothing older than {{ purge_age_days }} days
         </button>
       {% endif %}
     </form>

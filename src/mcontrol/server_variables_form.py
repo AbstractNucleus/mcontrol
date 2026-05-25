@@ -27,12 +27,11 @@ _INFER_ORDER: tuple[str, ...] = ("forge", "fabric", "paper", "quilt")
 def infer_loader_from_jar(server_jar: str) -> Loader:
     """Best-effort guess of the loader from the jar filename.
 
-    Mirrors the supabase-server backfill rule (AbstractNucleus/supabase-server#8):
-    case-insensitive substring match in `forge → fabric → paper → quilt`
+    Case-insensitive substring match in `forge → fabric → paper → quilt`
     order, vanilla as the fallback. New-server form submissions do NOT
-    call this — the operator's dropdown choice is authoritative there.
+    call this; the operator's dropdown choice is authoritative there.
     Kept here so future callers (legacy-row backfill, migrate flow) share
-    one rule with the DB-side backfill.
+    one rule.
     """
     needle = server_jar.lower()
     for loader in _INFER_ORDER:

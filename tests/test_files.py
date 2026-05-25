@@ -312,7 +312,7 @@ async def test_save_writes_content_and_returns_fresh_mtime(
     assert 'id="file-editor-meta"' in body
     assert f'name="mtime_ns" value="{new_mtime_ns}"' in body
     assert "saved" in body
-    # Success path must NOT re-render the editor — that would destroy the
+    # Success path must NOT re-render the editor. that would destroy the
     # mounted EditorView and reset the cursor (the whole point of #57).
     assert "data-file-editor" not in body
     assert "<textarea" not in body
@@ -737,7 +737,7 @@ async def test_upload_force_replaces_symlink_without_following(
     )
 
     assert response.status_code == 200
-    # The symlink target is unchanged — we replaced the link entry, not
+    # The symlink target is unchanged. we replaced the link entry, not
     # wrote through it.
     assert outside.read_text(encoding="utf-8") == "untouched"
     # The server-dir entry is now a regular file with the new bytes.
@@ -913,7 +913,7 @@ async def test_delete_symlink_unlinks_link_not_target(
 
     assert response.status_code == 200
     assert not link.exists() and not link.is_symlink()
-    # The original file is untouched — we never followed the link.
+    # The original file is untouched. we never followed the link.
     assert outside.read_text(encoding="utf-8") == "untouched"
 
 
@@ -1241,7 +1241,7 @@ async def test_move_response_is_source_parent_listing(
 
     assert response.status_code == 200
     body = response.text
-    # Source's parent (root) is what JS swaps in — moved.txt must be gone
+    # Source's parent (root) is what JS swaps in. moved.txt must be gone
     # from it, stayer.txt must still appear.
     assert "stayer.txt" in body
     assert "moved.txt" not in body
@@ -1490,7 +1490,7 @@ async def test_search_caps_at_limit_and_marks_truncated(
     assert "capped" in body or "truncated" in body
     # `data-select-path="matchX-` appears once per rendered hit.
     assert body.count('data-select-path="matchX-') == 5
-    # Late files weren't rendered — the cap stopped the walk early.
+    # Late files weren't rendered. the cap stopped the walk early.
     assert "matchX-19" not in body
 
 
@@ -1632,7 +1632,7 @@ async def test_search_cache_ttl_expires(
     )
     assert "newfile.txt" not in first.text
 
-    # Direct filesystem mutation — bypasses every invalidating handler.
+    # Direct filesystem mutation. bypasses every invalidating handler.
     (server_dir / "newfile.txt").write_text("y", encoding="utf-8")
 
     # Still within TTL → cached, stale result.
@@ -1653,7 +1653,7 @@ async def test_search_cache_ttl_expires(
 async def test_search_cache_two_servers_isolated(
     client, monkeypatch, tmp_path: Path
 ) -> None:
-    """Indexes are keyed by server name — a mutation on one server
+    """Indexes are keyed by server name. a mutation on one server
     must not pollute or invalidate the other server's cache."""
     a_dir = tmp_path / "a"
     a_dir.mkdir()
@@ -1677,7 +1677,7 @@ async def test_search_cache_two_servers_isolated(
     rb = await client.get("/servers/srvB/files/search", params={"q": "beta"})
     assert "beta.txt" in rb.text
 
-    # Mutate srvA via mkdir — must invalidate srvA only.
+    # Mutate srvA via mkdir. must invalidate srvA only.
     mk = await client.post(
         "/servers/srvA/files/mkdir", data={"path": "", "dirname": "fresh"}
     )
@@ -1691,7 +1691,7 @@ async def test_search_cache_skip_rules_apply_at_build(
     client, fake_server, server_dir: Path
 ) -> None:
     """Skip-set rules must be enforced at index-build time, not at
-    query time — chunk-region files are absent from the default index
+    query time. chunk-region files are absent from the default index
     and present in the `include_chunks=1` index."""
     region = server_dir / "world" / "region"
     region.mkdir(parents=True)

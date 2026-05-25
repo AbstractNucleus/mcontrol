@@ -8,7 +8,7 @@ from mcontrol.domain import discovery
 
 @pytest.fixture
 def db_calls(monkeypatch):
-    """Capture every db call discovery makes — order matters for the assertions."""
+    """Capture every db call discovery makes; order matters for the assertions."""
     calls: list[tuple[str, dict]] = []
 
     _existing_rows: dict[str, dict | None] = {}
@@ -90,7 +90,7 @@ async def test_run_discovery_updates_state_only_for_existing_rows(tmp_path, db_c
     assert count == 1
     inserts = [c for c in db_calls["calls"] if c[0] == "insert"]
     updates = [c for c in db_calls["calls"] if c[0] == "update_state"]
-    # No insert — operator-edited row is preserved.
+    # No insert; operator-edited row is preserved.
     assert inserts == []
     # Only state is refreshed; dir and container_name untouched.
     assert updates == [("update_state", {"name": "atm10", "state": "running"})]
@@ -144,8 +144,8 @@ async def test_run_discovery_processes_dirs_in_sorted_order(tmp_path, db_calls, 
 async def test_run_discovery_skips_dot_prefixed_directories(
     tmp_path, db_calls, monkeypatch
 ):
-    """Decision 026: tombstoned dirs (.deleted-foo-...), .git, and other
-    dot-prefixed utility dirs must not appear as servers."""
+    """Tombstoned dirs (.deleted-foo-...), .git, and other dot-prefixed
+    utility dirs must not appear as servers."""
     _make_dirs(
         tmp_path,
         ["atm10", ".deleted-monifactory-1735689600", ".git", ".cache"],

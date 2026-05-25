@@ -6,12 +6,12 @@ Single endpoint:
 
 The card auto-polls every 5s via HTMX (`hx-trigger="load, every 5s"`),
 swapping itself in place. Polling stops automatically when the
-operator navigates away — the trigger lives on a DOM node that the
+operator navigates away. the trigger lives on a DOM node that the
 detail page replaces on navigation.
 
 Container resolution goes through ``db.container_name_for(row)`` so a
-re-pointed row reads the right container (decision 021). Disk usage
-roots at the row's ``dir`` (decision 008); the plan's path-safety
+re-pointed row reads the right container. Disk usage
+roots at the row's ``dir``; the plan's path-safety
 contract relies on ``dir`` being DB-sourced, not URL-sourced.
 """
 

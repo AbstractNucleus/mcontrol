@@ -1,17 +1,22 @@
 # mcontrol
 
-Bespoke web panel for managing a single-host fleet of Minecraft servers running in Docker. See `README.md` for a project overview and `docs/decisions.md` for the architectural decisions register.
+Web panel for managing a single-host fleet of Minecraft servers running in Docker. See [README.md](README.md) for the project overview and [CONTRIBUTING.md](CONTRIBUTING.md) for the dev loop.
 
-## Agent skills
+## Stack at a glance
 
-### Issue tracker
+FastAPI + Jinja2 + HTMX backend, Supabase (Postgres + service-role) for the servers/players/tombstones tables, `aiodocker` against `/var/run/docker.sock`, CodeMirror (vendored) for the in-app file editor. Python 3.12, [uv](https://docs.astral.sh/uv/) for deps.
 
-GitHub Issues at `AbstractNucleus/mcontrol`, accessed via `gh`. See `docs/agents/issue-tracker.md`.
+## Project conventions
 
-### Triage labels
+- **Surgical changes only.** Touch what the task requires; don't clean up adjacent code, comments, or formatting.
+- **Route modules are thin.** HTTP wiring lives in `src/mcontrol/routes/`; business logic in `src/mcontrol/services/` and `src/mcontrol/domain/`; storage adapters in `src/mcontrol/infra/`.
+- **No inline styles.** Components consume `--token-name` variables from `src/mcontrol/static/tokens.css`. New colors go in the semantic layer of `tokens.css`, never as raw hex in templates.
+- **Tests mock collaborators.** Real Supabase and Docker socket are not available in CI. Use `monkeypatch` to stub `db.*` and the Docker client. See `tests/conftest.py` and `tests/test_home.py` for the pattern.
+- **Comments are sparse.** Default to no comments. Add one only when the *why* is non-obvious: a hidden constraint, a workaround, a surprising invariant.
 
-Canonical defaults (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+## Dev loop
 
-### Domain docs
-
-Single-context. Decisions register at `docs/decisions.md` (single-file, not per-ADR). Domain glossary at `docs/CONTEXT.md`. See `docs/agents/domain.md`.
+```bash
+uv run pytest -v        # must pass
+uv run ruff check .     # must be clean
+```

@@ -11,7 +11,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "supabase>=2.9",
     "aiodocker>=0.24",
-    # python-multipart is required for FastAPI's Form(...) parsing — used by
+    # python-multipart is required for FastAPI's Form(...) parsing. Used by
     # routes/console.py (RCON command submit) and routes/bindings.py.
     "python-multipart>=0.0.20",
 ]
@@ -36,7 +36,7 @@ target-version = "py312"
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.flake8-bugbear]
-# FastAPI's Depends() is intentionally called in parameter defaults — same
+# FastAPI's Depends() is intentionally called in parameter defaults: same
 # idiom as Form/Query/File which ruff already exempts from B008.
 extend-immutable-calls = ["fastapi.Depends", "Depends"]
 

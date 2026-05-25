@@ -5,12 +5,11 @@ lifecycle buttons (Start / Stop / Restart) is disabled, and which one
 carries the `--accent` (the next-action CTA)."
 
 Consumed by:
-- `routes.server.server_detail` — to render the initial buttons.
-- `routes.lifecycle.{start,stop,restart}` — to rebuild the buttons in
+- `routes.server.server_detail`: to render the initial buttons.
+- `routes.lifecycle.{start,stop,restart}`: to rebuild the buttons in
   the post-action OOB swap so the surface stays consistent.
 
-Slice 13 / decision 033. The slice 12 plan deferred this; this module
-pins the state table.
+Pins the state table.
 """
 
 from typing import Literal, TypedDict
@@ -28,7 +27,7 @@ class LifecycleView(TypedDict):
 _RUNNING_LIKE = {"running", "paused"}
 _STOPPED_LIKE = {"created", "exited", "dead"}
 _TRANSIENT = {"restarting", "removing", "scaffolding"}
-# mcontrol-specific lifecycle value (decision 041): container is up but
+# mcontrol-specific lifecycle value: container is up but
 # the listener port hasn't bound yet. Only ever written by the start
 # handler on probe timeout, never returned by docker discovery.
 _STARTING = "starting"
@@ -57,9 +56,9 @@ def view(state: str | None) -> LifecycleView:
             "accent": "stop",
         }
     if state == _STARTING:
-        # Container is up; listener probe timed out (decision 041).
+        # Container is up; listener probe timed out.
         # Operator can Stop a stuck-start or Restart it; Start would be
-        # a no-op. No accent — there's no obvious next action.
+        # a no-op. No accent. there's no obvious next action.
         return {
             "start_disabled": True,
             "stop_disabled": False,

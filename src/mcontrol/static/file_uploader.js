@@ -1,6 +1,6 @@
 // Drag-drop + button-fallback uploads for the file tree (slice 5 PR 3).
 //
-// Decision 016 (no bundler) means this is plain ES2020. It's deliberately
+// No-bundler policy means this is plain ES2020. It's deliberately
 // independent of htmx for the upload round-trip: we hold the FileList in
 // memory between the first POST and the operator's confirmed force=true
 // retry, which an htmx form-submit can't do (the browser doesn't keep
@@ -93,7 +93,7 @@ document.addEventListener("click", (evt) => {
 
 // Slice 5 follow-up: close the per-entry ⋯ popover after any action click
 // inside it, so the next action doesn't have to first dismiss the menu.
-// Also close any open popover on a click outside it — <details> doesn't
+// Also close any open popover on a click outside it. <details> doesn't
 // do outside-click dismissal natively.
 // requestAnimationFrame defers to the next frame so the action's own
 // handler runs first (e.g. opening the rename form, navigating download).
@@ -134,7 +134,7 @@ async function uploadFiles(path, files, force) {
   // XHR (not fetch) so we get upload.onprogress for the progress indicator
   // (issue #59). Modpack assets are routinely hundreds of MB; without
   // progress the operator sees no feedback during transit. Multi-file
-  // batches report aggregate progress across the multipart body — adequate
+  // batches report aggregate progress across the multipart body. adequate
   // per the issue brief.
   const xhr = new XMLHttpRequest();
   const progress = showUploadProgress(() => xhr.abort());
@@ -219,7 +219,7 @@ function errorMessageForXhr(verb, xhr) {
     if (data && typeof data.detail === "string" && data.detail) {
       return `${verb} failed: ${data.detail}`;
     }
-  } catch (_err) { /* not JSON — fall through */ }
+  } catch (_err) { /* not JSON. fall through */ }
   return `${verb} failed: HTTP ${xhr.status}`;
 }
 
@@ -263,7 +263,7 @@ async function errorMessageFor(verb, resp) {
     if (data && typeof data.detail === "string" && data.detail) {
       return `${verb} failed: ${data.detail}`;
     }
-  } catch (_err) { /* not JSON — fall through */ }
+  } catch (_err) { /* not JSON. fall through */ }
   return `${verb} failed: HTTP ${resp.status}`;
 }
 
@@ -620,7 +620,7 @@ async function refreshTreeAt(path) {
     ? "#file-tree"
     : `[data-upload-target][data-upload-path="${cssEscape(path)}"] > .file-tree__children`;
   const ul = document.querySelector(sel);
-  if (!ul) return;  // Not currently visible — skip the round-trip.
+  if (!ul) return;  // Not currently visible. skip the round-trip.
   try {
     const resp = await fetch(
       `/servers/${encodeURIComponent(name)}/files/tree?path=${encodeURIComponent(path)}`
@@ -652,7 +652,7 @@ function syncBulkUi() {
   if (counter) {
     counter.textContent = `${SELECTION.size} selected`;
   }
-  // Reflect SELECTION in every visible checkbox — covers the case where
+  // Reflect SELECTION in every visible checkbox. covers the case where
   // the operator selected something, then expanded a folder (htmx swap)
   // and the new DOM rows would otherwise come up unchecked.
   document.querySelectorAll("[data-select-path]").forEach((cb) => {
@@ -677,7 +677,7 @@ document.addEventListener("change", (evt) => {
 // Issue #58: Shift+click on a checkbox selects every entry in visible
 // DOM order between the anchor and the clicked checkbox (inclusive).
 // Subtraction-on-shift is intentionally not supported (matches Finder).
-// Runs on the click event — by the time it fires, cb.checked is already
+// Runs on the click event. by the time it fires, cb.checked is already
 // the post-toggle state, and modifier keys are available.
 document.addEventListener("click", (evt) => {
   if (!evt.shiftKey) return;
@@ -1174,7 +1174,7 @@ document.addEventListener("keydown", (evt) => {
       if (rowIsDir(row)) {
         evt.preventDefault();
         if (row.getAttribute("aria-expanded") === "true") {
-          // Already open — move focus to first child if any.
+          // Already open. move focus to first child if any.
           const kids = rowChildrenList(row);
           const first = kids && kids.querySelector(":scope > .file-tree__entry");
           if (first) focusTreeRow(first);
@@ -1260,7 +1260,7 @@ document.addEventListener("keydown", (evt) => {
 // ---- Tree focus restoration after htmx swap (issue #63) --------------
 //
 // htmx replaces the matched element's children, discarding any focused
-// row. Capture the focused path before the swap and restore after — to
+// row. Capture the focused path before the swap and restore after. to
 // the same path if it still exists, otherwise to the closest surviving
 // ancestor, otherwise to the first visible row.
 

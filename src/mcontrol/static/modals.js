@@ -10,7 +10,7 @@
 //     with tabindex=-1)
 //   - cycle Tab/Shift+Tab within the modal's focusables (focus trap)
 //   - close on Escape
-//   - return focus to the element that opened the modal — falling back to
+//   - return focus to the element that opened the modal. falling back to
 //     document.body if that element is gone (e.g. swapped-out trash row)
 //
 // Modal roots opt in by carrying [data-modal-root]. Cancel buttons opt in
@@ -110,7 +110,7 @@
       const closer = evt.target.closest && evt.target.closest("[data-modal-close]");
       if (!closer || !root.contains(closer)) return;
       // Anchor-tag closers may carry their own htmx-driven navigation;
-      // don't preventDefault — just stash the trigger restore.
+      // don't preventDefault. just stash the trigger restore.
       // (Plain <button data-modal-close> just removes the modal.)
       if (closer.tagName === "BUTTON" && !closer.hasAttribute("hx-get") && !closer.hasAttribute("hx-post")) {
         evt.preventDefault();

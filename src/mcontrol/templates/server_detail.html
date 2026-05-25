@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}{{ server.name }} — mcontrol{% endblock %}
+{% block title %}{{ server.name }} | mcontrol{% endblock %}
 
 {% block head_scripts %}
   {#
     CodeMirror 6 vendored locally under /static/vendor/codemirror/ (decision
-    016 — no bundler). Versions are pinned; bumps mean re-fetching bundles
+    016: no bundler). Versions are pinned; bumps mean re-fetching bundles
     with the same `?bundle&external=...` recipe so every sub-package shares
     one `@codemirror/state`/`view` instance via the importmap. Mixing
     instances breaks the editor with "two different EditorState" errors.
@@ -63,7 +63,7 @@
   </div>
   {#
     Visually-hidden aria-live region for lifecycle state announcements
-    (decision 039). `static/lifecycle.js` writes the new state here on
+    `static/lifecycle.js` writes the new state here on
     htmx:afterSwap of `#lifecycle-buttons`, so a screen-reader user gets
     the action's outcome announced without an extra visual flash.
   #}

@@ -6,13 +6,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# uv is the lockfile/dep tool; copy it from the official image. Pinned per decision 020.
+# uv is the lockfile/dep tool; copy it from the official image.
 COPY --from=ghcr.io/astral-sh/uv:0.11.7 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
 # Docker CLI + compose v2 plugin, used by mcontrol to recreate per-server
-# containers when the .env (RCON_PASSWORD) changes. Pinned per decision 020.
+# containers when the .env (RCON_PASSWORD) changes.
 ARG DOCKER_CE_CLI_VERSION=5:27.4.0-1~debian.12~bookworm
 ARG DOCKER_COMPOSE_PLUGIN_VERSION=2.31.0-1~debian.12~bookworm
 

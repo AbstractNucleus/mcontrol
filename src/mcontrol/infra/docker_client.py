@@ -1,13 +1,13 @@
 """Thin async wrapper around aiodocker for the operations slice 4 needs:
 
-- container_states_by_name() — discovery's existing read.
-- start/stop/restart(name) — lifecycle controls.
-- logs_stream(name, tail) — async generator of log lines for SSE.
-- find_network_name(name) — picks the MC container's docker network so
+- container_states_by_name(). discovery's existing read.
+- start/stop/restart(name). lifecycle controls.
+- logs_stream(name, tail). async generator of log lines for SSE.
+- find_network_name(name). picks the MC container's docker network so
   mcontrol can attach to it for RCON.
-- attach_self_to_network / detach_self_from_network — the network attach
+- attach_self_to_network / detach_self_from_network. the network attach
   dance the RCON SSE wraps with.
-- self_container_id() — used by the attach/detach calls.
+- self_container_id(). used by the attach/detach calls.
 
 Every entry point takes an ``aiodocker.Docker`` as its first argument.
 The single long-lived client is opened in ``main.lifespan`` and stored on
@@ -29,7 +29,7 @@ def self_container_id() -> str:
     """Short docker container ID of the running mcontrol process.
 
     Docker sets HOSTNAME to the short container ID by default. If a
-    deployment overrides hostname in compose, this assumption breaks —
+    deployment overrides hostname in compose, this assumption breaks -
     fall back to /etc/hostname.
     """
     hostname = os.environ.get("HOSTNAME")
@@ -42,7 +42,7 @@ def self_container_id() -> str:
 async def container_states_by_name(docker: aiodocker.Docker) -> dict[str, str]:
     """Return {container_name: status} for every container on the host.
 
-    Returns an empty dict if the Docker daemon is unreachable — callers
+    Returns an empty dict if the Docker daemon is unreachable. callers
     treat "no entry" as state="unknown" for that server.
     """
     try:

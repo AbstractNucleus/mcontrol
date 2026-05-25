@@ -23,7 +23,7 @@
 {% if mode == 'text' %}
   {% if conflict %}{% include "_file_conflict.html" %}{% endif %}
   {# Save targets a small meta slot (issue #57) so the editor stays mounted
-     across successful saves — the form's hx-target points at this slot and
+     across successful saves; the form's hx-target points at this slot and
      the save handler returns just `_file_editor_meta.html`. The 409
      conflict path uses HX-Retarget to swap the full #file-view instead. #}
   <form class="file-editor"

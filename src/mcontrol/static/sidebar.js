@@ -1,7 +1,7 @@
-// Sidebar UX — Claude Code-style resizable + collapsible left rail.
+// Sidebar UX. Claude Code-style resizable + collapsible left rail.
 // State persists across reloads via localStorage:
-//   "sidebar-width"     — px string with units (e.g. "280px")
-//   "sidebar-collapsed" — "1" when collapsed; absent otherwise
+//   "sidebar-width"    . px string with units (e.g. "280px")
+//   "sidebar-collapsed". "1" when collapsed; absent otherwise
 // First-paint application happens inline in base.html so the rail comes
 // up at the right size without a flash. This script wires the live drag
 // + collapse interactions.

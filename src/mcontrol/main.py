@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
         count = await discovery.run_discovery(docker, base_path)
         logger.info("discovery: %d server dir(s) seen under %s", count, base_path)
     except Exception:
-        # Discovery must never block the app from coming up — the home page
+        # Discovery must never block the app from coming up. The home page
         # surfaces an empty state and the operator can investigate from there.
         logger.exception("discovery failed; continuing without it")
     try:
@@ -68,7 +68,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="mcontrol", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
 
-    # Jinja global for the tombstone-count badge (decision 035). Called
+    # Jinja global for the tombstone-count badge. Called
     # from _sidebar.html on every page; uses tombstones.count() which is
     # a single scandir, so cheap to invoke per render.
     def _tombstone_count(request: Request) -> int:
@@ -81,7 +81,7 @@ def create_app() -> FastAPI:
     templates.env.globals["tombstone_count"] = _tombstone_count
 
     # Jinja global for the sidebar server list. Called from _sidebar.html on
-    # every page — keeps the navigator in sync across detail pages without
+    # every page. Keeps the navigator in sync across detail pages without
     # threading `servers` through every route's context. Same defensive
     # try/except as tombstone_count so a DB blip can't take the chrome down.
     def _sidebar_servers(_request: Request) -> list[dict]:
@@ -119,7 +119,7 @@ def create_app() -> FastAPI:
         )
         return JSONResponse(status_code=status_code, content=payload)
 
-    # Custom error pages (slice 12, decision 032). HTMX requests still
+    # Custom error pages. HTMX requests still
     # surface error JSON so swap targets behave; full-page navigations
     # render the chrome-shaped error template.
     def _wants_html(request: Request) -> bool:

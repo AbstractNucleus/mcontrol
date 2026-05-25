@@ -1,6 +1,6 @@
-"""Tests for routes/migrate.py — the slice 8 PR 1 card + run endpoint.
+"""Tests for routes/migrate.py: the slice 8 PR 1 card + run endpoint.
 
-Decision 028: per-server, one-way, opt-in migration. Card is gated on
+Per-server, one-way, opt-in migration. Card is gated on
 `scaffolded_at IS NULL`; POST runs migration.migrate(...), then
 db.update_variables + db.mark_scaffolded, then HX-Redirect.
 """
@@ -125,7 +125,7 @@ async def test_get_returns_form_prefilled_from_legacy_files(
 
     assert response.status_code == 200
     body = response.text
-    # Heap preserved via parsed_xmx + 2 (decision 009).
+    # Heap preserved via parsed_xmx + 2.
     assert 'value="14"' in body
     assert 'value="25571"' in body
     assert 'value="neoforge-21.1.86-server.jar"' in body
@@ -275,7 +275,7 @@ async def test_post_refuses_when_state_running(app_client, fake_db, base_dir):
     )
 
     assert response.status_code == 409
-    # Files untouched — no migration ran.
+    # Files untouched; no migration ran.
     assert (base_dir / "atm10" / "Dockerfile").exists()
     assert fake_db["scaffolded_marks"] == []
 

@@ -1,5 +1,5 @@
 """HTMX-driven inline edit for the per-server `container_name` override
-and `dir`. Decision 021 — the operator's safety valve against drift."""
+and `dir`. The operator's safety valve against drift."""
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse

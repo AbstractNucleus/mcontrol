@@ -12,7 +12,7 @@ _HEROBRINE_UUID = "ec561538-f3fd-461d-aff5-086b22154bce"
 def _server_dir(tmp_path: Path, name: str = "atm10") -> Path:
     """Create the standard ``<base>/<name>/server/`` layout used by the
     real fleet, return the per-server directory (one level above
-    ``server/``) — same shape membership.py expects."""
+    ``server/``). same shape membership.py expects."""
     server_dir = tmp_path / name
     (server_dir / "server").mkdir(parents=True)
     return server_dir
@@ -117,7 +117,7 @@ def test_read_ops_returns_entries(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Write — vanilla shape, mtime guard, atomicity
+# Write. vanilla shape, mtime guard, atomicity
 # ---------------------------------------------------------------------------
 
 

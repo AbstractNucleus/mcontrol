@@ -1,4 +1,4 @@
-"""Tests for the deep /healthz probe (slice 11, decision 030).
+"""Tests for the deep /healthz probe.
 
 Three subsystem probes (db, docker, base_path) run via asyncio.gather
 behind a 250 ms per-probe timeout. The endpoint returns 200 when all
@@ -124,7 +124,7 @@ async def test_healthz_503_when_every_probe_fails(client, patch_probes):
 
 
 async def test_healthz_envelope_is_json_on_503_too(client, patch_probes):
-    """Same shape on 503 as 200 — nginx and curl see one schema."""
+    """Same shape on 503 as 200. nginx and curl see one schema."""
     patch_probes["db"] = _fail("nope")
 
     response = await client.get("/healthz")
@@ -157,7 +157,7 @@ async def test_healthz_recovers_when_a_probe_raises_past_its_handler(
 
 async def test_probe_docker_uses_a_method_aiodocker_actually_exposes(env):
     """Regression: the original implementation called
-    ``docker.system.ping()`` which does not exist on aiodocker — the
+    ``docker.system.ping()`` which does not exist on aiodocker. the
     DockerSystem class only exposes ``info()``. ``_probe_docker`` must
     use a method that actually exists on the public surface, otherwise
     the probe AttributeErrors before any round-trip and ``/healthz``
@@ -179,7 +179,7 @@ async def test_probe_docker_uses_a_method_aiodocker_actually_exposes(env):
         except AttributeError as exc:
             raise AssertionError(
                 "aiodocker.Docker.version is not a real method on this "
-                "version — _probe_docker is calling the wrong API"
+                "version. _probe_docker is calling the wrong API"
             ) from exc
         except Exception:
             pass  # connection error against bogus socket is fine
@@ -222,7 +222,7 @@ async def test_probe_db_sanitises_detail_no_service_role_key_leak(monkeypatch, e
 
     assert result["status"] == "fail"
     # The sanitised detail uses str(exc), not repr(exc), and is length-capped.
-    # We verify the secret can leak via str(exc) too — the test enforces that
+    # We verify the secret can leak via str(exc) too. the test enforces that
     # when the probe raises an exception whose repr inlines the key, the
     # detail field is built from str(exc) not repr(exc). Both forms here
     # contain the key string, so this also documents the contract: callers
@@ -248,7 +248,7 @@ async def test_probe_db_detail_capped_at_200_chars(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# base_path probe — real filesystem
+# base_path probe. real filesystem
 # ---------------------------------------------------------------------------
 
 

@@ -38,7 +38,7 @@ async def save(
     if not force and st.st_mtime_ns != mtime_ns:
         # The form's hx-target is the meta slot for successful saves (issue
         # #57). On conflict we need to swap the whole view so the editor
-        # remounts with normalized content + banner — override the form's
+        # remounts with normalized content + banner. override the form's
         # target via htmx response headers.
         return templates.TemplateResponse(
             request=request,
@@ -78,7 +78,7 @@ async def upload(
     server: dict = Depends(get_server_or_404),
     path: str = Form(""),
     force: bool = Form(False),
-    files: list[UploadFile] = File(...),  # noqa: B008 — FastAPI dep-injection idiom
+    files: list[UploadFile] = File(...),  # noqa: B008  (FastAPI dep-injection idiom)
 ) -> HTMLResponse:
     """Upload one-or-more files to a directory under the server's bind-mount.
 
@@ -88,8 +88,8 @@ async def upload(
     partial. The client re-POSTs with `force=true` to commit.
 
     Per-file writes are atomic (sibling tempfile + os.replace). The
-    batch is *not* transactional — if file 7 of 10 fails after a clean
-    conflict scan, files 1–6 are on disk. That's acceptable; the
+    batch is *not* transactional: if file 7 of 10 fails after a clean
+    conflict scan, files 1-6 are on disk. That's acceptable; the
     operator can re-upload the failed remainder.
     """
     target_dir = file_safety.resolve_within(server["dir"], path)
@@ -101,12 +101,12 @@ async def upload(
     if not files:
         raise HTTPException(status_code=400, detail="no files uploaded")
 
-    # Filename validation first — never let an invalid name reach disk.
+    # Filename validation first. never let an invalid name reach disk.
     for f in files:
         file_safety.validate_upload_filename(f.filename or "")
 
     # Conflict scan: classify every existing target before any writes.
-    # Hard refusals (dir, special) abort with 400 even when force=true —
+    # Hard refusals (dir, special) abort with 400 even when force=true -
     # the operator can't clobber these via this endpoint, and surfacing
     # them through the conflict modal would be misleading.
     conflicts: list[str] = []

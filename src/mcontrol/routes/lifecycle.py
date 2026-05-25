@@ -4,7 +4,7 @@ Each handler delegates to ``services.lifecycle_service`` for the
 Docker + DB + RCON-password-cache side; the route is responsible for
 HTMX response shape, the post-action OOB swap, and the timeout flash.
 
-The response shape (slice 13, decision 033) is a single HTML body
+The response shape is a single HTML body
 carrying two HTMX swap targets:
 
 - The state pill, which arrives at `#state-pill` as `outerHTML` (the
@@ -26,7 +26,7 @@ from mcontrol.templates import templates
 
 router = APIRouter()
 
-_TIMEOUT_MSG = "Docker timed out — the container may still be starting. Try again."
+_TIMEOUT_MSG = "Docker timed out; the container may still be starting. Try again."
 
 
 def _pill_and_buttons(server: dict, state: str, *, flash: str | None = None) -> HTMLResponse:

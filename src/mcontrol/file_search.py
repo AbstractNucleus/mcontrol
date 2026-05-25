@@ -1,8 +1,8 @@
 """Per-server in-memory search index for the files tree.
 
-App-wide state lifted out of `routes/files.py` (decision 044). The index
-is consulted on every debounced keystroke of the search input — see
-issue #49 — so memoising the walk is the win. The cache lives in the
+App-wide state lifted out of `routes/files.py`. The index
+is consulted on every debounced keystroke of the search input (see
+issue #49), so memoising the walk is the win. The cache lives in the
 process; single-uvicorn-worker operation is assumed and multi-worker
 invalidation is explicitly out of scope.
 

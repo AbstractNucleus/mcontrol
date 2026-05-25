@@ -10,7 +10,7 @@ mtime-checked atomic edit (when offline).
   POST /servers/{name}/players/{uuid}/whitelist         → toggle whitelist
   POST /servers/{name}/players/{uuid}/op                → toggle op
 
-Decision 027:
+Rules:
   - Roster add is the only entry point for new identities; the picker
     only lists rows already in ``app_mcontrol.players``.
   - Op level is always vanilla default (4); no UI for non-default
@@ -19,7 +19,7 @@ Decision 027:
     are surfaced verbatim in a flash message.
 
 The RCON-vs-offline dispatch, view assembly, and name resolution live
-in ``services.membership_service`` — this module is thin orchestration
+in ``services.membership_service``: this module is thin orchestration
 plus template rendering.
 """
 
@@ -91,7 +91,7 @@ async def _flip_with_stale_guard(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"{kind}.json changed on disk between read and write — retry."
+                f"{kind}.json changed on disk between read and write. Retry."
             ),
         ) from None
 

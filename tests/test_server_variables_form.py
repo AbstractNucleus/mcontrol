@@ -1,4 +1,4 @@
-"""Tests for `mcontrol.server_variables_form` — the shared validator
+"""Tests for `mcontrol.server_variables_form`: the shared validator
 and the loader-from-jar inference helper (issue #123).
 
 The shared validator is exercised end-to-end in `test_new_server.py` and
@@ -70,7 +70,7 @@ def test_validate_skips_loader_check_when_field_absent():
         ("server.jar", "vanilla"),
         ("minecraft_server.1.21.4.jar", "vanilla"),
         ("", "vanilla"),
-        # Case-insensitive match — DB does ILIKE; we lower() the needle.
+        # Case-insensitive match. DB does ILIKE; we lower() the needle.
         ("FORGE-1.20.1.jar", "forge"),
         ("Paper-1.21.4.JAR", "paper"),
     ],

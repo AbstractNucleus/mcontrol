@@ -1,4 +1,4 @@
-"""Tests for the operator-triggered discovery endpoint (decision 034)."""
+"""Tests for the operator-triggered discovery endpoint."""
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -9,7 +9,7 @@ def env(monkeypatch, tmp_path):
     """Override the conftest env fixture so SERVER_BASE_PATH points at a
     real, existing tmp dir. The rescan route 503s on a missing path; for
     happy-path tests we want it to exist."""
-    monkeypatch.setenv("SUPABASE_URL", "https://api.noelkleen.com")
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
     monkeypatch.setenv("SERVER_BASE_PATH", str(tmp_path))
 
@@ -67,7 +67,7 @@ async def test_rescan_503_when_base_path_missing(monkeypatch, tmp_path) -> None:
     surfaces 503 (the startup lifespan handler logs-and-continues for
     the same condition, but at request time the operator deserves the
     failure to be visible)."""
-    monkeypatch.setenv("SUPABASE_URL", "https://api.noelkleen.com")
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
     monkeypatch.setenv("SERVER_BASE_PATH", str(tmp_path / "does-not-exist"))
 

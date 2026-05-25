@@ -1,8 +1,8 @@
-"""Tests for routes/delete_server.py — type-name confirm + tombstone.
+"""Tests for routes/delete_server.py: type-name confirm + tombstone.
 
-Decision 026: Delete renames <dir> to <base>/.deleted-<name>-<ts>/ and
-deletes the row. Refuses when state='running'. Type-name confirm is
-the destructive-op friction that mirrors slice 5's recursive-delete.
+Delete renames <dir> to <base>/.deleted-<name>-<ts>/ and deletes the
+row. Refuses when state='running'. Type-name confirm is the
+destructive-op friction that mirrors slice 5's recursive-delete.
 """
 
 from collections.abc import AsyncIterator
@@ -143,7 +143,7 @@ async def test_post_tombstones_dir_and_deletes_row(
     assert not server_dir.exists()
     tombstones = [p for p in base_dir.iterdir() if p.name.startswith(".deleted-newshire-")]
     assert len(tombstones) == 1
-    # Files preserved inside the tombstone — recovery is `mv tombstone newshire`.
+    # Files preserved inside the tombstone; recovery is `mv tombstone newshire`.
     assert (tombstones[0] / "marker.txt").read_text() == "server data"
 
 

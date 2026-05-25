@@ -1,10 +1,9 @@
 """Tiny parser for Minecraft ``server.properties`` files.
 
-Decision 024 leaves ``server.properties`` operator-managed; mcontrol
-only ever *reads* it. This helper centralises the parse so the slice 4
-RCON handshake (``enable-rcon``, ``rcon.password``) and the slice 7
-central Players page (``white-list`` indicator) share one parser
-instead of growing two.
+``server.properties`` is operator-managed; mcontrol only ever *reads*
+it. This helper centralises the parse so the slice 4 RCON handshake
+(``enable-rcon``, ``rcon.password``) and the slice 7 central Players
+page (``white-list`` indicator) share one parser instead of growing two.
 
 The format is the canonical Minecraft / ``java.util.Properties`` shape:
 

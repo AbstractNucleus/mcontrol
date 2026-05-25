@@ -23,7 +23,7 @@ def _format_memory(stats: object) -> str | None:
 
     Returns a string when the container is running, None otherwise.
     Slice 9 resolution #12: derive caption from live stats, not the
-    DB state column — both not-running and daemon-unreachable collapse
+    DB state column. both not-running and daemon-unreachable collapse
     to a single dash on the home surface.
     """
     if not isinstance(stats, dict) or stats.get("status") != "ok":
@@ -71,17 +71,17 @@ async def rescan(
     request: Request,
     docker: aiodocker.Docker = Depends(get_docker),
 ) -> Response:
-    """Operator-triggered discovery (decision 034).
+    """Operator-triggered discovery.
 
     Re-runs the same idempotent `discovery.run_discovery` routine the
-    lifespan kicks off at startup (decision 021). On HTMX requests
+    lifespan kicks off at startup. On HTMX requests
     returns 204 + `HX-Refresh: true` so the client reloads `/` and
     picks up the freshly-discovered rows. On plain-HTTP requests
     (curl, no-JS), returns 303 → `/`.
 
     A missing `SERVER_BASE_PATH` directory surfaces as 503; this is the
     operator's signal that the deployment-level bind mount has dropped
-    out (the lifespan handler logs and continues at startup — same
+    out (the lifespan handler logs and continues at startup. same
     surface from the operator-trigger side would silently hide the
     problem).
     """

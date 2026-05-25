@@ -1,4 +1,4 @@
-// Theme toggle (slice 12, decision 032).
+// Theme toggle.
 // Tri-state: "system" | "light" | "dark". Persists to localStorage.
 // The `data-theme` attribute on <html> has already been set by the inline
 // bootstrap in base.html before stylesheets evaluated; this script wires

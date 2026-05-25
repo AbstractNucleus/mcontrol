@@ -93,7 +93,7 @@ async def test_ok_render_shows_cpu_memory_disk(client, fake_db, fake_stats, tmp_
     body = response.text
     assert "12.4 %" in body                    # CPU
     assert "8.1 GiB / 12.0 GiB" in body         # memory used / limit
-    assert "(67 %)" in body                     # memory percent — 8.097/12 ≈ 67.48 → 67
+    assert "(67 %)" in body                     # memory percent. 8.097/12 ≈ 67.48 → 67
     assert "4.0 KiB" in body                    # disk
     assert "every 5 s" in body                  # ok caption
 
@@ -131,7 +131,7 @@ async def test_not_running_dashes_container_numbers_but_keeps_disk(
     # CPU and memory show em-dashes; disk still renders the real number.
     assert "container not running" in body
     assert "1.0 KiB" in body
-    # No CPU / memory percent figures — the OK template branch is not used.
+    # No CPU / memory percent figures. the OK template branch is not used.
     assert "%" not in body.split("Disk")[0]
 
 

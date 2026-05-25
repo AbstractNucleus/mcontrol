@@ -14,7 +14,7 @@ def get_docker(request: Request) -> aiodocker.Docker:
     Routes inject this via ``Depends(get_docker)`` and pass it into
     ``docker_client.*``, ``resources.*``, ``server_rcon.*``, etc. The
     single client is opened in ``main.lifespan`` startup and closed on
-    shutdown — see ``mcontrol.main.lifespan``.
+    shutdown. see ``mcontrol.main.lifespan``.
     """
     return request.app.state.docker
 

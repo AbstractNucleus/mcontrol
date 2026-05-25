@@ -1,9 +1,9 @@
-"""Server discovery — walks SERVER_BASE_PATH and registers each
+"""Server discovery. walks SERVER_BASE_PATH and registers each
 subdirectory in app_mcontrol.servers, refreshing its state from Docker.
 
-Design (decision 021): this routine is idempotent and **non-destructive
+Design: this routine is idempotent and **non-destructive
 of operator edits**. On a re-scan, dir and container_name (which the
-operator may have edited) are NEVER overwritten — only `state` is
+operator may have edited) are NEVER overwritten. only `state` is
 refreshed. New directories are inserted with default values; existing
 rows are touched only on the `state` column.
 
@@ -34,7 +34,7 @@ async def run_discovery(docker: aiodocker.Docker, base_path: Path) -> int:
     for entry in sorted(base_path.iterdir(), key=lambda p: p.name):
         if not entry.is_dir():
             continue
-        # Decision 026: skip dot-prefixed dirs so tombstoned dirs don't
+        # Skip dot-prefixed dirs so tombstoned dirs don't
         # resurrect on the next scan. Same filter handles .git,
         # lost+found, and any other operator-introduced non-server dir.
         if entry.name.startswith("."):
@@ -48,7 +48,7 @@ async def run_discovery(docker: aiodocker.Docker, base_path: Path) -> int:
                 state=states.get(entry.name, "unknown"),
             )
         else:
-            # Use the row's container_name override when looking up state —
+            # Use the row's container_name override when looking up state -
             # the actual docker container may be named differently from the
             # directory once an operator has repointed it.
             container_name = db.container_name_for(existing)

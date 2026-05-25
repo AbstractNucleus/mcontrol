@@ -1,21 +1,20 @@
 """Disk-backed per-server whitelist + ops file ops (slice 7 PR 1).
 
 This module is the only writer of ``<server-dir>/server/whitelist.json``
-and ``<server-dir>/server/ops.json``. Decision 027 makes those files
-the source of truth for membership; the DB roster (slice 7 PR 0) holds
-identities only.
+and ``<server-dir>/server/ops.json``. These files are the source of
+truth for membership; the DB roster (slice 7 PR 0) holds identities only.
 
 Vanilla shape:
 
-  - ``whitelist.json`` — list of ``{"uuid", "name"}``.
-  - ``ops.json``       — list of ``{"uuid", "name", "level", "bypassesPlayerLimit"}``.
+  - ``whitelist.json``: list of ``{"uuid", "name"}``.
+  - ``ops.json``      . list of ``{"uuid", "name", "level", "bypassesPlayerLimit"}``.
   - 2-space indent, trailing newline, insertion order preserved on round-trip.
 
 mtime stale-write guard mirrors the slice-5 file-editor pattern: read
 returns ``(entries, mtime_ns)``; write asserts the file's current
 mtime_ns matches the value the caller saw at read time, raising
 :class:`StaleWriteError` on drift. Pass ``mtime_ns=0`` to mean
-"expected no file" — useful for first-time writes; if a file appears
+"expected no file". useful for first-time writes; if a file appears
 between the call site's intent and the write, the guard refuses.
 
 The running-server write path lives in slice 7 PR 2 and goes through
@@ -43,7 +42,7 @@ class MalformedFileError(MembershipError):
 
 
 class StaleWriteError(MembershipError):
-    """File on disk changed since the caller's read — operator should retry."""
+    """File on disk changed since the caller's read. operator should retry."""
 
 
 def whitelist_path(server_dir: Path) -> Path:
@@ -149,7 +148,7 @@ def add_op_entry(server_dir: Path, *, uuid: str, name: str) -> bool:
     """Read, append a vanilla-default op entry if uuid not present, write.
 
     New entries are written as ``{"uuid", "name", "level": 4,
-    "bypassesPlayerLimit": false}`` per decision 027 — there is no level
+    "bypassesPlayerLimit": false}``. there is no level
     dropdown in the UI. Existing entries with non-default levels are
     preserved on round-trip because we never rewrite their fields."""
     entries, mtime_ns = read_ops(server_dir)
@@ -191,15 +190,15 @@ def scan_memberships(servers: list[dict[str, Any]]) -> list[dict[str, str]]:
     order.
 
     Used by:
-      - PR 3 Import — walks every file, upserts unknown UUIDs into
+      - PR 3 Import. walks every file, upserts unknown UUIDs into
         ``app_mcontrol.players``.
-      - PR 3 central Players page — per-row "Whitelisted on / Op on"
+      - PR 3 central Players page. per-row "Whitelisted on / Op on"
         summary.
-      - PR 4 cascade-remove pre-scan — which servers does this UUID
+      - PR 4 cascade-remove pre-scan. which servers does this UUID
         appear on?
 
     Missing files are treated as empty. Malformed files are skipped
-    silently — the per-server health banner (PR 2) is the surface for
+    silently. the per-server health banner (PR 2) is the surface for
     that failure mode."""
     out: list[dict[str, str]] = []
     for server in servers:

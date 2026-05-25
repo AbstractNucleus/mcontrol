@@ -77,7 +77,7 @@ class _FakeRconServer:
                     for part in parts:
                         writer.write(_pack(pid, 0, part))
                     await writer.drain()
-                elif ptype == 0:  # sentinel SERVERDATA_RESPONSE_VALUE — echo it back
+                elif ptype == 0:  # sentinel SERVERDATA_RESPONSE_VALUE. echo it back
                     writer.write(_pack(pid, 0, b""))
                     await writer.drain()
         finally:
