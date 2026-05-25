@@ -13,6 +13,49 @@
    ========================================================================= */
 
 
+/* ---- Fonts (Inter Tight, variable weight 100–900, latin + latin-ext) ---- */
+/* Self-hosted under /static/fonts/. Without these declarations the
+   --font-sans stack falls all the way through to system sans — the
+   "Inter Tight" name only resolves if a user happens to have it installed
+   locally. Mirrors D:\code\design\tokens.css. OFL 1.1 — see fonts/OFL.txt. */
+
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/static/fonts/InterTight-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/static/fonts/InterTight-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/static/fonts/InterTight-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/static/fonts/InterTight-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+
 /* ---- Primitives (do not consume directly from components) -------------- */
 :root {
   /* Anthropic brand core */
@@ -39,6 +82,18 @@
   --hex-orange-soft:  #F4DDD1;
   --hex-orange-light: #E08B6F;
   --hex-orange-pit:   #3A241B;
+
+  /* Cdesign warm-dark mood — cocoa ground + translucent glass + hairline
+     terracotta borders. Pulled from D:\code\design\. Consumed only by the
+     dark semantic block below; light mode keeps the Anthropic paper palette. */
+  --hex-cocoa-pit:        #1a1108;
+  --hex-cocoa-glow:       #3a1d10;
+  --hex-cocoa-surface:    rgba(38, 27, 20, 0.78);
+  --hex-cocoa-surface-lift: rgba(50, 35, 26, 0.88);
+  --hex-cocoa-sunken:     rgba(26, 17, 8, 0.62);
+  --hex-terracotta-18:    rgba(204, 120, 92, 0.18);
+  --hex-terracotta-30:    rgba(204, 120, 92, 0.30);
+  --hex-terracotta-45:    rgba(217, 119, 87, 0.45);
 
   --hex-info-bg-l:     #D6E4F6;  --hex-info-fg-l:     #3266AD;  --hex-info-br-l:     #4682D5;
   --hex-info-bg-d:     #253E5F;  --hex-info-fg-d:     #80AADD;
@@ -107,10 +162,15 @@
 
 
 /* ---- Semantic tokens — dark (explicit) --------------------------------- */
+/* Dark mode adopts the cdesign warm-dark editorial mood: cocoa-pit ground
+   lit by a terracotta radial glow over a topography texture (applied to
+   html/body further down), translucent warm-brown glass surfaces, hairline
+   terracotta borders. Light mode is untouched — cdesign is dark-only by
+   design. */
 [data-theme="dark"] {
-  --bg-page:        var(--hex-coal-pit);
-  --bg-surface:     var(--hex-coal);
-  --bg-sunken:      var(--hex-coal-deep);
+  --bg-page:        var(--hex-cocoa-pit);
+  --bg-surface:     var(--hex-cocoa-surface);
+  --bg-sunken:      var(--hex-cocoa-sunken);
   --bg-inverse:     var(--hex-bone);
 
   --fg-primary:     var(--hex-bone);
@@ -118,9 +178,19 @@
   --fg-muted:       var(--hex-bone-mute);
   --fg-inverse:     var(--hex-near-black);
 
-  --border-soft:    rgba(222, 220, 209, 0.15);
-  --border-medium:  rgba(222, 220, 209, 0.30);
-  --border-strong:  rgba(222, 220, 209, 0.40);
+  /* Hairline terracotta — the warmth comes from the ground bleeding through. */
+  --border-soft:    var(--hex-terracotta-18);
+  --border-medium:  var(--hex-terracotta-30);
+  --border-strong:  var(--hex-terracotta-45);
+
+  /* Surface lift on card hover, consumed by .card / .server-card. */
+  --bg-surface-hover: var(--hex-cocoa-surface-lift);
+
+  /* Glass card shadows — only used in dark mode. Light mode leaves cards
+     flat per its existing tokens. Hover stacks a hairline glow ring. */
+  --shadow-card:        0 2px 12px rgba(0, 0, 0, 0.5);
+  --shadow-card-hover:  0 12px 32px rgba(0, 0, 0, 0.6),
+                        0 0 0 1px var(--hex-terracotta-45);
 
   --accent:         var(--hex-orange);
   --accent-hover:   var(--hex-orange-light);
@@ -157,9 +227,9 @@
    OS-level dark preference. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg-page:        var(--hex-coal-pit);
-    --bg-surface:     var(--hex-coal);
-    --bg-sunken:      var(--hex-coal-deep);
+    --bg-page:        var(--hex-cocoa-pit);
+    --bg-surface:     var(--hex-cocoa-surface);
+    --bg-sunken:      var(--hex-cocoa-sunken);
     --bg-inverse:     var(--hex-bone);
 
     --fg-primary:     var(--hex-bone);
@@ -167,9 +237,15 @@
     --fg-muted:       var(--hex-bone-mute);
     --fg-inverse:     var(--hex-near-black);
 
-    --border-soft:    rgba(222, 220, 209, 0.15);
-    --border-medium:  rgba(222, 220, 209, 0.30);
-    --border-strong:  rgba(222, 220, 209, 0.40);
+    --border-soft:    var(--hex-terracotta-18);
+    --border-medium:  var(--hex-terracotta-30);
+    --border-strong:  var(--hex-terracotta-45);
+
+    --bg-surface-hover: var(--hex-cocoa-surface-lift);
+
+    --shadow-card:        0 2px 12px rgba(0, 0, 0, 0.5);
+    --shadow-card-hover:  0 12px 32px rgba(0, 0, 0, 0.6),
+                          0 0 0 1px var(--hex-terracotta-45);
 
     --accent-hover:   var(--hex-orange-light);
     --accent-soft:    var(--hex-orange-pit);
@@ -250,13 +326,39 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--bg-page);
+  min-height: 100vh;
+  background-color: var(--bg-page);
   color: var(--fg-primary);
   font-family: var(--font-sans);
   font-size: var(--fs-md);
   line-height: var(--lh-base);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* Cdesign signature ground — terracotta radial glow at lower-right over a
+   topography texture, both fixed so the glow stays anchored as content
+   scrolls. Dark only; light mode keeps the flat cream page. */
+[data-theme="dark"] body {
+  background-image:
+    radial-gradient(ellipse at 75% 70%, var(--hex-cocoa-glow) 0%, transparent 60%),
+    url("/static/images/topography.jpg");
+  background-size: cover, cover;
+  background-position: center, center;
+  background-attachment: fixed, fixed;
+  background-repeat: no-repeat, no-repeat;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) body {
+    background-image:
+      radial-gradient(ellipse at 75% 70%, var(--hex-cocoa-glow) 0%, transparent 60%),
+      url("/static/images/topography.jpg");
+    background-size: cover, cover;
+    background-position: center, center;
+    background-attachment: fixed, fixed;
+    background-repeat: no-repeat, no-repeat;
+  }
 }
 
 ::selection {

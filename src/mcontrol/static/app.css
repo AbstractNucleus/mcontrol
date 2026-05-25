@@ -2298,3 +2298,72 @@ small {
   gap: var(--space-2);
   justify-content: center;
 }
+
+
+/* ---- Glass surfaces (cdesign mood, dark only) -------------------------
+   Layered on top of the existing panel rules above. In dark mode the
+   surface tokens are translucent rgba over warm brown, so the radial-glow
+   ground bleeds through the backdrop blur — the signature cdesign panel.
+
+   Light mode stays flat per the project's existing convention ("shadows
+   reserved for popovers / dialogs only"). Borders, padding, and radii are
+   left to the existing rules; this block only adds depth and motion. */
+
+/* Explicit dark (theme.js set data-theme="dark"). */
+[data-theme="dark"] .card,
+[data-theme="dark"] .server-card,
+[data-theme="dark"] .empty-state,
+[data-theme="dark"] .lifecycle-row,
+[data-theme="dark"] .resources-card,
+[data-theme="dark"] .bindings-card,
+[data-theme="dark"] .variables-card,
+[data-theme="dark"] .migrate-card {
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* JS-off dark fallback (no data-theme attr, OS prefers dark). Mirrors the
+   token-level fallback in tokens.css so first paint matches. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .card,
+  html:not([data-theme]) .server-card,
+  html:not([data-theme]) .empty-state,
+  html:not([data-theme]) .lifecycle-row,
+  html:not([data-theme]) .resources-card,
+  html:not([data-theme]) .bindings-card,
+  html:not([data-theme]) .variables-card,
+  html:not([data-theme]) .migrate-card {
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}
+
+/* The headline interaction — server cards lift, lighten, and warm in one
+   180ms beat. Same gesture D:\code\design\ uses on its project tiles.
+   Dark only; light mode keeps the original subtle border-color hover. */
+.server-card {
+  transition: transform var(--motion-fast) var(--ease),
+              box-shadow var(--motion-fast) var(--ease),
+              background var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease);
+}
+
+[data-theme="dark"] .server-card:hover,
+[data-theme="dark"] .server-card:focus-within {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-card-hover);
+  background: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .server-card:hover,
+  html:not([data-theme]) .server-card:focus-within {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-card-hover);
+    background: var(--bg-surface-hover);
+    border-color: var(--border-strong);
+  }
+}
