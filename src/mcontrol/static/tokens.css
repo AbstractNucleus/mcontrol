@@ -83,18 +83,6 @@
   --hex-orange-light: #E08B6F;
   --hex-orange-pit:   #3A241B;
 
-  /* Cdesign warm-dark mood — cocoa ground + translucent glass + hairline
-     terracotta borders. Pulled from D:\code\design\. Consumed only by the
-     dark semantic block below; light mode keeps the Anthropic paper palette. */
-  --hex-cocoa-pit:        #1a1108;
-  --hex-cocoa-glow:       #3a1d10;
-  --hex-cocoa-surface:    rgba(38, 27, 20, 0.78);
-  --hex-cocoa-surface-lift: rgba(50, 35, 26, 0.88);
-  --hex-cocoa-sunken:     rgba(26, 17, 8, 0.62);
-  --hex-terracotta-18:    rgba(204, 120, 92, 0.18);
-  --hex-terracotta-30:    rgba(204, 120, 92, 0.30);
-  --hex-terracotta-45:    rgba(217, 119, 87, 0.45);
-
   --hex-info-bg-l:     #D6E4F6;  --hex-info-fg-l:     #3266AD;  --hex-info-br-l:     #4682D5;
   --hex-info-bg-d:     #253E5F;  --hex-info-fg-d:     #80AADD;
   --hex-success-bg-l:  #E9F1DC;  --hex-success-fg-l:  #265B19;  --hex-success-br-l:  #437426;
@@ -162,15 +150,13 @@
 
 
 /* ---- Semantic tokens — dark (explicit) --------------------------------- */
-/* Dark mode adopts the cdesign warm-dark editorial mood: cocoa-pit ground
-   lit by a terracotta radial glow over a topography texture (applied to
-   html/body further down), translucent warm-brown glass surfaces, hairline
-   terracotta borders. Light mode is untouched — cdesign is dark-only by
-   design. */
+/* Mirrors the Claude Code desktop app: flat coal-pit page, narrowly-lifted
+   surfaces (~7-unit step from page), neutral bone-alpha hairline borders,
+   terracotta accent used scarcely. No glow, no texture, no glass. */
 [data-theme="dark"] {
-  --bg-page:        var(--hex-cocoa-pit);
-  --bg-surface:     var(--hex-cocoa-surface);
-  --bg-sunken:      var(--hex-cocoa-sunken);
+  --bg-page:        var(--hex-coal-pit);
+  --bg-surface:     var(--hex-coal);
+  --bg-sunken:      var(--hex-coal-deep);
   --bg-inverse:     var(--hex-bone);
 
   --fg-primary:     var(--hex-bone);
@@ -178,19 +164,9 @@
   --fg-muted:       var(--hex-bone-mute);
   --fg-inverse:     var(--hex-near-black);
 
-  /* Hairline terracotta — the warmth comes from the ground bleeding through. */
-  --border-soft:    var(--hex-terracotta-18);
-  --border-medium:  var(--hex-terracotta-30);
-  --border-strong:  var(--hex-terracotta-45);
-
-  /* Surface lift on card hover, consumed by .card / .server-card. */
-  --bg-surface-hover: var(--hex-cocoa-surface-lift);
-
-  /* Glass card shadows — only used in dark mode. Light mode leaves cards
-     flat per its existing tokens. Hover stacks a hairline glow ring. */
-  --shadow-card:        0 2px 12px rgba(0, 0, 0, 0.5);
-  --shadow-card-hover:  0 12px 32px rgba(0, 0, 0, 0.6),
-                        0 0 0 1px var(--hex-terracotta-45);
+  --border-soft:    rgba(222, 220, 209, 0.10);
+  --border-medium:  rgba(222, 220, 209, 0.22);
+  --border-strong:  rgba(222, 220, 209, 0.35);
 
   --accent:         var(--hex-orange);
   --accent-hover:   var(--hex-orange-light);
@@ -227,9 +203,9 @@
    OS-level dark preference. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg-page:        var(--hex-cocoa-pit);
-    --bg-surface:     var(--hex-cocoa-surface);
-    --bg-sunken:      var(--hex-cocoa-sunken);
+    --bg-page:        var(--hex-coal-pit);
+    --bg-surface:     var(--hex-coal);
+    --bg-sunken:      var(--hex-coal-deep);
     --bg-inverse:     var(--hex-bone);
 
     --fg-primary:     var(--hex-bone);
@@ -237,15 +213,9 @@
     --fg-muted:       var(--hex-bone-mute);
     --fg-inverse:     var(--hex-near-black);
 
-    --border-soft:    var(--hex-terracotta-18);
-    --border-medium:  var(--hex-terracotta-30);
-    --border-strong:  var(--hex-terracotta-45);
-
-    --bg-surface-hover: var(--hex-cocoa-surface-lift);
-
-    --shadow-card:        0 2px 12px rgba(0, 0, 0, 0.5);
-    --shadow-card-hover:  0 12px 32px rgba(0, 0, 0, 0.6),
-                          0 0 0 1px var(--hex-terracotta-45);
+    --border-soft:    rgba(222, 220, 209, 0.10);
+    --border-medium:  rgba(222, 220, 209, 0.22);
+    --border-strong:  rgba(222, 220, 209, 0.35);
 
     --accent-hover:   var(--hex-orange-light);
     --accent-soft:    var(--hex-orange-pit);
@@ -326,8 +296,7 @@
 html, body {
   margin: 0;
   padding: 0;
-  min-height: 100vh;
-  background-color: var(--bg-page);
+  background: var(--bg-page);
   color: var(--fg-primary);
   font-family: var(--font-sans);
   font-size: var(--fs-md);
@@ -336,30 +305,6 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 
-/* Cdesign signature ground — terracotta radial glow at lower-right over a
-   topography texture, both fixed so the glow stays anchored as content
-   scrolls. Dark only; light mode keeps the flat cream page. */
-[data-theme="dark"] body {
-  background-image:
-    radial-gradient(ellipse at 75% 70%, var(--hex-cocoa-glow) 0%, transparent 60%),
-    url("/static/images/topography.jpg");
-  background-size: cover, cover;
-  background-position: center, center;
-  background-attachment: fixed, fixed;
-  background-repeat: no-repeat, no-repeat;
-}
-
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme]) body {
-    background-image:
-      radial-gradient(ellipse at 75% 70%, var(--hex-cocoa-glow) 0%, transparent 60%),
-      url("/static/images/topography.jpg");
-    background-size: cover, cover;
-    background-position: center, center;
-    background-attachment: fixed, fixed;
-    background-repeat: no-repeat, no-repeat;
-  }
-}
 
 ::selection {
   background: var(--accent-soft);
