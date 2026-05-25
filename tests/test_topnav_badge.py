@@ -131,7 +131,7 @@ async def test_topnav_renders_badge_with_count(
 async def test_topnav_badge_visible_from_non_home_pages(
     env_with_base, monkeypatch, fake_stats
 ):
-    """Badge renders on every page that includes _topnav.html. Spot-check
+    """Badge renders on every page (sidebar is in base.html). Spot-check
     /trash, which has its own route + template path."""
     _make_tombstone(env_with_base, "atm10")
 

@@ -68,9 +68,9 @@ def create_app() -> FastAPI:
     app = FastAPI(title="mcontrol", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
 
-    # Jinja global for the topnav badge (decision 035). Called from
-    # _topnav.html on every page; uses tombstones.count() which is a
-    # single scandir, so cheap to invoke per render.
+    # Jinja global for the tombstone-count badge (decision 035). Called
+    # from _sidebar.html on every page; uses tombstones.count() which is
+    # a single scandir, so cheap to invoke per render.
     def _tombstone_count(request: Request) -> int:
         try:
             base = Path(request.app.state.settings.server_base_path)
