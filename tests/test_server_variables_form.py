@@ -1,4 +1,4 @@
-"""Tests for `mcontrol.server_variables_form`: the shared validator
+"""Tests for `mcontrol.domain.server_variables_form`: the shared validator
 and the loader-from-jar inference helper (issue #123).
 
 The shared validator is exercised end-to-end in `test_new_server.py` and
@@ -9,7 +9,7 @@ supabase-server backfill.
 
 import pytest
 
-from mcontrol.server_variables_form import (
+from mcontrol.domain.server_variables_form import (
     LOADERS,
     infer_loader_from_jar,
     validate,

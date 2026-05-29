@@ -5,9 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from mcontrol import mojang
 from mcontrol.domain import membership
-from mcontrol.infra import db
+from mcontrol.infra import db, mojang
 
 _NOTCH_UUID = "069a79f4-44e9-4726-a5be-fca90e38aaf5"
 _HEROBRINE_UUID = "ec561538-f3fd-461d-aff5-086b22154bce"

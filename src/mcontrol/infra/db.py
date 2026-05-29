@@ -134,16 +134,6 @@ def delete_server(name: str) -> None:
     _table().delete().eq("name", name).execute()
 
 
-# upsert_server stays as-is for any external caller; discovery no
-# longer uses it. Slice 4 leaves the function in place so test_db's
-# slice-3 upsert tests continue to pass without modification.
-def upsert_server(*, name: str, dir: str, state: str) -> None:
-    _table().upsert(
-        {"name": name, "dir": dir, "state": state},
-        on_conflict="name",
-    ).execute()
-
-
 # ---------------------------------------------------------------------------
 # Player roster. Per-server whitelist/ops
 # membership lives on disk; this table is identity-only.

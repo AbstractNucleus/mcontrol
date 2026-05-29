@@ -32,8 +32,8 @@ from pathlib import Path
 
 import aiodocker
 
-from mcontrol import rcon, server_props
-from mcontrol.infra import docker_client
+from mcontrol.domain import lifecycle_state, server_props
+from mcontrol.infra import docker_client, rcon
 
 _RCON_PORT = 25575
 
@@ -67,7 +67,7 @@ def stale_password_detected(server: dict) -> bool:
     which is mtime-cached so render-time overhead is one ``stat`` call
     once warm.
     """
-    if server.get("state") != "running":
+    if not lifecycle_state.is_running(server):
         return False
     server_name = server["name"]
     if server_name not in _last_authed_password:

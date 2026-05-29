@@ -14,7 +14,7 @@ import sys
 
 import pytest
 
-from mcontrol import resources
+from mcontrol.infra import resources
 
 # ---------------------------------------------------------------------------
 # read_container_stats. faked aiodocker

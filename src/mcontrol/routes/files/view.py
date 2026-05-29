@@ -6,9 +6,9 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
 
-from mcontrol import file_safety
+from mcontrol.infra import file_safety
 from mcontrol.routes._dependencies import get_server_or_404
-from mcontrol.routes.files._safety import _BINARY_SNIFF_BYTES, _TEXT_VIEW_BYTES_MAX
+from mcontrol.routes.files._listing import _BINARY_SNIFF_BYTES, _TEXT_VIEW_BYTES_MAX
 from mcontrol.templates import templates
 
 router = APIRouter()

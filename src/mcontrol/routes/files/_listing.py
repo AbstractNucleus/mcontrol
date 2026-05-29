@@ -2,14 +2,14 @@
 
 Directory listing + parent-listing computation, plus the view-size
 constants. The path-safety primitives themselves live in
-`mcontrol.file_safety` (reused across other route modules); this file
+`mcontrol.infra.file_safety` (reused across other route modules); this file
 just bundles the listing-shape helpers that only the files routes need.
 """
 
 import stat
 from pathlib import Path
 
-from mcontrol import file_safety
+from mcontrol.infra import file_safety
 
 # Caps applied by the view endpoint. The save endpoint reads these via
 # `view.py` rather than this module since save's mtime/conflict path
@@ -39,12 +39,12 @@ def _list_dir(target: Path, base: Path) -> list[dict]:
     return entries
 
 
-def _parent_listing(server_dir: str, target: Path) -> tuple[Path, list[dict]]:
-    """Return (parent_dir, listing) for use as the action response.
+def _parent_listing(server_dir: str, target: Path) -> list[dict]:
+    """Return the listing of `target`'s parent for an action response.
 
-    Delete and mkdir both refresh the parent of their target. the JS
+    Delete, rename, and move refresh the parent of their target. the JS
     swaps that listing into the closest matching `<ul.file-tree__children>`.
     """
     base = Path(server_dir).resolve()
     parent = target.parent if target != base else base
-    return parent, _list_dir(parent, base)
+    return _list_dir(parent, base)

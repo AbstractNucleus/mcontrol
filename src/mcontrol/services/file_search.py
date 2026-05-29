@@ -18,7 +18,7 @@ import stat
 import time
 from pathlib import Path
 
-from mcontrol import file_safety
+from mcontrol.infra import file_safety
 
 # High-cardinality subdirs inside a Minecraft world whose contents are
 # addressed by machine-generated names (chunk regions, per-player data

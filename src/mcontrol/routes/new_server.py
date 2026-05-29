@@ -17,9 +17,9 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from mcontrol import server_variables_form
+from mcontrol.domain import server_variables_form
+from mcontrol.domain.server_variables_form import LOADERS
 from mcontrol.infra import db_async
-from mcontrol.server_variables_form import LOADERS
 from mcontrol.services import server_service
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
@@ -119,13 +119,7 @@ async def new_submit(
 
     assert target is not None  # narrow for type-checkers; unreachable when no errors
 
-    variables: dict = {
-        "memory_budget_gb": form["memory_budget_gb"],
-        "port": form["port"],
-        "server_jar": form["server_jar"],
-    }
-    if form["jvm_extra_args"]:
-        variables["jvm_extra_args"] = form["jvm_extra_args"]
+    variables = server_variables_form.build_variables(form)
 
     try:
         await server_service.scaffold_new_server(

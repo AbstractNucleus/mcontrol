@@ -18,7 +18,7 @@ import sys
 
 import pytest
 
-from mcontrol import healthz
+from mcontrol.infra import healthz
 
 
 def _ok(name: str) -> dict:

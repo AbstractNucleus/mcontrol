@@ -95,19 +95,6 @@ def test_get_server_returns_none_when_missing(env, monkeypatch):
     assert db.get_server("nope") is None
 
 
-def test_upsert_server_uses_name_as_conflict_key(env, monkeypatch):
-    client, table = _fake_supabase_client()
-    monkeypatch.setattr(db, "_client_singleton", client)
-
-    db.upsert_server(name="atm10", dir="/srv/atm10", state="running")
-
-    args, kwargs = table.upsert.call_args
-    payload = args[0]
-    assert payload == {"name": "atm10", "dir": "/srv/atm10", "state": "running"}
-    assert kwargs == {"on_conflict": "name"}
-    table.upsert.return_value.execute.assert_called_once_with()
-
-
 def test_insert_server_writes_full_row(env, monkeypatch):
     client, table = _fake_supabase_client()
     monkeypatch.setattr(db, "_client_singleton", client)

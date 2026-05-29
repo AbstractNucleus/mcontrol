@@ -54,6 +54,25 @@ def validate(form: dict) -> dict[str, str]:
     return errors
 
 
+def build_variables(form: dict) -> dict:
+    """Assemble the variables JSONB from a validated form dict.
+
+    ``jvm_extra_args`` is omitted when empty so the stored shape stays
+    minimal and the start-script template's ``.get(..., "")`` default
+    applies. Shared by the new-server and migrate flows; the variables
+    *edit* flow merges into existing JSONB instead (see
+    ``server_service.update_server_variables``).
+    """
+    variables: dict = {
+        "memory_budget_gb": form["memory_budget_gb"],
+        "port": form["port"],
+        "server_jar": form["server_jar"],
+    }
+    if form.get("jvm_extra_args"):
+        variables["jvm_extra_args"] = form["jvm_extra_args"]
+    return variables
+
+
 async def check_port_collision(exclude_name: str | None, port: int) -> str | None:
     """Return an error string if *port* is already used by another server.
 

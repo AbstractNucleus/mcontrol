@@ -1,0 +1,657 @@
+/* ---- Log + Console panes ---------------------------------------------- */
+.log-pane,
+.console-pane {
+  display: grid;
+  gap: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+}
+
+.log-pane__head,
+.console-pane__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.log-pane__stream,
+.console-pane__stream {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--fg-primary);
+  padding: var(--space-3) var(--space-4);
+  height: 18rem;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+/* Server logs are full of long mod-loader and stack-trace lines; wrapping
+   them turns one logical entry into a hard-to-scan ragged block. Keep
+   each line intact and let the pane scroll horizontally. */
+.log-pane__stream {
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.console-pane__input {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.console-pane__input input {
+  flex: 1;
+  font-family: var(--font-mono);
+}
+
+
+/* ---- Files pane -------------------------------------------------------- */
+.files-pane {
+  display: grid;
+  gap: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+}
+
+.files-pane__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.files-pane__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.files-pane__split {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1fr) 2fr;
+  gap: var(--space-4);
+}
+
+@media (max-width: 768px) {
+  .files-pane__split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.file-tree {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  height: 26rem;
+  overflow: auto;
+  font-size: var(--fs-sm);
+  font-family: var(--font-mono);
+}
+
+.file-tree__children {
+  list-style: none;
+  margin: 0;
+  padding-left: var(--space-4);
+}
+
+.file-tree__entry {
+  line-height: 1.7;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.file-tree__entry:focus {
+  outline: none;
+}
+
+.file-tree__entry:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.file-tree__entry--dir[aria-expanded="false"] > .file-tree__children {
+  display: none;
+}
+
+.file-tree__toggle {
+  background: transparent;
+  border: 0;
+  color: var(--fg-primary);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+
+.file-tree__toggle:hover,
+.file-tree__entry--file > a:hover,
+.file-tree__entry--symlink > a:hover {
+  color: var(--accent);
+}
+
+.file-tree__entry--file > a,
+.file-tree__entry--symlink > a {
+  color: var(--fg-primary);
+  text-decoration: none;
+}
+
+.file-tree__entry--symlink > a {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+.file-tree__menu {
+  display: inline-block;
+  position: relative;
+  margin-left: var(--space-1);
+}
+
+.file-tree__menu-trigger {
+  list-style: none;
+  cursor: pointer;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xs);
+  color: var(--fg-muted);
+  font-size: var(--fs-xs);
+  padding: 0 6px;
+  line-height: 1.4;
+  user-select: none;
+  background: var(--bg-surface);
+  transition: color var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease);
+}
+
+.file-tree__menu-trigger::-webkit-details-marker { display: none; }
+.file-tree__menu-trigger::marker { content: ""; }
+
+.file-tree__menu-trigger:hover {
+  color: var(--fg-primary);
+  border-color: var(--border-medium);
+}
+
+.file-tree__menu-trigger:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.file-tree__menu[open] .file-tree__menu-trigger {
+  color: var(--fg-primary);
+  border-color: var(--border-medium);
+}
+
+.file-tree__menu-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  min-width: 10rem;
+  margin-top: var(--space-1);
+  padding: var(--space-1);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  display: grid;
+  gap: 1px;
+}
+
+.file-tree__menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--fg-primary);
+  cursor: pointer;
+  padding: 6px var(--space-3);
+  font: inherit;
+  font-size: var(--fs-sm);
+  border-radius: var(--radius-xs);
+  text-decoration: none;
+}
+
+.file-tree__menu-item:hover,
+.file-tree__menu-item:focus-visible {
+  background: var(--bg-sunken);
+  color: var(--accent);
+  outline: none;
+}
+
+.file-tree__menu-item--danger {
+  color: var(--danger-fg);
+}
+
+.file-tree__menu-item--danger:hover {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+}
+
+[data-upload-target].is-drop-active {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+
+.file-upload-input {
+  display: none;
+}
+
+.file-action-status:empty {
+  display: none;
+}
+
+.file-action-status {
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  padding: var(--space-2) 0;
+}
+
+.file-action-form,
+.file-delete-confirm,
+.file-upload-conflict,
+.file-conflict {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.file-delete-confirm--danger {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+}
+
+.file-action-form__actions,
+.file-delete-confirm__actions,
+.file-upload-conflict__actions,
+.file-conflict__actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.file-action-form input[type="text"],
+.file-delete-confirm input[type="text"] {
+  font-family: var(--font-mono);
+}
+
+.file-upload-conflict__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  font-family: var(--font-mono);
+}
+
+.file-upload-error {
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: var(--danger-fg);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+}
+
+.file-upload-progress {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.file-upload-progress__caption {
+  font-variant-numeric: tabular-nums;
+}
+
+.file-upload-progress__bar {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xs);
+  height: var(--space-2);
+  overflow: hidden;
+}
+
+.file-upload-progress__fill {
+  background: var(--accent);
+  height: 100%;
+  transition: width var(--motion-fast) var(--ease);
+}
+
+.file-upload-progress__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.file-move-modal {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.file-move-modal__selection {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+.file-move-modal__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.file-picker {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  max-height: 18rem;
+  overflow: auto;
+  font-size: var(--fs-sm);
+  font-family: var(--font-mono);
+}
+
+.file-picker__entry {
+  list-style: none;
+  line-height: 1.7;
+}
+
+.file-picker__children {
+  list-style: none;
+  margin: 0;
+  padding-left: var(--space-4);
+}
+
+.file-picker__select {
+  background: transparent;
+  border: 0;
+  color: var(--fg-primary);
+  cursor: pointer;
+  padding: 1px 6px;
+  font: inherit;
+  border-radius: var(--radius-xs);
+  text-align: left;
+}
+
+.file-picker__select:hover {
+  color: var(--accent);
+}
+
+.file-picker__select.is-selected {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.file-picker__root {
+  font-style: italic;
+}
+
+.file-search {
+  position: relative;
+}
+
+.file-search-input {
+  font-family: var(--font-sans);
+  width: 100%;
+  padding-right: 2rem;
+}
+
+.file-search__clear {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-size: var(--fs-md);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.file-search__clear:hover {
+  background: var(--bg-sunken);
+  color: var(--fg-primary);
+}
+
+#file-search-results:empty {
+  display: none;
+}
+
+.file-search-results {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.file-search-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 14rem;
+  overflow: auto;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+}
+
+.file-search-list__entry {
+  padding: 5px var(--space-3);
+  font-size: var(--fs-sm);
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.file-search-list__entry:last-child {
+  border-bottom: none;
+}
+
+.file-search-list__entry > a {
+  color: var(--fg-primary);
+  text-decoration: none;
+}
+
+.file-search-list__entry > a:hover {
+  color: var(--accent);
+}
+
+.file-search-list__name--symlink {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+.file-tree__checkbox {
+  margin-right: var(--space-1);
+  accent-color: var(--accent);
+}
+
+.file-bulk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+.file-bulk-toolbar .t-caption {
+  color: var(--fg-primary);
+  font-weight: 500;
+}
+
+.file-view {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  height: 26rem;
+  overflow: auto;
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+}
+
+.file-view__saved {
+  color: var(--success-fg);
+  font-weight: 500;
+  animation: file-view-saved-fade 3s var(--ease) forwards;
+}
+
+@keyframes file-view-saved-fade {
+  0%, 33%  { opacity: 1; }
+  100%     { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-view__saved {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+.file-view__head {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.file-view__breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+}
+
+.file-view__breadcrumb-segment {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.file-view__breadcrumb-segment:hover {
+  color: var(--fg-primary);
+}
+
+.file-view__breadcrumb-sep {
+  color: var(--fg-muted);
+}
+
+.file-view__breadcrumb-leaf {
+  color: var(--fg-primary);
+  font-weight: 500;
+}
+
+.file-view__meta {
+  margin: 0;
+}
+
+.file-view__info-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.file-view__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.file-view__action {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  color: var(--fg-primary);
+  cursor: pointer;
+  padding: 6px var(--space-3);
+  font: inherit;
+  font-size: var(--fs-sm);
+  border-radius: var(--radius-xs);
+  text-decoration: none;
+}
+
+.file-view__action:hover {
+  background: var(--bg-sunken);
+  color: var(--accent);
+}
+
+.file-view__action--danger {
+  color: var(--danger-fg);
+}
+
+.file-view__action--danger:hover {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+}
+
+
+/* ---- File editor (CodeMirror) ----------------------------------------- */
+.file-editor {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.file-editor__textarea {
+  display: none;
+}
+
+.file-editor__cm {
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  height: 18rem;
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+
+.file-editor__actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+/* In-flight disable for the Save button (issue #65). htmx sets the
+   disabled attribute on the submit button for the duration of the POST
+   so a rapid double-click can't produce a duplicate request. */
+.file-editor button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+

@@ -100,7 +100,6 @@
   --bg-page:        var(--hex-cream);
   --bg-surface:     var(--hex-paper);
   --bg-sunken:      var(--hex-stone);
-  --bg-inverse:     var(--hex-near-black);
 
   /* Text */
   --fg-primary:     var(--hex-ink);
@@ -144,6 +143,10 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 10px 20px -4px rgba(0, 0, 0, 0.15), 0 4px 8px -4px rgba(0, 0, 0, 0.10);
 
+  /* Modal / dialog backdrop scrim (theme-independent. dark over any page) */
+  --overlay-scrim:        rgba(20, 20, 19, 0.40);
+  --overlay-scrim-strong: rgba(20, 20, 19, 0.65);
+
   /* Tells the UA that form controls / scrollbars should match */
   color-scheme: light;
 }
@@ -157,7 +160,6 @@
   --bg-page:        var(--hex-coal-pit);
   --bg-surface:     var(--hex-coal);
   --bg-sunken:      var(--hex-coal-deep);
-  --bg-inverse:     var(--hex-bone);
 
   --fg-primary:     var(--hex-bone);
   --fg-secondary:   var(--hex-bone-soft);
@@ -206,7 +208,6 @@
     --bg-page:        var(--hex-coal-pit);
     --bg-surface:     var(--hex-coal);
     --bg-sunken:      var(--hex-coal-deep);
-    --bg-inverse:     var(--hex-bone);
 
     --fg-primary:     var(--hex-bone);
     --fg-secondary:   var(--hex-bone-soft);
@@ -261,7 +262,6 @@
   --lh-tight: 1.1;
   --lh-snug:  1.25;
   --lh-base:  1.4;
-  --lh-loose: 1.55;
 
   --radius-xs:   4px;
   --radius-sm:   6px;
@@ -286,7 +286,6 @@
   --motion-base: 200ms;
   --motion-slow: 320ms;
   --ease:        cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ease-in:     cubic-bezier(0.4, 0, 1, 1);
 }
 
 

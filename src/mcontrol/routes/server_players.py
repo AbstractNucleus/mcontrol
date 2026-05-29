@@ -29,7 +29,7 @@ import aiodocker
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol.domain import membership
+from mcontrol.domain import lifecycle_state, membership
 from mcontrol.infra import db_async
 from mcontrol.routes._dependencies import (
     get_docker,
@@ -59,7 +59,7 @@ async def _card(
             "members": members,
             "malformed": malformed,
             "roster": await db_async.list_players(),
-            "running": server.get("state") == "running",
+            "running": lifecycle_state.is_running(server),
             "flash": flash,
         },
         status_code=status_code,

@@ -1,0 +1,548 @@
+/* mcontrol: component CSS. All colour, type, spacing, and motion values
+   come from tokens.css. Claude-flavoured theme, semantic-token-only consumption.
+   ========================================================================= */
+
+
+/* ---- Flash / toast stack (fixed, bottom-right) ------------------------- */
+.flash-stack {
+  position: fixed;
+  bottom: var(--space-6);
+  right: var(--space-6);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(22rem, calc(100vw - var(--space-12)));
+  pointer-events: none;
+}
+
+.flash-msg {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-md);
+  font-size: var(--fs-sm);
+  pointer-events: auto;
+  animation: flash-msg-fade 4s var(--ease) forwards;
+}
+
+.flash-msg__text {
+  flex: 1;
+  color: var(--fg-primary);
+  line-height: var(--lh-base);
+}
+
+.flash-msg__dismiss {
+  flex: none;
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: var(--fs-md);
+  line-height: 1;
+  padding: 0 0 0 var(--space-2);
+}
+
+.flash-msg__dismiss:hover {
+  color: var(--fg-primary);
+}
+
+.flash-msg--ok {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+
+.flash-msg--ok .flash-msg__text {
+  color: var(--success-fg);
+}
+
+.flash-msg--info {
+  background: var(--info-bg);
+  border-color: var(--info-border);
+}
+
+.flash-msg--info .flash-msg__text {
+  color: var(--info-fg);
+}
+
+.flash-msg--error {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+
+.flash-msg--error .flash-msg__text {
+  color: var(--danger-fg);
+}
+
+@keyframes flash-msg-fade {
+  0%, 70% { opacity: 1; }
+  100%    { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flash-msg {
+    animation: none;
+  }
+}
+
+
+/* ---- App shell + sidebar (Claude Code-style left rail) ----------------
+   App shell is a flex row: sidebar on the left (resizable), main content
+   on the right (fills remaining space). Sidebar width lives in a CSS
+   custom property so JS can update it during drag and persist to
+   localStorage; the inline bootstrap in base.html restores it before
+   first paint. Collapsed state is a data attribute on <html>.
+   ----------------------------------------------------------------------- */
+
+:root {
+  --sidebar-width: 248px;
+  --sidebar-width-collapsed: 56px;
+  --sidebar-width-min: 200px;
+  --sidebar-width-max: 420px;
+}
+
+.app-shell {
+  display: flex;
+  align-items: stretch;
+  min-height: 100vh;
+}
+
+.sidebar {
+  flex: 0 0 var(--sidebar-width);
+  width: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5) var(--space-3) var(--space-3);
+  border-right: 1px solid var(--border-soft);
+  background: var(--bg-page);
+  /* Lock sidebar height to the viewport so internal scroll regions
+     (the server list) stay within their own pane rather than scrolling
+     the page. Sticky positions it against scroll, and provides a
+     containing block for the absolutely-positioned resize handle. */
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  gap: var(--space-4);
+}
+
+[data-sidebar="collapsed"] .sidebar {
+  flex-basis: var(--sidebar-width-collapsed);
+  width: var(--sidebar-width-collapsed);
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+}
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: var(--fg-primary);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.sidebar__brand:hover {
+  background: var(--bg-sunken);
+  color: var(--fg-primary);
+}
+
+.sidebar__logo-mark {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-xs);
+  background: var(--accent);
+  position: relative;
+}
+
+.sidebar__logo-mark::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 2px;
+  background: var(--bg-page);
+}
+
+.sidebar__brand-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar__brand-version {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--fg-muted);
+}
+
+[data-sidebar="collapsed"] .sidebar__brand-name,
+[data-sidebar="collapsed"] .sidebar__brand-version {
+  display: none;
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar__nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 7px var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--fg-secondary);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  text-decoration: none;
+  transition: color var(--motion-fast) var(--ease),
+              background var(--motion-fast) var(--ease);
+}
+
+.sidebar__nav-link:hover {
+  color: var(--fg-primary);
+  background: var(--bg-sunken);
+}
+
+.sidebar__nav-link[aria-current="page"] {
+  color: var(--fg-primary);
+  background: var(--bg-surface);
+}
+
+.sidebar__icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--fg-muted);
+}
+
+.sidebar__nav-link[aria-current="page"] .sidebar__icon {
+  color: var(--accent);
+}
+
+.sidebar__nav-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-sidebar="collapsed"] .sidebar__nav-link {
+  justify-content: center;
+  padding: 7px;
+}
+
+[data-sidebar="collapsed"] .sidebar__nav-label,
+[data-sidebar="collapsed"] .sidebar__section-label,
+[data-sidebar="collapsed"] .sidebar__servers,
+[data-sidebar="collapsed"] .sidebar__empty,
+[data-sidebar="collapsed"] .theme-toggle,
+[data-sidebar="collapsed"] .sidebar__nav-link .topnav__badge {
+  display: none;
+}
+
+.sidebar__section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow: hidden;
+}
+
+.sidebar__section-label {
+  padding: 0 var(--space-3);
+  margin: var(--space-2) 0 var(--space-1);
+}
+
+.sidebar__servers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow-y: auto;
+  /* Hide scrollbar chrome unless the list overflows. */
+  scrollbar-width: thin;
+}
+
+.sidebar__server {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  transition: color var(--motion-fast) var(--ease),
+              background var(--motion-fast) var(--ease);
+}
+
+.sidebar__server:hover {
+  color: var(--fg-primary);
+  background: var(--bg-sunken);
+}
+
+.sidebar__server[aria-current="page"] {
+  color: var(--fg-primary);
+  background: var(--bg-surface);
+}
+
+.sidebar__server-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--fg-muted);
+}
+
+/* State-coloured dots: mirror the state-pill colour mapping but as a
+   plain swatch so the row stays a single line of mono. */
+.sidebar__server-dot--running    { background: var(--success-fg); }
+.sidebar__server-dot--exited,
+.sidebar__server-dot--dead       { background: var(--danger-fg); }
+.sidebar__server-dot--restarting,
+.sidebar__server-dot--starting,
+.sidebar__server-dot--pending,
+.sidebar__server-dot--removing   { background: var(--warning-fg); }
+.sidebar__server-dot--paused     { background: var(--info-fg); }
+
+.sidebar__server-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar__empty {
+  padding: 0 var(--space-3);
+}
+
+.sidebar__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-soft);
+}
+
+[data-sidebar="collapsed"] .sidebar__footer {
+  justify-content: center;
+}
+
+.sidebar__collapse {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease),
+              background var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease);
+}
+
+.sidebar__collapse:hover {
+  color: var(--fg-primary);
+  background: var(--bg-sunken);
+}
+
+[data-sidebar="collapsed"] .sidebar__collapse svg {
+  transform: rotate(180deg);
+}
+
+.sidebar__resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: col-resize;
+  z-index: 5;
+}
+
+.sidebar__resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 2px;
+  width: 1px;
+  height: 100%;
+  background: transparent;
+  transition: background var(--motion-fast) var(--ease);
+}
+
+.sidebar__resize-handle:hover::after,
+[data-sidebar-resizing="true"] .sidebar__resize-handle::after {
+  background: var(--accent);
+}
+
+[data-sidebar="collapsed"] .sidebar__resize-handle {
+  pointer-events: none;
+}
+
+/* Disable text selection while a drag is in progress so highlight doesn't
+   flicker as the user drags. JS toggles data-sidebar-resizing on <html>. */
+[data-sidebar-resizing="true"] {
+  user-select: none;
+  cursor: col-resize;
+}
+
+.page-main {
+  flex: 1;
+  min-width: 0;
+  max-width: 1100px;
+  padding: var(--space-8) var(--space-10);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+@media (max-width: 768px) {
+  /* Below 768px, auto-collapse the rail to icons unless the user has
+     explicitly expanded it. The drag handle is disabled in collapsed
+     mode (above) so phone users don't accidentally enter resize mode. */
+  :root:not([data-sidebar="expanded"]) {
+    --sidebar-width: var(--sidebar-width-collapsed);
+  }
+  :root:not([data-sidebar="expanded"]) .sidebar__brand-name,
+  :root:not([data-sidebar="expanded"]) .sidebar__brand-version,
+  :root:not([data-sidebar="expanded"]) .sidebar__nav-label,
+  :root:not([data-sidebar="expanded"]) .sidebar__section-label,
+  :root:not([data-sidebar="expanded"]) .sidebar__servers,
+  :root:not([data-sidebar="expanded"]) .sidebar__empty,
+  :root:not([data-sidebar="expanded"]) .theme-toggle {
+    display: none;
+  }
+  :root:not([data-sidebar="expanded"]) .sidebar__nav-link {
+    justify-content: center;
+    padding: 7px;
+  }
+  .page-main {
+    padding-left: var(--space-5);
+    padding-right: var(--space-5);
+  }
+}
+
+
+/* ---- A11y helper ------------------------------------------------------ */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+
+/* ---- Theme toggle (segmented tri-state) -------------------------------- */
+.theme-toggle {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-full);
+  gap: 1px;
+  margin: 0;
+}
+
+.theme-toggle legend {
+  display: none;
+}
+
+.theme-toggle__option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 9px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  color: var(--fg-muted);
+  transition: color var(--motion-fast) var(--ease),
+              background var(--motion-fast) var(--ease);
+}
+
+.theme-toggle__option:hover {
+  color: var(--fg-primary);
+}
+
+.theme-toggle__option input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.theme-toggle__option input:focus-visible + svg {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+  border-radius: var(--radius-full);
+}
+
+.theme-toggle__option:has(input:checked) {
+  background: var(--bg-surface);
+  color: var(--fg-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.theme-toggle__option svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+
+/* ---- Sidebar count badge (kept from the retired topnav so the Trash
+   tombstone-count chip in _sidebar.html keeps the same look + tests) -- */
+.topnav__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 4px;
+  border-radius: var(--radius-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+

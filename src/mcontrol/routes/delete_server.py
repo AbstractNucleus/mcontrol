@@ -16,6 +16,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from mcontrol.domain import lifecycle_state
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.services import server_service
 from mcontrol.settings import Settings
@@ -64,7 +65,7 @@ async def post(
 ) -> HTMLResponse:
     # Re-check state at request time. protects against the operator
     # starting the server in another tab between page render and click.
-    if server.get("state") == "running":
+    if lifecycle_state.is_running(server):
         raise HTTPException(
             status_code=409, detail="Stop the server before deleting."
         )

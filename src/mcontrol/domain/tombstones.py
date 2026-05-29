@@ -24,7 +24,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from mcontrol.resources import read_disk_usage
+from mcontrol.infra.resources import read_disk_usage
 
 DEFAULT_PURGE_AGE_DAYS = 7
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from mcontrol import server_props
+from mcontrol.domain import server_props
 
 
 def test_read_properties_returns_empty_when_file_missing(tmp_path):

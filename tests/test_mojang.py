@@ -1,11 +1,11 @@
 import httpx
 import pytest
 
-from mcontrol import mojang
+from mcontrol.infra import mojang
 
 
 def _patch_async_client(monkeypatch, handler):
-    """Replace ``mcontrol.mojang.httpx.AsyncClient`` with a factory that
+    """Replace ``mcontrol.infra.mojang.httpx.AsyncClient`` with a factory that
     builds a real AsyncClient backed by an httpx.MockTransport using
     ``handler``. Lets the test assert the URL and stub the response
     without touching the network."""

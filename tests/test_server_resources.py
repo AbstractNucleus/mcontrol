@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from mcontrol import resources
-from mcontrol.infra import db
+from mcontrol.infra import db, resources
 
 
 def _row(tmp_path: Path, *, name: str = "atm10", container_name: str | None = None) -> dict:

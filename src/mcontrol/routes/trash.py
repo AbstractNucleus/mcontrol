@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse
 
 from mcontrol import __version__
 from mcontrol.domain import tombstones
-from mcontrol.resources import format_bytes
+from mcontrol.infra.resources import format_bytes
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 

@@ -61,7 +61,7 @@ def fake_rcon(monkeypatch):
         captured["password"] = password
         return conn
 
-    from mcontrol import rcon
+    from mcontrol.infra import rcon
     monkeypatch.setattr(rcon, "connect", fake_connect)
     return captured
 

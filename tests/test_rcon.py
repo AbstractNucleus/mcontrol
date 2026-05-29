@@ -10,7 +10,7 @@ import struct
 
 import pytest
 
-from mcontrol import rcon
+from mcontrol.infra import rcon
 
 
 def _pack(packet_id: int, packet_type: int, body: bytes) -> bytes:

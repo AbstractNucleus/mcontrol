@@ -382,7 +382,7 @@ async def test_post_surfaces_orphan_path_when_rollback_rmtree_fails(
 async def test_post_rejects_when_host_port_already_bound(
     app_client, fake_db, monkeypatch
 ):
-    from mcontrol import server_variables_form
+    from mcontrol.domain import server_variables_form
 
     monkeypatch.setattr(
         server_variables_form,

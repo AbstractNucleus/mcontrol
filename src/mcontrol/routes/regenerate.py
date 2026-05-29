@@ -18,7 +18,6 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol.domain import health, scaffolding
-from mcontrol.file_writer import atomic_write_text
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.templates import render_variables_card, templates
 
@@ -120,13 +119,6 @@ async def confirm(
     ):
         return _render_diff_partial(request, server, drifted=True, status_code=409)
 
-    rendered_compose = scaffolding.render_compose(server["name"], variables)
-    rendered_start = scaffolding.render_start_script(variables)
-
-    server_dir.mkdir(parents=True, exist_ok=True)
-    (server_dir / "server").mkdir(parents=True, exist_ok=True)
-    atomic_write_text(compose_path, rendered_compose)
-    atomic_write_text(start_path, rendered_start)
-    start_path.chmod(0o755)
+    scaffolding.write_scaffold_files(server_dir, server["name"], variables)
 
     return render_variables_card(request, server)

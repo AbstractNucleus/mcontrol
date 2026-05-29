@@ -1,10 +1,33 @@
 from collections.abc import AsyncIterator
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from mcontrol.settings import get_settings
+
+
+@pytest.fixture
+def server_dir(tmp_path: Path) -> Path:
+    d = tmp_path / "srv"
+    d.mkdir()
+    return d
+
+
+@pytest.fixture
+def fake_server(monkeypatch, server_dir: Path):
+    rows: dict[str, dict] = {
+        "atm10": {"name": "atm10", "dir": str(server_dir)}
+    }
+    from mcontrol.infra import db
+    from mcontrol.services import file_search
+    monkeypatch.setattr(db, "get_server", rows.get)
+    # The search index is a module-level singleton keyed by server name;
+    # clear it between tests so cached state from a previous tmp_path
+    # doesn't bleed into this one.
+    file_search._search_index.clear()
+    return rows
 
 
 @pytest.fixture(autouse=True)

@@ -31,7 +31,7 @@ def fake_stats(monkeypatch):
             raise result
         return result
 
-    from mcontrol import resources
+    from mcontrol.infra import resources
 
     monkeypatch.setattr(resources, "read_container_stats", fake_read)
     return by_name
@@ -67,6 +67,21 @@ async def test_home_lists_servers_when_present(client, fake_servers, fake_stats)
     assert "running" in body
     assert "exited" in body
     assert "No servers yet" not in body
+
+
+async def test_sidebar_lists_servers(client, fake_servers, fake_stats):
+    """The left rail is populated from request.state (prefetched off the
+    render path by the _prime_sidebar middleware), not a blocking DB call
+    inside the Jinja global. Assert the server appears specifically inside
+    the <aside class="sidebar"> block, not just anywhere on the page."""
+    fake_servers.append({"name": "atm10", "state": "running"})
+
+    response = await client.get("/")
+
+    assert response.status_code == 200
+    body = response.text
+    aside = body[body.index('<aside class="sidebar"') : body.index("</aside>")]
+    assert 'sidebar__server-name">atm10' in aside
 
 
 async def test_home_links_each_server_to_detail_page(client, fake_servers, fake_stats):

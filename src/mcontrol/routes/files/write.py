@@ -6,10 +6,11 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
-from mcontrol import file_safety, file_search
-from mcontrol.file_writer import atomic_write_stream_async, atomic_write_text_async
+from mcontrol.infra import file_safety
+from mcontrol.infra.file_writer import atomic_write_stream_async, atomic_write_text_async
 from mcontrol.routes._dependencies import get_server_or_404
-from mcontrol.routes.files._safety import _list_dir
+from mcontrol.routes.files._listing import _list_dir
+from mcontrol.services import file_search
 from mcontrol.templates import templates
 
 router = APIRouter()

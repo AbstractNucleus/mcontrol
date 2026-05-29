@@ -17,10 +17,8 @@ from pathlib import Path
 from typing import Any
 
 from mcontrol.domain import scaffolding
-from mcontrol.file_writer import atomic_write_text
 
 _LEGACY_FILENAMES = ("Dockerfile", "entrypoint.sh", ".dockerignore", ".env")
-_HEADROOM_GB = 2  # mirrored from scaffolding._HEADROOM_GB.
 
 _XMX_RE = re.compile(r"-Xmx(\d+)[gG]\b")
 _JAR_RE = re.compile(r"-jar\s+(\S+)")
@@ -59,7 +57,7 @@ def parse_legacy_variables(server_dir: Path) -> dict[str, Any]:
     xmx_match = _XMX_RE.search(start_text)
     jar_match = _JAR_RE.search(start_text)
     if xmx_match:
-        out["memory_budget_gb"] = int(xmx_match.group(1)) + _HEADROOM_GB
+        out["memory_budget_gb"] = int(xmx_match.group(1)) + scaffolding.HEADROOM_GB
     if jar_match:
         out["server_jar"] = jar_match.group(1)
     if xmx_match and jar_match:
@@ -83,25 +81,16 @@ def migrate(name: str, variables: dict[str, Any], base: Path) -> None:
     """Converge `<base>/<name>/` on slice-6 scaffold output.
 
     Steps in order:
-      1. Render both templates (StrictUndefined raises here, before any IO).
-      2. Atomic-write `<dir>/docker-compose.yml`.
-      3. Atomic-write `<dir>/server/start_server.sh` (chmod 0o755).
-      4. Unlink each legacy file with `missing_ok=True`.
+      1. Render + atomic-write docker-compose.yml and server/start_server.sh
+         via `scaffolding.write_scaffold_files` (StrictUndefined raises
+         before any IO).
+      2. Unlink each legacy file with `missing_ok=True`.
 
     No DB writes; no rollback. Re-running after a partial success
     converges on the same end state. every step is idempotent.
     """
-    rendered_compose = scaffolding.render_compose(name, variables)
-    rendered_start = scaffolding.render_start_script(variables)
-
     server_dir = base / name
-    inner = server_dir / "server"
-    inner.mkdir(parents=True, exist_ok=True)
-
-    atomic_write_text(server_dir / "docker-compose.yml", rendered_compose)
-    start_path = inner / "start_server.sh"
-    atomic_write_text(start_path, rendered_start)
-    start_path.chmod(0o755)
+    scaffolding.write_scaffold_files(server_dir, name, variables)
 
     for filename in _LEGACY_FILENAMES:
         (server_dir / filename).unlink(missing_ok=True)

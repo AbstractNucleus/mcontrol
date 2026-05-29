@@ -33,6 +33,16 @@ _TRANSIENT = {"restarting", "removing", "scaffolding"}
 _STARTING = "starting"
 
 
+def is_running(server: dict) -> bool:
+    """True when a server row's recorded state is exactly ``"running"``.
+
+    Deliberately narrower than ``_RUNNING_LIKE``: callers gate live-only
+    actions (RCON membership sync, the delete guard, the migrate
+    warning) that a paused or transient container can't service.
+    """
+    return server.get("state") == "running"
+
+
 def view(state: str | None) -> LifecycleView:
     """Map a server state string to the three buttons' view state.
 

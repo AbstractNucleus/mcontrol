@@ -1,6 +1,6 @@
 """Basename search endpoint.
 
-The index itself lives in `mcontrol.file_search`. This
+The index itself lives in `mcontrol.services.file_search`. This
 module owns the request shape (`q`, `include_chunks`), the result cap,
 and the htmx template choice. The skip-set rules apply at index-build
 time inside `file_search`, not here.
@@ -12,8 +12,8 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import file_search
 from mcontrol.routes._dependencies import get_server_or_404
+from mcontrol.services import file_search
 from mcontrol.templates import templates
 
 router = APIRouter()

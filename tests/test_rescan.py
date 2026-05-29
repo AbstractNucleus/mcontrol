@@ -26,7 +26,7 @@ def fake_servers(monkeypatch):
 def fake_stats(monkeypatch):
     async def fake_read(_docker, container_name: str):
         return {"status": "unreachable"}
-    from mcontrol import resources
+    from mcontrol.infra import resources
     monkeypatch.setattr(resources, "read_container_stats", fake_read)
 
 

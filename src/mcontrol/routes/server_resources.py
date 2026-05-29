@@ -22,8 +22,7 @@ import aiodocker
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import resources
-from mcontrol.infra import db
+from mcontrol.infra import db, resources
 from mcontrol.routes._dependencies import get_docker, get_server_or_404
 from mcontrol.templates import templates
 

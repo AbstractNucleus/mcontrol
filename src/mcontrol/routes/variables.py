@@ -13,7 +13,7 @@ is the only entry point in the UI.
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import server_variables_form
+from mcontrol.domain import server_variables_form
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.services import server_service
 from mcontrol.templates import render_variables_card, templates

@@ -24,8 +24,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import server_variables_form
-from mcontrol.domain import migration
+from mcontrol.domain import lifecycle_state, migration, server_variables_form
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.services import server_service
 from mcontrol.settings import Settings
@@ -72,7 +71,7 @@ def _render_card(
             "form": form,
             "errors": errors or {},
             "error_banner": error_banner,
-            "running": server.get("state") == "running",
+            "running": lifecycle_state.is_running(server),
             "legacy_filenames": [p.name for p in migration.legacy_files(server_dir)],
         },
         status_code=status_code,
@@ -100,7 +99,7 @@ async def run_migration(
 ) -> HTMLResponse:
     if server.get("scaffolded_at") is not None:
         raise HTTPException(status_code=409, detail="Server is already scaffolded.")
-    if server.get("state") == "running":
+    if lifecycle_state.is_running(server):
         raise HTTPException(status_code=409, detail="Stop the server before migrating.")
 
     form = {
@@ -128,13 +127,7 @@ async def run_migration(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid path.") from exc
 
-    variables: dict = {
-        "memory_budget_gb": form["memory_budget_gb"],
-        "port": form["port"],
-        "server_jar": form["server_jar"],
-    }
-    if form["jvm_extra_args"]:
-        variables["jvm_extra_args"] = form["jvm_extra_args"]
+    variables = server_variables_form.build_variables(form)
 
     await server_service.migrate_legacy_server(name=name, variables=variables, base=base)
 

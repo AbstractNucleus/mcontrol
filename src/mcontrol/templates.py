@@ -13,23 +13,10 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from mcontrol.domain import health
+from mcontrol.infra.resources import format_bytes
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
-
-
-def humansize(size: int) -> str:
-    """Format a byte count for the file-view metadata caption (issue #60).
-
-    Bytes for <1 KB, KB with one decimal for <1 MB, MB with one decimal
-    otherwise. 1 KB = 1024 B. Negative inputs aren't expected from stat()
-    and fall through as bytes.
-    """
-    if size < 1024:
-        return f"{size} B"
-    if size < 1024 * 1024:
-        return f"{size / 1024:.1f} KB"
-    return f"{size / (1024 * 1024):.1f} MB"
 
 
 def humantime(mtime_ns: int) -> str:
@@ -42,7 +29,7 @@ def humantime(mtime_ns: int) -> str:
     return datetime.fromtimestamp(mtime_ns / 1e9).strftime("%Y-%m-%d %H:%M:%S")
 
 
-templates.env.filters["humansize"] = humansize
+templates.env.filters["humansize"] = format_bytes
 templates.env.filters["humantime"] = humantime
 
 

@@ -34,7 +34,13 @@
   }
   </script>
   <script type="module" src="/static/file_editor.js"></script>
+  {# file_uploader.js was split into three ordered classic scripts (issue:
+     1k-line decomposition). defer preserves document order, so the three
+     share one global scope exactly as the former single file did:
+     uploader (core helpers + single-file actions) → bulk → tree nav. #}
   <script src="/static/file_uploader.js" defer></script>
+  <script src="/static/file_bulk.js" defer></script>
+  <script src="/static/file_tree_nav.js" defer></script>
 {% endblock %}
 
 {% block main %}

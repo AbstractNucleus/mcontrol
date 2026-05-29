@@ -16,9 +16,8 @@ from typing import Any
 
 import aiodocker
 
-from mcontrol import mojang, server_props
-from mcontrol.domain import membership
-from mcontrol.infra import db_async, server_rcon
+from mcontrol.domain import lifecycle_state, membership, server_props
+from mcontrol.infra import db_async, mojang, server_rcon
 
 _RCON_VERB = {
     ("whitelist", True): "whitelist add",
@@ -101,7 +100,7 @@ async def apply_membership(
     Returns the flash dict. ``StaleWriteError`` from the offline path is
     intentionally not caught here. the route maps it to 409.
     """
-    if server.get("state") == "running":
+    if lifecycle_state.is_running(server):
         return await _apply_running(
             docker, server, kind=kind, name=name, enabled=enabled
         )
@@ -230,14 +229,13 @@ async def import_unknown_uuids() -> int:
     number of new rows inserted."""
     server_rows = await db_async.list_servers()
     memberships = membership.scan_memberships(server_rows)
+    known = {p["uuid"] for p in await db_async.list_players()}
 
     new_rows: list[dict[str, str]] = []
     seen_new: set[str] = set()
     for record in memberships:
         uuid = record["uuid"]
-        if uuid in seen_new:
-            continue
-        if await db_async.get_player(uuid) is not None:
+        if uuid in known or uuid in seen_new:
             continue
         seen_new.add(uuid)
         new_rows.append({"uuid": uuid, "name": record["name"]})
@@ -290,24 +288,14 @@ async def cascade_remove_player(
                 }
             )
             continue
+        # scan_memberships speaks "whitelist"/"ops"; the RCON verb map
+        # (reached via apply_membership) speaks "whitelist"/"op". Normalise
+        # once here and reuse the single running-vs-offline dispatch rule
+        # rather than re-deriving it.
+        rcon_kind = "op" if kind == "ops" else "whitelist"
         try:
-            if server.get("state") == "running":
-                cmd = (
-                    f"whitelist remove {name}"
-                    if kind == "whitelist"
-                    else f"deop {name}"
-                )
-                await server_rcon.run_command(docker, server, cmd)
-            else:
-                server_dir = Path(server["dir"])
-                if kind == "whitelist":
-                    membership.remove_whitelist_entry(server_dir, uuid=uuid)
-                else:
-                    membership.remove_op_entry(server_dir, uuid=uuid)
-            removed.append(f"{record['server_name']} ({kind})")
-        except server_rcon.RconUnavailable as exc:
-            failures.append(
-                {"server_name": record["server_name"], "kind": kind, "reason": str(exc)}
+            flash = await apply_membership(
+                docker, server, kind=rcon_kind, uuid=uuid, name=name, enabled=False
             )
         except membership.StaleWriteError:
             failures.append(
@@ -317,6 +305,7 @@ async def cascade_remove_player(
                     "reason": "file changed mid-write; retry",
                 }
             )
+            continue
         except membership.MalformedFileError as exc:
             failures.append(
                 {
@@ -325,6 +314,17 @@ async def cascade_remove_player(
                     "reason": f"file failed to parse: {exc}",
                 }
             )
+            continue
+        if flash["kind"] == "error":
+            failures.append(
+                {
+                    "server_name": record["server_name"],
+                    "kind": kind,
+                    "reason": flash["message"],
+                }
+            )
+        else:
+            removed.append(f"{record['server_name']} ({kind})")
 
     return removed, failures
 

@@ -2,12 +2,11 @@
 server's bind-mount.
 
 Used by the file-browser save endpoint (slice 5 PR 2) and the upload
-endpoint (slice 5 PR 3). Mirrors the env_writer pattern: write a
-sibling tempfile, then `os.replace()` over the target so a partial
-write can never leave a half-baked file on disk visible to the running
-container.
+endpoint (slice 5 PR 3). Writes a sibling tempfile, then `os.replace()`
+over the target so a partial write can never leave a half-baked file on
+disk visible to the running container.
 
-Files land as root, same as slice 4's env_writer. No chown step.
+Files land as root. No chown step.
 """
 
 import asyncio
