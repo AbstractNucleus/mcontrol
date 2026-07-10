@@ -57,6 +57,12 @@ async function revealBreadcrumb(path) {
       row = findTreeRow(accum);
       if (!row) return;
     }
+    // A rendered-but-collapsed ancestor (keyboard Left/Enter or dir
+    // click) hides the whole subtree via CSS; expand it so the target
+    // row is actually visible when we scroll to it.
+    if (i < segments.length - 1 && row.getAttribute("aria-expanded") === "false") {
+      row.setAttribute("aria-expanded", "true");
+    }
   }
   const target = findTreeRow(path);
   if (target) target.scrollIntoView({ block: "nearest", behavior: "smooth" });
