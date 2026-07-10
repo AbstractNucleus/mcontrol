@@ -194,6 +194,23 @@ function collapseDir(row) {
   return true;
 }
 
+// Click on a dir's name toggles collapse/expand. The button's htmx
+// trigger is `click once` (lazy-load), so after the first load a click
+// would otherwise do nothing. Expansion just sets the attribute: on the
+// first click htmx is already fetching from the same event, and loaded
+// children are simply re-shown by CSS.
+document.addEventListener("click", (evt) => {
+  const toggle = evt.target.closest && evt.target.closest(".file-tree__toggle");
+  if (!toggle) return;
+  const row = toggle.closest(".file-tree__entry--dir");
+  if (!row) return;
+  if (row.getAttribute("aria-expanded") === "true") {
+    collapseDir(row);
+  } else {
+    row.setAttribute("aria-expanded", "true");
+  }
+});
+
 // Initial roving-tabindex setup + after every htmx swap that touches
 // the tree: ensure one row has tabindex=0 (the previously-active path
 // if any, otherwise the first visible row). Newly-rendered dir rows
