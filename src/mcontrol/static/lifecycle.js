@@ -38,14 +38,15 @@
 
   // The OOB swap replaces `#lifecycle-buttons` with a fresh wrapper that
   // carries `data-state` reflecting the new server state. htmx fires
-  // `htmx:oobAfterSwap` against the newly-inserted node, so we read the
-  // state off it and write a short sentence into the aria-live region.
+  // `htmx:oobAfterSwap` against the newly-inserted node (`detail.elt`;
+  // `detail.target` is the replaced old node), so we read the state off
+  // it and write a short sentence into the aria-live region.
   document.body.addEventListener("htmx:oobAfterSwap", (evt) => {
-    const target = evt.detail && evt.detail.target;
-    if (!target || target.id !== "lifecycle-buttons") return;
+    const elt = evt.detail && evt.detail.elt;
+    if (!elt || elt.id !== "lifecycle-buttons") return;
     const status = document.getElementById("lifecycle-status");
     if (!status) return;
-    const state = target.getAttribute("data-state") || "unknown";
+    const state = elt.getAttribute("data-state") || "unknown";
     status.textContent = `Server state: ${state}.`;
   });
 })();
