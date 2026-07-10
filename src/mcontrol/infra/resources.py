@@ -23,12 +23,18 @@ enforcing, read from the same stats payload), 021 (caller resolves the
 container via db.container_name_for(row)).
 """
 
+import asyncio
 import os
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
 import aiodocker
+
+# aiodocker treats /stats as a long-running call even with stream=False
+# and drops the client-level total/sock_read timeouts, so the 5s poll
+# needs its own bound. Timeout falls into the "unreachable" branch.
+_STATS_TIMEOUT_S = 10.0
 
 
 async def read_container_stats(
@@ -44,10 +50,13 @@ async def read_container_stats(
     except Exception:
         return {"status": "unreachable"}
     if not info.get("State", {}).get("Running", False):
-        return {"status": "not-running"}
+        return {
+            "status": "not-running",
+            "container_state": info.get("State", {}).get("Status"),
+        }
 
     try:
-        result = await container.stats(stream=False)
+        result = await asyncio.wait_for(container.stats(stream=False), _STATS_TIMEOUT_S)
     except Exception:
         return {"status": "unreachable"}
     snapshot = result[0] if isinstance(result, list) else result
@@ -57,6 +66,8 @@ async def read_container_stats(
         "cpu_percent": _cpu_percent(snapshot),
         "mem_used": _mem_used(snapshot),
         "mem_limit": int(snapshot.get("memory_stats", {}).get("limit", 0) or 0),
+        "container_state": info.get("State", {}).get("Status"),
+        "started_at": info.get("State", {}).get("StartedAt"),
     }
 
 

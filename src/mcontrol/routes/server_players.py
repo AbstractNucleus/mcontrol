@@ -23,6 +23,7 @@ in ``services.membership_service``: this module is thin orchestration
 plus template rendering.
 """
 
+import re
 from pathlib import Path
 
 import aiodocker
@@ -30,7 +31,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol.domain import lifecycle_state, membership
-from mcontrol.infra import db_async
+from mcontrol.infra import db_async, server_rcon
 from mcontrol.routes._dependencies import (
     get_docker,
     get_server_or_404,
@@ -40,6 +41,11 @@ from mcontrol.services import membership_service
 from mcontrol.templates import templates
 
 router = APIRouter()
+
+# Vanilla/Paper `list` response head: "There are 2 of a max of 20 players online: ..."
+_ONLINE_RE = re.compile(
+    r"There are (\d+) of a max (?:of )?(\d+) players online:?\s*(.*)"
+)
 
 
 async def _card(
@@ -101,6 +107,35 @@ async def get_card(
     request: Request, server: dict = Depends(get_server_or_404)
 ) -> HTMLResponse:
     return await _card(request, server)
+
+
+@router.get("/servers/{name}/players/online", response_class=HTMLResponse)
+async def online_chip(
+    request: Request,
+    server: dict = Depends(get_server_or_404),
+    docker: aiodocker.Docker = Depends(get_docker),
+) -> HTMLResponse:
+    """Head-count chip: one-shot RCON `list`. Any failure degrades to the
+    plain live pill; the chip must never break the players card."""
+    running = lifecycle_state.is_running(server)
+    context: dict = {"server": server, "running": running, "ok": False}
+    if running:
+        try:
+            response = await server_rcon.run_command(docker, server, "list")
+        except server_rcon.RconUnavailable:
+            response = ""
+        match = _ONLINE_RE.search(response or "")
+        if match:
+            names = [n.strip() for n in match.group(3).split(",") if n.strip()]
+            context.update(
+                ok=True,
+                online=int(match.group(1)),
+                max_players=int(match.group(2)),
+                names=names,
+            )
+    return templates.TemplateResponse(
+        request=request, name="_online_chip.html", context=context
+    )
 
 
 @router.post("/servers/{name}/players", response_class=HTMLResponse)

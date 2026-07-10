@@ -16,6 +16,7 @@
         data-upload-path="{{ entry.path }}">
       <input type="checkbox"
              class="file-tree__checkbox"
+             aria-label="Select {{ entry.name }}"
              data-select-path="{{ entry.path }}"
              data-select-kind="dir"
              data-select-name="{{ entry.name }}">
@@ -26,7 +27,7 @@
               hx-swap="innerHTML"
               hx-trigger="click once">{{ entry.name }}/</button>
       <details class="file-tree__menu">
-        <summary class="file-tree__menu-trigger" title="Actions for {{ entry.name }}/">⋯</summary>
+        <summary class="file-tree__menu-trigger" title="Actions for {{ entry.name }}/" aria-label="Actions for {{ entry.name }}/">⋯</summary>
         <div class="file-tree__menu-panel">
           <button class="file-tree__menu-item"
                   type="button"
@@ -64,6 +65,7 @@
         data-tree-kind="symlink">
       <input type="checkbox"
              class="file-tree__checkbox"
+             aria-label="Select {{ entry.name }}"
              data-select-path="{{ entry.path }}"
              data-select-kind="symlink"
              data-select-name="{{ entry.name }}">
@@ -72,7 +74,7 @@
          hx-target="#file-view"
          hx-swap="innerHTML">{{ entry.name }} →</a>
       <details class="file-tree__menu">
-        <summary class="file-tree__menu-trigger" title="Actions for {{ entry.name }}">⋯</summary>
+        <summary class="file-tree__menu-trigger" title="Actions for {{ entry.name }}" aria-label="Actions for {{ entry.name }}">⋯</summary>
         <div class="file-tree__menu-panel">
           <button class="file-tree__menu-item"
                   type="button"
@@ -101,6 +103,7 @@
         data-tree-kind="file">
       <input type="checkbox"
              class="file-tree__checkbox"
+             aria-label="Select {{ entry.name }}"
              data-select-path="{{ entry.path }}"
              data-select-kind="file"
              data-select-name="{{ entry.name }}">
@@ -109,7 +112,7 @@
          hx-target="#file-view"
          hx-swap="innerHTML">{{ entry.name }}</a>
       <details class="file-tree__menu">
-        <summary class="file-tree__menu-trigger" title="Actions for {{ entry.name }}">⋯</summary>
+        <summary class="file-tree__menu-trigger" title="Actions for {{ entry.name }}" aria-label="Actions for {{ entry.name }}">⋯</summary>
         <div class="file-tree__menu-panel">
           <a class="file-tree__menu-item"
              href="/servers/{{ server_name }}/files/download?path={{ entry.path|urlencode }}"

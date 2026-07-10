@@ -8,7 +8,7 @@ process.
 from datetime import UTC, datetime
 from typing import Any
 
-from supabase import Client, create_client
+from supabase import Client, ClientOptions, create_client
 
 from mcontrol.settings import get_settings
 
@@ -23,9 +23,14 @@ def _client() -> Client:
     global _client_singleton
     if _client_singleton is None:
         settings = get_settings()
+        # Bounds every PostgREST round-trip. healthz abandons its probe
+        # thread after its own budget, but without a client timeout that
+        # thread would linger for the OS TCP timeout (~2 min) per probe
+        # during an outage.
         _client_singleton = create_client(
             settings.supabase_url,
             settings.supabase_service_role_key,
+            options=ClientOptions(postgrest_client_timeout=5),
         )
     return _client_singleton
 

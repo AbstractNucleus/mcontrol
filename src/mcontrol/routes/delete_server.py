@@ -13,11 +13,13 @@ DB delete sequence lives in ``services.server_service``.
 
 from pathlib import Path
 
+import aiodocker
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol.domain import lifecycle_state
-from mcontrol.routes._dependencies import get_server_or_404
+from mcontrol.infra import db, docker_client
+from mcontrol.routes._dependencies import get_docker, get_server_or_404
 from mcontrol.services import server_service
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
@@ -62,10 +64,21 @@ async def post(
     name: str,
     server: dict = Depends(get_server_or_404),
     confirm_name: str = Form(""),
+    docker: aiodocker.Docker = Depends(get_docker),
 ) -> HTMLResponse:
     # Re-check state at request time. protects against the operator
     # starting the server in another tab between page render and click.
     if lifecycle_state.is_running(server):
+        raise HTTPException(
+            status_code=409, detail="Stop the server before deleting."
+        )
+
+    # The DB state column can be stale (started outside the panel), so
+    # also ask Docker before tombstoning a bind-mount the JVM may still
+    # be writing to. An unreachable daemon yields {} and the DB check
+    # above stands alone. deleting while the daemon is down is legitimate.
+    live_states = await docker_client.container_states_by_name(docker)
+    if live_states.get(db.container_name_for(server)) == "running":
         raise HTTPException(
             status_code=409, detail="Stop the server before deleting."
         )

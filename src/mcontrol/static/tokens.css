@@ -82,8 +82,12 @@
   --hex-orange-soft:  #F4DDD1;
   --hex-orange-light: #E08B6F;
   --hex-orange-pit:   #3A241B;
+  /* Darker terracottas for accent-as-TEXT on light surfaces; the brand
+     orange itself only reaches ~2.8-3.1:1 there (WCAG AA fail). */
+  --hex-orange-text:  #B0502D;
+  --hex-orange-ember: #9C4322;
 
-  --hex-info-bg-l:     #D6E4F6;  --hex-info-fg-l:     #3266AD;  --hex-info-br-l:     #4682D5;
+  --hex-info-bg-l:     #D6E4F6;  --hex-info-fg-l:     #2C5C9E;  --hex-info-br-l:     #4682D5;
   --hex-info-bg-d:     #253E5F;  --hex-info-fg-d:     #80AADD;
   --hex-success-bg-l:  #E9F1DC;  --hex-success-fg-l:  #265B19;  --hex-success-br-l:  #437426;
   --hex-success-bg-d:  #1B4614;  --hex-success-fg-d:  #7AB948;  --hex-success-br-d:  #599130;
@@ -116,7 +120,11 @@
   --accent:         var(--hex-orange);
   --accent-hover:   var(--hex-orange-deep);
   --accent-soft:    var(--hex-orange-soft);
-  --accent-fg:      var(--hex-paper);
+  --accent-fg:      var(--hex-ink);
+  /* Accent when used as text on page/surface backgrounds (AA-safe) */
+  --accent-text:    var(--hex-orange-text);
+  /* Accent when used as text on --accent-soft chips (AA-safe) */
+  --accent-on-soft: var(--hex-orange-ember);
 
   /* Semantic: info, success, warning, danger */
   --info-bg:        var(--hex-info-bg-l);
@@ -134,6 +142,31 @@
   --danger-bg:      var(--hex-danger-bg-l);
   --danger-fg:      var(--hex-danger-fg-l);
   --danger-border:  var(--hex-danger-br-l);
+
+  /* Terminal surfaces (log + console panes): a deliberate dark island in
+     BOTH themes, mirroring an embedded terminal. Defined once here; the
+     dark blocks don't override them, so the values hold everywhere. */
+  --bg-terminal:     var(--hex-coal-pit);
+  --fg-terminal:     var(--hex-bone);
+  --fg-terminal-dim: var(--hex-bone-mute);
+  --border-terminal: rgba(222, 220, 209, 0.14);
+  --log-warn:        var(--hex-warning-fg-d);
+  --log-error:       var(--hex-danger-fg-d);
+  --log-cmd:         var(--hex-orange-light);
+
+  /* Syntax highlighting (file editor) */
+  --code-string:      var(--hex-success-fg-l);
+  --code-number:      var(--hex-info-fg-l);
+  --code-keyword:     var(--hex-warning-fg-l);
+  --code-property:    var(--hex-orange-text);
+  --code-comment:     var(--hex-ink-mute);
+  --code-punctuation: var(--hex-ink-soft);
+  /* Active-line tint: translucent so the selection layer beneath stays
+     visible (mirrors the border-alpha idiom). */
+  --code-active-line: rgba(31, 30, 29, 0.06);
+
+  /* Skeleton shimmer highlight (loading placeholders) */
+  --skeleton-sheen: rgba(31, 30, 29, 0.05);
 
   /* Focus ring: neutral, never orange */
   --ring:           rgba(20, 20, 19, 0.70);
@@ -174,6 +207,8 @@
   --accent-hover:   var(--hex-orange-light);
   --accent-soft:    var(--hex-orange-pit);
   --accent-fg:      var(--hex-near-black);
+  --accent-text:    var(--hex-orange);
+  --accent-on-soft: var(--hex-orange);
 
   --info-bg:        var(--hex-info-bg-d);
   --info-fg:        var(--hex-info-fg-d);
@@ -190,6 +225,16 @@
   --danger-bg:      var(--hex-danger-bg-d);
   --danger-fg:      var(--hex-danger-fg-d);
   --danger-border:  var(--hex-danger-br-d);
+
+  --code-string:      var(--hex-success-fg-d);
+  --code-number:      var(--hex-info-fg-d);
+  --code-keyword:     var(--hex-warning-fg-d);
+  --code-property:    var(--hex-orange);
+  --code-comment:     var(--hex-bone-mute);
+  --code-punctuation: var(--hex-bone-soft);
+  --code-active-line: rgba(222, 220, 209, 0.07);
+
+  --skeleton-sheen: rgba(222, 220, 209, 0.06);
 
   --ring:           rgba(250, 249, 245, 0.70);
 
@@ -221,6 +266,8 @@
     --accent-hover:   var(--hex-orange-light);
     --accent-soft:    var(--hex-orange-pit);
     --accent-fg:      var(--hex-near-black);
+    --accent-text:    var(--hex-orange);
+    --accent-on-soft: var(--hex-orange);
 
     --info-bg:        var(--hex-info-bg-d);
     --info-fg:        var(--hex-info-fg-d);
@@ -236,6 +283,16 @@
     --danger-bg:      var(--hex-danger-bg-d);
     --danger-fg:      var(--hex-danger-fg-d);
     --danger-border:  var(--hex-danger-br-d);
+
+    --code-string:      var(--hex-success-fg-d);
+    --code-number:      var(--hex-info-fg-d);
+    --code-keyword:     var(--hex-warning-fg-d);
+    --code-property:    var(--hex-orange);
+    --code-comment:     var(--hex-bone-mute);
+    --code-punctuation: var(--hex-bone-soft);
+    --code-active-line: rgba(222, 220, 209, 0.07);
+
+    --skeleton-sheen: rgba(222, 220, 209, 0.06);
 
     --ring:           rgba(250, 249, 245, 0.70);
 
@@ -322,7 +379,7 @@ a {
 }
 
 a:hover {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 code, kbd, samp, pre {
@@ -451,5 +508,15 @@ button, input, textarea, select {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  /* htmx `transition:true` swaps call startViewTransition regardless of
+     motion preference; the universal clamp above can't match these
+     UA-generated pseudos, so silence them explicitly. */
+  ::view-transition-group(*),
+  ::view-transition-image-pair(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

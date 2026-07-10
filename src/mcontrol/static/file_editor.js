@@ -14,7 +14,8 @@ import { EditorView, basicSetup } from "codemirror";
 import { EditorState } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
 import { indentWithTab } from "@codemirror/commands";
-import { StreamLanguage } from "@codemirror/language";
+import { HighlightStyle, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
 import { properties as propertiesMode } from "@codemirror/legacy-modes/mode/properties";
 import { toml as tomlMode } from "@codemirror/legacy-modes/mode/toml";
 import { json } from "@codemirror/lang-json";
@@ -40,6 +41,23 @@ const snbtParser = {
     return null;
   },
 };
+
+// Syntax colours resolve through tokens.css custom properties so the
+// palette follows the active theme without remounting the editor.
+const themeHighlight = HighlightStyle.define([
+  { tag: tags.string, color: "var(--code-string)" },
+  { tag: tags.number, color: "var(--code-number)" },
+  { tag: [tags.keyword, tags.atom, tags.bool], color: "var(--code-keyword)" },
+  { tag: [tags.propertyName, tags.variableName], color: "var(--code-property)" },
+  { tag: tags.comment, color: "var(--code-comment)" },
+  { tag: tags.punctuation, color: "var(--code-punctuation)" },
+]);
+
+// Unsaved-changes tracking: one editor mounts at a time (#file-view),
+// so a module-level flag + view handle is sufficient.
+let dirty = false;
+let currentView = null;
+let hintCounter = 0;
 
 function languageFor(filename) {
   const lower = (filename || "").toLowerCase();
@@ -67,6 +85,11 @@ function languageFor(filename) {
 function mountEditor(textarea) {
   if (textarea.dataset.fileEditorMounted === "1") return;
   textarea.dataset.fileEditorMounted = "1";
+  // Fresh mount = clean doc. Also covers confirmed discards and the
+  // conflict banner's Reload, which both remount the editor. Exception:
+  // a 409 remount ships the operator's *pending* content alongside the
+  // conflict banner; that doc is not on disk, so it stays dirty.
+  dirty = !!document.getElementById("file-conflict");
 
   const lang = languageFor(textarea.dataset.fileName);
   const saveKeymap = {
@@ -77,12 +100,16 @@ function mountEditor(textarea) {
       return true;
     },
   };
+  const hintId = `file-editor-tab-hint-${++hintCounter}`;
   const extensions = [
     basicSetup,
     keymap.of([saveKeymap, indentWithTab]),
+    syntaxHighlighting(themeHighlight),
+    EditorView.contentAttributes.of({ "aria-describedby": hintId }),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         textarea.value = update.state.doc.toString();
+        dirty = true;
       }
     }),
   ];
@@ -95,7 +122,15 @@ function mountEditor(textarea) {
   const view = new EditorView({ state });
   textarea.parentNode.insertBefore(view.dom, textarea);
   view.dom.classList.add("file-editor__cm");
+  // indentWithTab traps Tab; advertise the standard escape hatch to
+  // assistive tech via the content element's aria-describedby.
+  const hint = document.createElement("span");
+  hint.id = hintId;
+  hint.className = "visually-hidden";
+  hint.textContent = "Press Escape, then Tab to leave the editor";
+  textarea.parentNode.insertBefore(hint, textarea);
   textarea.style.display = "none";
+  currentView = view;
 }
 
 function mountAll(root) {
@@ -107,6 +142,40 @@ function mountAll(root) {
 
 document.body.addEventListener("htmx:afterSettle", (evt) => {
   mountAll(evt.target);
+});
+
+// Destroy the outgoing EditorView before a swap replaces #file-view's
+// content; otherwise every file-open leaks the doc buffer plus a
+// document-level event listener per abandoned view.
+document.body.addEventListener("htmx:beforeSwap", (evt) => {
+  const target = evt.detail && evt.detail.target;
+  if (!currentView || !target || !target.contains(currentView.dom)) return;
+  currentView.destroy();
+  currentView = null;
+});
+
+// Clear the dirty flag on a successful save. Document-level (not bound
+// to the form) because the conflict banner's Overwrite button POSTs
+// /files/save via its own hx-post outside the form.
+document.body.addEventListener("htmx:afterRequest", (evt) => {
+  const path = evt.detail.pathInfo && evt.detail.pathInfo.requestPath;
+  if (evt.detail.successful && path && path.includes("/files/save")) {
+    dirty = false;
+  }
+});
+
+// Unsaved-changes guard. Only GETs targeting #file-view (tree links,
+// search results, conflict Reload) destroy pending edits; POSTs (Save,
+// Overwrite) must never prompt.
+document.body.addEventListener("htmx:confirm", (evt) => {
+  if (!dirty) return;
+  const d = evt.detail;
+  if (!d.target || d.target.id !== "file-view" || d.verb !== "get") return;
+  if (!window.confirm("Discard unsaved changes?")) evt.preventDefault();
+});
+
+window.addEventListener("beforeunload", (evt) => {
+  if (dirty) evt.preventDefault();
 });
 
 // Cover the case where the partial is already in the DOM at page load

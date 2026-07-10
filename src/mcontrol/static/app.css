@@ -1,8 +1,0 @@
-/* mcontrol component CSS. Split into focused modules for navigability;
-   @import preserves the exact cascade order of the former single file.
-   Colour/type/spacing/motion tokens live in tokens.css (loaded first). */
-@import url("app.shell.css");
-@import url("app.controls.css");
-@import url("app.server.css");
-@import url("app.files.css");
-@import url("app.misc.css");

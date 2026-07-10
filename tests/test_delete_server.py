@@ -23,8 +23,12 @@ def base_dir(tmp_path, monkeypatch, env):
 @pytest.fixture
 async def app_client(base_dir) -> AsyncIterator[AsyncClient]:
     from mcontrol.main import create_app
+    from tests.conftest import make_fake_docker
 
     app = create_app()
+    # POST delete asks Docker for the live container state; the default
+    # fake lists no containers, so the live-state guard stays quiet.
+    app.state.docker = make_fake_docker()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -161,6 +165,56 @@ async def test_post_refuses_when_state_running(app_client, fake_db, base_dir):
     # Files untouched.
     assert server_dir.exists()
     assert (server_dir / "marker.txt").exists()
+
+
+async def test_post_refuses_when_live_container_running_despite_stale_db(
+    app_client, fake_db, base_dir, monkeypatch
+):
+    """DB says exited but Docker says running: refuse. The stale state
+    column must not let a bind-mount the JVM is still writing to be
+    tombstoned."""
+    from mcontrol.infra import docker_client
+
+    fake_db["rows"].append(_row(base_dir, state="exited"))
+    server_dir = base_dir / "newshire"
+
+    async def fake_states(_docker):
+        return {"newshire": "running"}
+
+    monkeypatch.setattr(docker_client, "container_states_by_name", fake_states)
+
+    response = await app_client.post(
+        "/servers/newshire/delete",
+        data={"confirm_name": "newshire"},
+    )
+
+    assert response.status_code == 409
+    assert fake_db["deletes"] == []
+    assert (server_dir / "marker.txt").exists()
+
+
+async def test_post_falls_back_to_db_state_when_daemon_unreachable(
+    app_client, fake_db, base_dir, monkeypatch
+):
+    """An unreachable daemon yields no live states; deleting an exited
+    server while Docker is down is legitimate and must proceed."""
+    from mcontrol.infra import docker_client
+
+    fake_db["rows"].append(_row(base_dir))
+
+    async def fake_states(_docker):
+        return {}  # container_states_by_name's unreachable-daemon shape
+
+    monkeypatch.setattr(docker_client, "container_states_by_name", fake_states)
+
+    response = await app_client.post(
+        "/servers/newshire/delete",
+        data={"confirm_name": "newshire"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers.get("HX-Redirect") == "/"
+    assert fake_db["deletes"] == ["newshire"]
 
 
 async def test_post_rejects_when_confirm_name_does_not_match(

@@ -28,7 +28,10 @@
   box-shadow: var(--shadow-md);
   font-size: var(--fs-sm);
   pointer-events: auto;
-  animation: flash-msg-fade 4s var(--ease) forwards;
+  /* -in listed last: later animations win the shared opacity property,
+     so this order lets the enter fade play before the 4s hold-and-fade. */
+  animation: flash-msg-fade 4s var(--ease) forwards,
+             flash-msg-in var(--motion-fast) var(--ease);
 }
 
 .flash-msg__text {
@@ -79,14 +82,25 @@
   color: var(--danger-fg);
 }
 
+@keyframes flash-msg-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Hold fully visible until ~95%, then a ~200ms exit; flash.js removes the
+   node on a 4s timer, so the keyframe end and removal line up. */
 @keyframes flash-msg-fade {
-  0%, 70% { opacity: 1; }
+  0%, 95% { opacity: 1; }
   100%    { opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .flash-msg {
     animation: none;
+  }
+  .sidebar,
+  .sidebar__collapse svg {
+    transition: none;
   }
 }
 
@@ -120,6 +134,9 @@
   padding: var(--space-5) var(--space-3) var(--space-3);
   border-right: 1px solid var(--border-soft);
   background: var(--bg-page);
+  transition: flex-basis var(--motion-base) var(--ease),
+              width var(--motion-base) var(--ease),
+              padding var(--motion-base) var(--ease);
   /* Lock sidebar height to the viewport so internal scroll regions
      (the server list) stay within their own pane rather than scrolling
      the page. Sticky positions it against scroll, and provides a
@@ -415,6 +432,15 @@
   cursor: col-resize;
 }
 
+/* Drag-resize must track the pointer 1:1; only collapse/expand animates. */
+[data-sidebar-resizing="true"] .sidebar {
+  transition: none;
+}
+
+.sidebar__collapse svg {
+  transition: transform var(--motion-fast) var(--ease);
+}
+
 .page-main {
   flex: 1;
   min-width: 0;
@@ -423,6 +449,40 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
+}
+
+/* Cross-document view transitions: content cross-fades on navigation while
+   the rail holds still. Progressive enhancement — unsupported browsers get
+   plain navigation. Scoped inside the motion media query because the global
+   reduced-motion clamp can't reach UA-generated ::view-transition pseudos. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+
+  .sidebar {
+    view-transition-name: sidebar;
+  }
+
+  .page-main {
+    view-transition-name: page;
+  }
+
+  @keyframes vt-fade-out {
+    to { opacity: 0; }
+  }
+
+  @keyframes vt-fade-in {
+    from { opacity: 0; }
+  }
+
+  ::view-transition-old(page) {
+    animation: vt-fade-out 90ms var(--ease) both;
+  }
+
+  ::view-transition-new(page) {
+    animation: vt-fade-in 160ms var(--ease) both;
+  }
 }
 
 @media (max-width: 768px) {
@@ -452,7 +512,34 @@
 }
 
 
-/* ---- A11y helper ------------------------------------------------------ */
+/* ---- A11y helpers ------------------------------------------------------ */
+/* Skip link: off-screen until keyboard-focused, then floats over the rail.
+   :focus (not :focus-visible) — skip links only ever receive keyboard focus. */
+.skip-link {
+  position: fixed;
+  top: -100%;
+  left: var(--space-3);
+  z-index: 300;
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-surface);
+  color: var(--fg-primary);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  box-shadow: var(--shadow-md);
+}
+
+.skip-link:focus {
+  top: var(--space-3);
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.page-main:focus {
+  outline: none;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -525,6 +612,103 @@
 }
 
 
+/* ---- Ctrl/Cmd+K quick switcher ----------------------------------------- */
+.switcher {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh var(--space-5) var(--space-5);
+  background: var(--overlay-scrim);
+}
+
+[data-theme="dark"] .switcher {
+  background: var(--overlay-scrim-strong);
+}
+
+.switcher__panel {
+  width: min(30rem, 100%);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: modal-rise var(--motion-base) var(--ease) both;
+}
+
+.switcher__input,
+input.switcher__input {
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 0;
+  background: transparent;
+  padding: var(--space-4) var(--space-5);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+.switcher__input:focus-visible {
+  outline: none;
+}
+
+.switcher__list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2);
+  max-height: 40vh;
+  overflow-y: auto;
+  display: grid;
+  gap: 1px;
+}
+
+.switcher__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 7px var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--fg-secondary);
+  cursor: pointer;
+}
+
+.switcher__item:hover {
+  background: var(--bg-sunken);
+  color: var(--fg-primary);
+}
+
+.switcher__item.is-selected {
+  background: var(--bg-sunken);
+  color: var(--fg-primary);
+}
+
+.switcher__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: transparent;
+}
+
+.switcher__name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.switcher__empty {
+  padding: var(--space-3);
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+  text-align: center;
+}
+
+
 /* ---- Sidebar count badge (kept from the retired topnav so the Trash
    tombstone-count chip in _sidebar.html keeps the same look + tests) -- */
 .topnav__badge {
@@ -537,7 +721,7 @@
   margin-left: 4px;
   border-radius: var(--radius-full);
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-on-soft);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   font-weight: 600;

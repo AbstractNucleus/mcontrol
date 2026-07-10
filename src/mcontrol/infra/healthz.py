@@ -2,9 +2,10 @@
 
 Three subsystem probes (Supabase reachability, Docker socket
 reachability, and the bind-mount base path being a writable directory)
-run concurrently with a 250 ms per-probe budget. The endpoint
-returns 200 when all three pass and 503 when any one fails so the
-upstream nginx terminator can react.
+run concurrently. Docker and the base path are local and get a 250 ms
+budget; the DB probe rides a WAN round-trip to Supabase and gets 2 s.
+The endpoint returns 200 when all three pass and 503 when any one fails
+so the upstream nginx terminator can react.
 
 Distinct from ``mcontrol.health`` (per-server scaffold-integrity for
 the detail-page banner). Different question, different consumer,
@@ -24,6 +25,9 @@ from mcontrol.infra import db
 from mcontrol.settings import get_settings
 
 _TIMEOUT_S = 0.25
+# Normal Supabase RTT routinely exceeds 250 ms; a tighter budget makes
+# the probe flap on healthy deployments.
+_DB_TIMEOUT_S = 2.0
 _DETAIL_MAX = 200
 
 
@@ -39,9 +43,12 @@ def _sanitise(exc: BaseException) -> str:
 
 async def _probe_db() -> dict[str, str]:
     try:
-        await asyncio.wait_for(asyncio.to_thread(db.ping), _TIMEOUT_S)
+        await asyncio.wait_for(asyncio.to_thread(db.ping), _DB_TIMEOUT_S)
     except TimeoutError:
-        return {"status": "fail", "detail": "timeout after 250 ms"}
+        return {
+            "status": "fail",
+            "detail": f"timeout after {int(_DB_TIMEOUT_S * 1000)} ms",
+        }
     except Exception as exc:
         return {"status": "fail", "detail": _sanitise(exc)}
     return {"status": "ok", "detail": "reachable"}

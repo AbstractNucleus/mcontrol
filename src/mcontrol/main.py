@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 import aiodocker
+import aiohttp
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -45,7 +46,13 @@ async def lifespan(app: FastAPI):
     # (decision #98). Routes inject it via Depends(get_docker); non-route
     # callers (discovery here, healthz, resources, server_rcon) get it
     # passed in explicitly.
-    docker = aiodocker.Docker(url=settings.docker_host)
+    # The timeout bounds one-shot API calls so a wedged daemon can't hang
+    # the panel. aiodocker strips total/sock_read for long-running paths
+    # (log follow, stats streams), so SSE log tailing stays alive.
+    docker = aiodocker.Docker(
+        url=settings.docker_host,
+        timeout=aiohttp.ClientTimeout(total=60, connect=5, sock_read=30),
+    )
     app.state.docker = docker
 
     base_path = Path(settings.server_base_path)
@@ -65,7 +72,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="mcontrol", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="mcontrol", version=__version__, lifespan=lifespan)
     app.state.settings = settings
 
     # Jinja global for the tombstone-count badge. Called
@@ -152,7 +159,7 @@ def create_app() -> FastAPI:
             return templates.TemplateResponse(
                 request=request,
                 name="404.html",
-                context={"version": __version__, "detail": exc.detail},
+                context={"detail": exc.detail},
                 status_code=404,
             )
         # Default: forward to FastAPI's normal JSON shape so HTMX
@@ -170,7 +177,7 @@ def create_app() -> FastAPI:
             return templates.TemplateResponse(
                 request=request,
                 name="500.html",
-                context={"version": __version__},
+                context={},
                 status_code=500,
             )
         return JSONResponse(

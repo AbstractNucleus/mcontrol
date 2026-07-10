@@ -1,0 +1,47 @@
+{#
+  One home-page fleet row. Shared by home.html and the lifecycle routes'
+  quick-action responses (HX-Target: fleet-row-<name> swaps the whole row).
+
+  Context: `server` dict with name/state plus optional loader, port, cpu
+  (string), memory (string), started_at (ISO). Quick-action responses omit
+  the stats fields; the cells degrade to dashes until the next page load.
+
+  Column alignment across rows comes from subgrid (.server-list owns the
+  template columns). Tests anchor on `class="server-card__name" href=` and
+  the memory cell's exact `-` / `x.x GiB / y.y GiB (NN %)` strings.
+#}
+{% set lc = lifecycle_view(server.state) %}
+<li class="server-card" id="fleet-row-{{ server.name }}">
+  <span class="server-card__state">
+    <span class="state-pill state-pill--{{ server.state }}">{{ server.state }}</span>
+  </span>
+  <span class="server-card__id">
+    <a class="server-card__name" href="/servers/{{ server.name }}">{{ server.name }}</a>
+    {% if server.loader %}<span class="loader-badge">{{ server.loader }}</span>{% endif %}
+  </span>
+  <span class="server-card__port t-num">{% if server.port %}:{{ server.port }}{% endif %}</span>
+  <span class="server-card__cpu t-num">{{ server.cpu or "" }}</span>
+  <span class="server-card__memory">{{ server.memory or "-" }}</span>
+  <span class="server-card__uptime t-num">{{ server.started_at | uptime if server.started_at else "" }}</span>
+  <span class="server-card__actions">
+    {# Only the applicable action(s) render; transient states get none. #}
+    {% if not lc.start_disabled %}
+      <button class="btn btn--sm btn--ghost"
+              type="button"
+              aria-label="Start {{ server.name }}"
+              hx-post="/servers/{{ server.name }}/lifecycle/start"
+              hx-target="#fleet-row-{{ server.name }}"
+              hx-swap="outerHTML"
+              hx-disabled-elt="this">Start{% include "_spinner.html" %}</button>
+    {% endif %}
+    {% if not lc.stop_disabled %}
+      <button class="btn btn--sm btn--ghost"
+              type="button"
+              aria-label="Stop {{ server.name }}"
+              hx-post="/servers/{{ server.name }}/lifecycle/stop"
+              hx-target="#fleet-row-{{ server.name }}"
+              hx-swap="outerHTML"
+              hx-disabled-elt="this">Stop{% include "_spinner.html" %}</button>
+    {% endif %}
+  </span>
+</li>

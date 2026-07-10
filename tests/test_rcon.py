@@ -33,6 +33,8 @@ class _FakeRconServer:
         self.password = password
         self.received_commands: list[bytes] = []
         self.fail_auth = False
+        self.hang_auth = False  # accept TCP, never answer the AUTH packet
+        self.hang_exec = False  # answer auth, never answer EXECCOMMAND
         self.exec_response = b"There are 3 of a max of 20 players online: alice, bob, carol"
         self.exec_response_parts: list[bytes] | None = None  # overrides exec_response when set
         self._server: asyncio.base_events.Server | None = None
@@ -53,6 +55,9 @@ class _FakeRconServer:
             # Auth packet first
             pid, ptype, body = await _read_packet(reader)
             assert ptype == 3, "first packet must be AUTH"
+            if self.hang_auth:
+                await reader.read()  # wait for the client to give up and close
+                return
             ok = body.rstrip(b"\x00").decode() == self.password and not self.fail_auth
             response_id = pid if ok else -1
             writer.write(_pack(response_id, 2, b""))  # AUTH_RESPONSE
@@ -69,6 +74,9 @@ class _FakeRconServer:
                     break
                 if ptype == 2:  # EXECCOMMAND
                     self.received_commands.append(body.rstrip(b"\x00"))
+                    if self.hang_exec:
+                        await reader.read()  # wait for the client to give up and close
+                        return
                     parts = (
                         self.exec_response_parts
                         if self.exec_response_parts is not None
@@ -137,3 +145,24 @@ async def test_run_reassembles_multi_packet_response():
             assert response == "chunk-one chunk-two"
         finally:
             await client.close()
+
+
+async def test_connect_times_out_when_auth_hangs(monkeypatch):
+    monkeypatch.setattr(rcon, "_CONNECT_TIMEOUT_S", 0.05)
+    async with _FakeRconServer() as server:
+        server.hang_auth = True
+        with pytest.raises(TimeoutError):
+            await rcon.connect(server.host, server.port, "hunter2")
+
+
+async def test_run_times_out_and_closes_when_exec_hangs(monkeypatch):
+    monkeypatch.setattr(rcon, "_COMMAND_TIMEOUT_S", 0.05)
+    async with _FakeRconServer() as server:
+        server.hang_exec = True
+        client = await rcon.connect(server.host, server.port, "hunter2")
+        with pytest.raises(TimeoutError):
+            await client.run("list")
+        # A timed-out exchange desyncs the stream; the connection must
+        # be closed rather than reused.
+        with pytest.raises(rcon.RconClosedError):
+            await client.run("list")

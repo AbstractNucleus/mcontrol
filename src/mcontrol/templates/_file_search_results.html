@@ -14,7 +14,7 @@
       <p class="t-caption t-muted">world chunk/player dirs skipped. Append <code>&amp;include_chunks=1</code> to include them.</p>
     {% endif %}
   {% else %}
-    <p class="t-caption">
+    <p class="t-caption" role="status">
       {{ results|length }} match{{ '' if results|length == 1 else 'es' }}
       {%- if truncated %} (capped; narrow the query){%- endif -%}
     </p>
@@ -26,6 +26,7 @@
         <li class="file-search-list__entry file-search-list__entry--{{ r.kind }}">
           <input type="checkbox"
                  class="file-tree__checkbox"
+                 aria-label="Select {{ r.path }}"
                  data-select-path="{{ r.path }}"
                  data-select-kind="{{ r.kind }}"
                  data-select-name="{{ r.name }}">

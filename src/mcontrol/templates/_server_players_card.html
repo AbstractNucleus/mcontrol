@@ -2,9 +2,15 @@
   <header class="players-card__head">
     <p class="t-eyebrow">Players</p>
     {% if running %}
-      <span class="state-pill state-pill--running">live (RCON)</span>
+      {# Lazy chip: fills with the RCON `list` head-count on load, then
+         self-polls. Falls back to the plain live pill if RCON is down. #}
+      <span id="online-chip"
+            class="state-pill state-pill--running"
+            hx-get="/servers/{{ server.name }}/players/online"
+            hx-trigger="load, every 60s"
+            hx-swap="outerHTML">live (RCON)</span>
     {% else %}
-      <span class="state-pill state-pill--unknown">offline (file edit)</span>
+      <span id="online-chip" class="state-pill state-pill--unknown">offline (file edit)</span>
     {% endif %}
   </header>
 
@@ -47,6 +53,7 @@
                     class="players-card__toggle">
                 <input type="hidden" name="enabled" value="{{ '0' if m.in_whitelist else '1' }}">
                 <input type="checkbox"
+                       id="wl-{{ m.uuid }}"
                        {% if m.in_whitelist %}checked{% endif %}
                        onchange="this.form.requestSubmit()"
                        aria-label="Whitelist {{ m.name }}">
@@ -59,6 +66,7 @@
                     class="players-card__toggle">
                 <input type="hidden" name="enabled" value="{{ '0' if m.in_op else '1' }}">
                 <input type="checkbox"
+                       id="op-{{ m.uuid }}"
                        {% if m.in_op %}checked{% endif %}
                        onchange="this.form.requestSubmit()"
                        aria-label="Op {{ m.name }}">
@@ -85,6 +93,6 @@
         <option value="{{ p.uuid }}">{{ p.name }}</option>
       {% endfor %}
     </select>
-    <button type="submit" class="btn btn--primary">Add</button>
+    <button type="submit" class="btn btn--primary" id="players-card-add-{{ server.name }}">Add</button>
   </form>
 </section>

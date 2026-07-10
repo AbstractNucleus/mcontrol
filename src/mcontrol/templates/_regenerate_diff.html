@@ -35,7 +35,8 @@
   <form class="regenerate-diff__actions"
         hx-post="/servers/{{ server.name }}/regenerate/confirm"
         hx-target="#variables"
-        hx-swap="outerHTML">
+        hx-swap="outerHTML"
+        hx-disabled-elt="find button[type='submit']">
     <input type="hidden" name="compose_mtime_ns" value="{{ compose_mtime_ns }}">
     <input type="hidden" name="start_mtime_ns" value="{{ start_mtime_ns }}">
     <button type="submit" class="btn btn--primary">Confirm{% include "_spinner.html" %}</button>

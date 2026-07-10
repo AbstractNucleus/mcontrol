@@ -1,7 +1,8 @@
 """Tests for the deep /healthz probe.
 
 Three subsystem probes (db, docker, base_path) run via asyncio.gather
-behind a 250 ms per-probe timeout. The endpoint returns 200 when all
+behind per-probe timeouts (250 ms for the local docker/base_path probes,
+2 s for the WAN-bound db probe). The endpoint returns 200 when all
 three are ok and 503 when any one fails. Tests pin:
 
   - the all-ok / each-fail / every-fail status code mapping
@@ -191,6 +192,9 @@ async def test_probe_docker_uses_a_method_aiodocker_actually_exposes(env):
 
 
 async def test_probe_db_returns_fail_on_timeout(monkeypatch):
+    # Shrink the budget so the test doesn't wait out the real 2 s.
+    monkeypatch.setattr(healthz, "_DB_TIMEOUT_S", 0.05)
+
     def slow_ping():
         # Block longer than the probe budget.
         import time as _t
@@ -202,6 +206,13 @@ async def test_probe_db_returns_fail_on_timeout(monkeypatch):
 
     assert result["status"] == "fail"
     assert "timeout" in result["detail"]
+
+
+def test_db_probe_budget_wider_than_supabase_rtt():
+    """250 ms sat below normal Supabase WAN RTT and made the probe flap
+    on healthy deployments; the local probes keep the tight budget."""
+    assert healthz._DB_TIMEOUT_S == 2.0
+    assert healthz._TIMEOUT_S == 0.25
 
 
 async def test_probe_db_sanitises_detail_no_service_role_key_leak(monkeypatch, env):

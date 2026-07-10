@@ -14,19 +14,21 @@
               type="button"
               hx-post="/rescan"
               hx-swap="none"
-              title="Re-walk SERVER_BASE_PATH and refresh container state from Docker">Rescan</button>
+              hx-disabled-elt="this"
+              title="Re-walk SERVER_BASE_PATH and refresh container state from Docker">Rescan{% include "_spinner.html" %}</button>
       <a class="btn btn--primary" href="/servers/new">New server</a>
     </div>
   </div>
 
   {% if servers %}
+    <p class="fleet-summary t-caption">
+      {{ summary.total }} server{{ "s" if summary.total != 1 }}
+      · {{ summary.running }} running
+      {%- if summary.memory %} · {{ summary.memory }} in use{% endif %}
+    </p>
     <ul class="server-list">
       {% for server in servers %}
-        <li class="server-card">
-          <a class="server-card__name" href="/servers/{{ server.name }}">{{ server.name }}</a>
-          <span class="server-card__memory">{{ server.memory or "-" }}</span>
-          <span class="state-pill state-pill--{{ server.state }}">{{ server.state }}</span>
-        </li>
+        {% include "_fleet_row.html" %}
       {% endfor %}
     </ul>
   {% else %}
@@ -45,7 +47,8 @@
         <button class="btn btn--ghost"
                 type="button"
                 hx-post="/rescan"
-                hx-swap="none">Rescan</button>
+                hx-swap="none"
+                hx-disabled-elt="this">Rescan{% include "_spinner.html" %}</button>
         <a class="btn btn--primary" href="/servers/new">Create a server</a>
       </div>
     </div>

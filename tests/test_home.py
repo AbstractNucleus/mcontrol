@@ -44,7 +44,8 @@ async def test_home_renders_wordmark(client, fake_servers, fake_stats):
     body = response.text
     assert "mcontrol" in body
     assert "/static/tokens.css" in body
-    assert "/static/app.css" in body
+    assert "/static/app.shell.css" in body
+    assert "/static/app.misc.css" in body
 
 
 async def test_home_shows_empty_state_when_no_servers(client, fake_servers, fake_stats):

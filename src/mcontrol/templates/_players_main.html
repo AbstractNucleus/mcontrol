@@ -14,9 +14,10 @@
     <form class="players-page__import"
           hx-post="/players/import"
           hx-target="#players-main"
-          hx-swap="outerHTML">
-      <button class="players-page__import-btn" type="submit">
-        {{ unknown_count }} membership(s) on disk for unknown UUID(s). Click to Import
+          hx-swap="outerHTML"
+          hx-disabled-elt="find button[type='submit']">
+      <button class="players-page__import-btn" type="submit" id="players-page-import">
+        {{ unknown_count }} membership(s) on disk for unknown UUID(s). Click to Import{% include "_spinner.html" %}
       </button>
     </form>
   {% endif %}
@@ -24,7 +25,8 @@
   <form class="players-page__add"
         hx-post="/players"
         hx-target="#players-main"
-        hx-swap="outerHTML">
+        hx-swap="outerHTML"
+        hx-disabled-elt="find button[type='submit']">
     <label for="players-page-name">Add by Minecraft name</label>
     <input id="players-page-name"
            name="name"
@@ -33,7 +35,7 @@
            autocomplete="off"
            placeholder="e.g. Notch"
            value="{{ form.name }}">
-    <button type="submit" class="btn btn--primary">Look up + add</button>
+    <button type="submit" class="btn btn--primary" id="players-page-add">Look up + add{% include "_spinner.html" %}</button>
     {% if errors.name %}
       <p class="players-page__error">{{ errors.name }}</p>
     {% endif %}

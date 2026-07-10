@@ -191,3 +191,158 @@ async def test_detail_page_mounts_resources_card_above_metadata(
     detail_dl_idx = body.index('class="server-detail"')
     assert lifecycle_idx < resources_idx < detail_dl_idx
     assert 'hx-get="/servers/atm10/resources"' in body
+
+
+# ---------------------------------------------------------------------------
+# State reconciliation via the 5s poll (OOB pill + buttons healing)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def capture_state_writes(monkeypatch):
+    seen: list[dict] = []
+
+    def fake_update(**kwargs):
+        seen.append(kwargs)
+
+    monkeypatch.setattr(db, "update_server_state", fake_update)
+    return seen
+
+
+async def test_no_divergence_emits_no_oob_fragments(
+    client, fake_db, fake_stats, capture_state_writes, tmp_path
+):
+    row = _row(tmp_path)
+    fake_db["servers"]["atm10"] = row
+    fake_stats["override"] = {
+        "status": "ok",
+        "cpu_percent": 1.0,
+        "mem_used": 1024**3,
+        "mem_limit": 2 * 1024**3,
+        "container_state": "running",
+    }
+
+    response = await client.get("/servers/atm10/resources")
+
+    assert response.status_code == 200
+    assert "hx-swap-oob" not in response.text
+    assert capture_state_writes == []
+
+
+async def test_crashed_container_heals_pill_and_buttons(
+    client, fake_db, fake_stats, capture_state_writes, tmp_path
+):
+    row = _row(tmp_path)  # DB says running
+    fake_db["servers"]["atm10"] = row
+    fake_stats["override"] = {"status": "not-running", "container_state": "exited"}
+
+    response = await client.get("/servers/atm10/resources")
+
+    body = response.text
+    assert response.status_code == 200
+    assert 'id="state-pill"' in body
+    assert "state-pill--exited" in body
+    assert 'hx-swap-oob="true"' in body
+    assert 'id="lifecycle-buttons"' in body
+    assert capture_state_writes == [{"name": "atm10", "state": "exited"}]
+
+
+async def test_starting_promotes_to_running_once_port_bound(
+    client, fake_db, fake_stats, capture_state_writes, tmp_path, monkeypatch
+):
+    from mcontrol.services import lifecycle_service
+
+    row = _row(tmp_path)
+    row["state"] = "starting"
+    row["variables"] = {"port": 25565}
+    fake_db["servers"]["atm10"] = row
+    fake_stats["override"] = {
+        "status": "ok",
+        "cpu_percent": 1.0,
+        "mem_used": 1024**3,
+        "mem_limit": 2 * 1024**3,
+        "container_state": "running",
+    }
+
+    async def fake_probe(port):
+        return True
+
+    monkeypatch.setattr(lifecycle_service, "probe_listener_once", fake_probe)
+
+    response = await client.get("/servers/atm10/resources")
+
+    assert "state-pill--running" in response.text
+    assert capture_state_writes == [{"name": "atm10", "state": "running"}]
+
+
+async def test_starting_stays_starting_while_port_unbound(
+    client, fake_db, fake_stats, capture_state_writes, tmp_path, monkeypatch
+):
+    from mcontrol.services import lifecycle_service
+
+    row = _row(tmp_path)
+    row["state"] = "starting"
+    row["variables"] = {"port": 25565}
+    fake_db["servers"]["atm10"] = row
+    fake_stats["override"] = {
+        "status": "ok",
+        "cpu_percent": 1.0,
+        "mem_used": 1024**3,
+        "mem_limit": 2 * 1024**3,
+        "container_state": "running",
+    }
+
+    async def fake_probe(port):
+        return False
+
+    monkeypatch.setattr(lifecycle_service, "probe_listener_once", fake_probe)
+
+    response = await client.get("/servers/atm10/resources")
+
+    assert "hx-swap-oob" not in response.text
+    assert capture_state_writes == []
+
+
+async def test_stale_exited_not_promoted_while_port_unbound(
+    client, fake_db, fake_stats, capture_state_writes, tmp_path, monkeypatch
+):
+    """Poll landing mid-start: DB still holds the pre-start state while
+    Docker already reports "running" but the listener isn't up. The
+    reconciler must not stomp the start handler's upcoming commit."""
+    from mcontrol.services import lifecycle_service
+
+    row = _row(tmp_path)
+    row["state"] = "exited"
+    row["variables"] = {"port": 25565}
+    fake_db["servers"]["atm10"] = row
+    fake_stats["override"] = {
+        "status": "ok",
+        "cpu_percent": 1.0,
+        "mem_used": 1024**3,
+        "mem_limit": 2 * 1024**3,
+        "container_state": "running",
+    }
+
+    async def fake_probe(port):
+        return False
+
+    monkeypatch.setattr(lifecycle_service, "probe_listener_once", fake_probe)
+
+    response = await client.get("/servers/atm10/resources")
+
+    assert "hx-swap-oob" not in response.text
+    assert capture_state_writes == []
+
+
+async def test_unreachable_daemon_never_reconciles(
+    client, fake_db, fake_stats, capture_state_writes, tmp_path
+):
+    row = _row(tmp_path)
+    fake_db["servers"]["atm10"] = row
+    fake_stats["override"] = {"status": "unreachable"}
+
+    response = await client.get("/servers/atm10/resources")
+
+    assert response.status_code == 200
+    assert "hx-swap-oob" not in response.text
+    assert capture_state_writes == []

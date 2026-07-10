@@ -5,6 +5,7 @@
 #}
 <div id="lifecycle-flash"
      class="lifecycle-flash{% if message %} lifecycle-flash--error{% endif %}"
+     role="{% if message %}alert{% else %}status{% endif %}"
      {% if oob %}hx-swap-oob="true"{% endif %}>
   {% if message %}{{ message }}{% endif %}
 </div>

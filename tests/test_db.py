@@ -21,22 +21,27 @@ def _fake_supabase_client():
 def test_client_constructed_with_settings(env, monkeypatch):
     captured = {}
 
-    def fake_create_client(url, key):
+    def fake_create_client(url, key, options=None):
         captured["url"] = url
         captured["key"] = key
+        captured["options"] = options
         return MagicMock()
 
     monkeypatch.setattr(db, "create_client", fake_create_client)
 
     db._client()
 
-    assert captured == {"url": "https://example.supabase.co", "key": "test-key"}
+    assert captured["url"] == "https://example.supabase.co"
+    assert captured["key"] == "test-key"
+    # Bounded PostgREST round-trips so abandoned healthz probe threads
+    # self-terminate instead of lingering for the OS TCP timeout.
+    assert captured["options"].postgrest_client_timeout == 5
 
 
 def test_client_is_cached(env, monkeypatch):
     calls = {"n": 0}
 
-    def fake_create_client(url, key):
+    def fake_create_client(url, key, options=None):
         calls["n"] += 1
         return MagicMock()
 

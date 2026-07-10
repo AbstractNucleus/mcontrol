@@ -117,6 +117,16 @@ async def test_save_force_overwrite_after_mismatch(
 
     assert response.status_code == 200
     assert target.read_text(encoding="utf-8") == "operator-version\n"
+    body = response.text
+    # The Overwrite button targets #file-view, so force success must return
+    # the full editor partial (not the bare meta fragment) or the swap
+    # leaves the pane without an editor.
+    assert "data-file-editor" in body
+    assert "operator-version" in body
+    # Fresh mtime for the next save; no conflict banner on the re-render.
+    new_mtime_ns = target.stat().st_mtime_ns
+    assert f'name="mtime_ns" value="{new_mtime_ns}"' in body
+    assert "file-conflict" not in body
 
 
 async def test_save_400_on_traversal(client, fake_server) -> None:

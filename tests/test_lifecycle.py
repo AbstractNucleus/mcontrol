@@ -250,6 +250,84 @@ async def test_restart_timeout_returns_flash_and_does_not_update_state(
     assert stub_db_writes == []
 
 
+async def test_start_docker_error_returns_flash_and_does_not_update_state(
+    client, fake_server_row, stub_db_writes, monkeypatch
+):
+    import aiodocker
+
+    from mcontrol.infra import docker_client
+
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "exited",
+    }
+
+    async def _boom(_docker, name):
+        raise aiodocker.DockerError(404, "No such container: atm10")
+
+    monkeypatch.setattr(docker_client, "start", _boom)
+
+    response = await client.post("/servers/atm10/lifecycle/start")
+
+    assert response.status_code == 200
+    assert "lifecycle-flash--error" in response.text
+    assert "Docker error" in response.text
+    # Pill keeps the current (DB) state, mirroring the timeout branch.
+    assert "state-pill--exited" in response.text
+    assert stub_db_writes == []
+
+
+async def test_stop_docker_error_returns_flash_and_does_not_update_state(
+    client, fake_server_row, stub_db_writes, monkeypatch
+):
+    import aiodocker
+
+    from mcontrol.infra import docker_client
+
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "running",
+    }
+
+    async def _boom(_docker, name):
+        raise aiodocker.DockerError(404, "No such container: atm10")
+
+    monkeypatch.setattr(docker_client, "stop", _boom)
+
+    response = await client.post("/servers/atm10/lifecycle/stop")
+
+    assert response.status_code == 200
+    assert "lifecycle-flash--error" in response.text
+    assert "Docker error" in response.text
+    assert "state-pill--running" in response.text
+    assert stub_db_writes == []
+
+
+async def test_restart_docker_error_returns_flash_and_does_not_update_state(
+    client, fake_server_row, stub_db_writes, monkeypatch
+):
+    import aiodocker
+
+    from mcontrol.infra import docker_client
+
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "running",
+    }
+
+    async def _boom(_docker, name):
+        raise aiodocker.DockerError(404, "No such container: atm10")
+
+    monkeypatch.setattr(docker_client, "restart", _boom)
+
+    response = await client.post("/servers/atm10/lifecycle/restart")
+
+    assert response.status_code == 200
+    assert "lifecycle-flash--error" in response.text
+    assert "Docker error" in response.text
+    assert stub_db_writes == []
+
+
 async def test_lifecycle_uses_container_name_override(
     client, fake_server_row, stub_db_writes, stub_docker
 ):
@@ -360,3 +438,44 @@ async def test_start_response_carries_oob_buttons_for_running_state(
 
     restart = _button_chunk(body, "restart")
     assert not _is_disabled(restart)
+
+
+# ---------------------------------------------------------------------------
+# Fleet quick actions (home page rows target #fleet-row-<name>)
+# ---------------------------------------------------------------------------
+
+
+async def test_start_with_fleet_target_returns_row_not_pill(
+    client, fake_server_row, stub_db_writes, stub_docker
+):
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "exited",
+    }
+
+    response = await client.post(
+        "/servers/atm10/lifecycle/start",
+        headers={"HX-Target": "fleet-row-atm10"},
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'id="fleet-row-atm10"' in body
+    assert 'class="server-card__name" href="/servers/atm10"' in body
+    assert "state-pill--running" in body
+    assert 'id="lifecycle-buttons"' not in body
+
+
+async def test_start_without_fleet_target_keeps_pill_shape(
+    client, fake_server_row, stub_db_writes, stub_docker
+):
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "exited",
+    }
+
+    response = await client.post("/servers/atm10/lifecycle/start")
+
+    assert response.status_code == 200
+    assert 'id="state-pill"' in response.text
+    assert 'id="fleet-row-atm10"' not in response.text

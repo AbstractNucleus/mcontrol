@@ -10,6 +10,7 @@ Three units under test:
   - format_bytes          → table-driven; covers the unit boundaries.
 """
 
+import os
 import sys
 
 import pytest
@@ -81,7 +82,13 @@ class _FakeContainer:
     async def show(self):
         if self._show_raises:
             raise RuntimeError("show failed")
-        return {"State": {"Running": self._running}}
+        return {
+            "State": {
+                "Running": self._running,
+                "Status": "running" if self._running else "exited",
+                "StartedAt": "2026-07-10T06:00:00.000000000Z" if self._running else None,
+            }
+        }
 
     async def stats(self, *, stream: bool):
         assert stream is False, "card uses single-snapshot stream=false"
@@ -98,12 +105,31 @@ async def test_read_stats_returns_unreachable_when_container_missing(env):
 
 async def test_read_stats_returns_not_running_when_state_is_stopped(env):
     docker = _fake_docker(container=_FakeContainer(running=False))
-    assert await resources.read_container_stats(docker, "atm10") == {"status": "not-running"}
+    assert await resources.read_container_stats(docker, "atm10") == {
+        "status": "not-running",
+        "container_state": "exited",
+    }
 
 
 async def test_read_stats_returns_unreachable_when_stats_call_raises(env):
     container = _FakeContainer(running=True)
     container._stats_raises = True
+    docker = _fake_docker(container=container)
+    assert await resources.read_container_stats(docker, "atm10") == {"status": "unreachable"}
+
+
+async def test_read_stats_returns_unreachable_when_stats_call_hangs(env, monkeypatch):
+    """aiodocker exempts /stats from the client-level timeout, so the
+    module bounds the call itself. a hang degrades to 'unreachable'."""
+    import asyncio
+
+    container = _FakeContainer(running=True)
+
+    async def hang(*, stream):  # noqa: ARG001
+        await asyncio.sleep(30)
+
+    container.stats = hang
+    monkeypatch.setattr(resources, "_STATS_TIMEOUT_S", 0.05)
     docker = _fake_docker(container=container)
     assert await resources.read_container_stats(docker, "atm10") == {"status": "unreachable"}
 
@@ -256,6 +282,11 @@ def test_read_disk_usage_cache_invalidated_on_root_mtime_change(tmp_path):
     assert resources.read_disk_usage(tmp_path) == 50
 
     (tmp_path / "g.bin").write_bytes(b"y" * 70)
+    # Filesystem mtime granularity can leave both writes in the same tick,
+    # which would (correctly, per the cache contract) serve the stale total
+    # and flake this test. Force the root mtime forward explicitly.
+    stat = tmp_path.stat()
+    os.utime(tmp_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
 
     assert resources.read_disk_usage(tmp_path) == 120
 

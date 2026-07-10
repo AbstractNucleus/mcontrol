@@ -10,19 +10,19 @@
   <p class="t-caption">file on disk changed since you opened it</p>
   <div class="file-conflict__actions">
     <button type="button"
-            class="file-conflict__btn"
+            class="btn btn--sm file-conflict__btn"
             hx-get="/servers/{{ server_name }}/files/view?path={{ filename|urlencode }}"
             hx-target="#file-view"
             hx-swap="innerHTML">Reload (discard my edits)</button>
     <button type="button"
-            class="file-conflict__btn"
+            class="btn btn--sm btn--danger file-conflict__btn"
             hx-post="/servers/{{ server_name }}/files/save"
             hx-target="#file-view"
             hx-swap="innerHTML"
             hx-vals='{"force": "true"}'
             hx-include="[data-file-editor-form]">Overwrite</button>
     <button type="button"
-            class="file-conflict__btn"
+            class="btn btn--sm file-conflict__btn"
             onclick="this.closest('#file-conflict').remove()">Cancel</button>
   </div>
 </div>

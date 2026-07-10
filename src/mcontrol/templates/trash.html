@@ -21,12 +21,12 @@
           hx-target="#trash-modal"
           hx-swap="innerHTML">
       {% if sweep_count > 0 %}
-        <button type="submit" class="trash-page__empty-btn">
+        <button type="submit" class="btn btn--danger">
           Empty trash: {{ sweep_count }} tombstone{% if sweep_count != 1 %}s{% endif %}
           older than {{ purge_age_days }} days, {{ sweep_bytes_human }}
         </button>
       {% else %}
-        <button type="submit" class="trash-page__empty-btn" disabled>
+        <button type="submit" class="btn btn--danger" disabled>
           Empty trash: nothing older than {{ purge_age_days }} days
         </button>
       {% endif %}

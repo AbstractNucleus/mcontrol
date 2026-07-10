@@ -32,12 +32,7 @@
   function syncControl(intent) {
     var inputs = document.querySelectorAll('[data-theme-toggle] input[name="theme"]');
     inputs.forEach(function (input) {
-      var checked = input.value === intent;
-      input.checked = checked;
-      var label = input.closest("label");
-      if (label) {
-        label.setAttribute("aria-pressed", checked ? "true" : "false");
-      }
+      input.checked = input.value === intent;
     });
   }
 

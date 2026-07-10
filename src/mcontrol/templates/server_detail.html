@@ -28,62 +28,76 @@
       "@codemirror/lang-yaml":    "/static/vendor/codemirror/lang-yaml.mjs",
       "@codemirror/legacy-modes/mode/properties": "/static/vendor/codemirror/legacy-modes-properties.mjs",
       "@codemirror/legacy-modes/mode/toml":       "/static/vendor/codemirror/legacy-modes-toml.mjs",
+      "@lezer/highlight":         "/static/vendor/codemirror/lezer-highlight.mjs",
       "codemirror":               "/static/vendor/codemirror/codemirror.mjs",
       "/node/process.mjs":        "/static/vendor/codemirror/process-stub.mjs"
     }
   }
   </script>
-  <script type="module" src="/static/file_editor.js"></script>
+  <script type="module" src="/static/file_editor.js?v={{ version }}"></script>
   {# file_uploader.js was split into three ordered classic scripts (issue:
      1k-line decomposition). defer preserves document order, so the three
      share one global scope exactly as the former single file did:
      uploader (core helpers + single-file actions) → bulk → tree nav. #}
-  <script src="/static/file_uploader.js" defer></script>
-  <script src="/static/file_bulk.js" defer></script>
-  <script src="/static/file_tree_nav.js" defer></script>
+  <script src="/static/file_uploader.js?v={{ version }}" defer></script>
+  <script src="/static/file_bulk.js?v={{ version }}" defer></script>
+  <script src="/static/file_tree_nav.js?v={{ version }}" defer></script>
 {% endblock %}
 
 {% block main %}
 <section class="server-detail-layout">
-  <a class="detail-back" href="/">
-    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M15 18l-6-6 6-6"></path>
-    </svg>
-    All servers
-  </a>
-  <h1 class="detail-title">
-    <span class="detail-title__name">{{ server.name }}</span>
-    {% include "_state_pill.html" %}
-    {% if server.loader %}
-      <span class="loader-badge" aria-label="Loader: {{ server.loader }}">{{ server.loader }}</span>
-    {% endif %}
-  </h1>
+  {#
+    Sticky command header: name, live state, and the lifecycle actions stay
+    reachable while reading logs 2000px below. The .lifecycle-row class is
+    load-bearing for tests (source order: lifecycle-row → #server-resources
+    → .server-detail).
+  #}
+  <header class="detail-header">
+    <a class="detail-back" href="/">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M15 18l-6-6 6-6"></path>
+      </svg>
+      All servers
+    </a>
+    <div class="detail-header__row">
+      <h1 class="detail-title">
+        <span class="detail-title__name">{{ server.name }}</span>
+        {% include "_state_pill.html" %}
+        {% if server.loader %}
+          <span class="loader-badge" aria-label="Loader: {{ server.loader }}">{{ server.loader }}</span>
+        {% endif %}
+      </h1>
+      <div class="lifecycle-row">
+        {% include "_lifecycle_buttons.html" %}
+      </div>
+    </div>
+    {#
+      Visually-hidden aria-live region for lifecycle state announcements
+      `static/lifecycle.js` writes the new state here on
+      htmx:afterSwap of `#lifecycle-buttons`, so a screen-reader user gets
+      the action's outcome announced without an extra visual flash.
+    #}
+    <div id="lifecycle-status"
+         class="visually-hidden"
+         role="status"
+         aria-live="polite"
+         aria-atomic="true"></div>
+    {% include "_lifecycle_flash.html" %}
+  </header>
 
   {% if health_issues %}
     {% include "_health_banner.html" %}
   {% endif %}
 
-  <div class="lifecycle-row">
-    <p class="t-eyebrow">Lifecycle</p>
-    {% include "_lifecycle_buttons.html" %}
-  </div>
-  {#
-    Visually-hidden aria-live region for lifecycle state announcements
-    `static/lifecycle.js` writes the new state here on
-    htmx:afterSwap of `#lifecycle-buttons`, so a screen-reader user gets
-    the action's outcome announced without an extra visual flash.
-  #}
-  <div id="lifecycle-status"
-       class="visually-hidden"
-       role="status"
-       aria-live="polite"
-       aria-atomic="true"></div>
-  {% include "_lifecycle_flash.html" %}
-
   <section id="server-resources"
+           class="hx-slot"
            hx-get="/servers/{{ server.name }}/resources"
            hx-trigger="load, every 5s"
-           hx-swap="outerHTML"></section>
+           hx-swap="outerHTML">
+    <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
+    <span class="skeleton skeleton--bar" aria-hidden="true"></span>
+    <span class="skeleton skeleton--line" aria-hidden="true"></span>
+  </section>
 
   <dl class="server-detail">
     <dt>Directory</dt>
@@ -105,31 +119,47 @@
     {% endif %}
 
     <dt>Last seen</dt>
-    <dd>{{ server.updated_at }}</dd>
+    <dd title="{{ server.updated_at }}">{{ server.updated_at | reltime or server.updated_at }}</dd>
   </dl>
 
-  {% if server.scaffolded_at %}
-    {% include "_variables_card.html" %}
-  {% else %}
-    <section id="migrate-card"
-             hx-get="/servers/{{ server.name }}/migrate"
-             hx-trigger="load"
-             hx-swap="outerHTML"></section>
-  {% endif %}
+  {% include "_log_pane.html" %}
 
-  {% include "_bindings_card.html" %}
+  {% include "_console_pane.html" %}
 
   <section id="server-players"
+           class="hx-slot hx-slot--players"
            hx-get="/servers/{{ server.name }}/players"
            hx-trigger="load"
-           hx-swap="outerHTML"></section>
+           hx-swap="outerHTML">
+    <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
+    <span class="skeleton skeleton--line" aria-hidden="true"></span>
+    <span class="skeleton skeleton--block" aria-hidden="true"></span>
+  </section>
+
+  <div class="detail-config">
+    {% if server.scaffolded_at %}
+      {% include "_variables_card.html" %}
+    {% else %}
+      <section id="migrate-card"
+               class="hx-slot hx-slot--migrate"
+               hx-get="/servers/{{ server.name }}/migrate"
+               hx-trigger="load"
+               hx-swap="outerHTML">
+        <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
+        <span class="skeleton skeleton--line" aria-hidden="true"></span>
+        <span class="skeleton skeleton--block" aria-hidden="true"></span>
+      </section>
+    {% endif %}
+
+    {% include "_bindings_card.html" %}
+  </div>
 
   <section class="files-pane" data-server-name="{{ server.name }}">
     <header class="files-pane__head">
       <p class="t-eyebrow files-pane__eyebrow">
         Files
         <details class="file-tree__menu">
-          <summary class="file-tree__menu-trigger" title="Actions for server root">⋯</summary>
+          <summary class="file-tree__menu-trigger" title="Actions for server root" aria-label="Actions for server root">⋯</summary>
           <div class="file-tree__menu-panel">
             <button class="file-tree__menu-item"
                     type="button"
@@ -184,10 +214,6 @@
     </div>
     <input type="file" id="file-upload-input" class="file-upload-input" multiple hidden>
   </section>
-
-  {% include "_log_pane.html" %}
-
-  {% include "_console_pane.html" %}
 
   {% include "_delete_confirm.html" %}
 </section>

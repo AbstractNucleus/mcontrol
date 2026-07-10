@@ -31,7 +31,7 @@
           aria-label="Start {{ server.name }}"
           hx-post="/servers/{{ server.name }}/lifecycle/start"
           hx-target="#state-pill"
-          hx-swap="outerHTML"
+          hx-swap="outerHTML transition:true"
           hx-disabled-elt="this"
           {% if lifecycle.start_disabled %}disabled{% endif %}>Start{% include "_spinner.html" %}</button>
   <button class="btn btn--sm{% if lifecycle.accent == 'stop' %} btn--primary{% endif %}"
@@ -40,7 +40,7 @@
           aria-label="Stop {{ server.name }}"
           hx-post="/servers/{{ server.name }}/lifecycle/stop"
           hx-target="#state-pill"
-          hx-swap="outerHTML"
+          hx-swap="outerHTML transition:true"
           hx-disabled-elt="this"
           {% if lifecycle.stop_disabled %}disabled{% endif %}>Stop{% include "_spinner.html" %}</button>
   <button class="btn btn--sm"
@@ -49,7 +49,7 @@
           aria-label="Restart {{ server.name }}"
           hx-post="/servers/{{ server.name }}/lifecycle/restart"
           hx-target="#state-pill"
-          hx-swap="outerHTML"
+          hx-swap="outerHTML transition:true"
           hx-disabled-elt="this"
           {% if lifecycle.restart_disabled %}disabled{% endif %}>Restart{% include "_spinner.html" %}</button>
 </div>

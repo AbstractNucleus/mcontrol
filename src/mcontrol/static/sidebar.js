@@ -12,6 +12,7 @@
   var COLLAPSED_KEY = "sidebar-collapsed";
   var MIN = 200;
   var MAX = 420;
+  var resizeHandle = null;
 
   function setRoot(prop, value) {
     document.documentElement.style.setProperty(prop, value);
@@ -20,27 +21,62 @@
   function setWidth(px) {
     var clamped = Math.max(MIN, Math.min(MAX, px));
     setRoot("--sidebar-width", clamped + "px");
+    if (resizeHandle) resizeHandle.setAttribute("aria-valuenow", String(clamped));
     try { localStorage.setItem(WIDTH_KEY, clamped + "px"); } catch (_) {}
+    return clamped;
   }
 
   function isCollapsed() {
     return document.documentElement.getAttribute("data-sidebar") === "collapsed";
   }
 
+  function syncCollapseBtn(collapsed) {
+    var btn = document.querySelector("[data-sidebar-collapse]");
+    if (!btn) return;
+    var label = collapsed ? "Expand sidebar" : "Collapse sidebar";
+    btn.setAttribute("aria-label", label);
+    btn.setAttribute("title", label);
+    btn.setAttribute("aria-expanded", String(!collapsed));
+  }
+
   function setCollapsed(collapsed) {
     var root = document.documentElement;
+    // Explicit "expanded" (not attribute removal): the <768px media query
+    // auto-collapses unless the user has explicitly expanded.
     if (collapsed) {
       root.setAttribute("data-sidebar", "collapsed");
       try { localStorage.setItem(COLLAPSED_KEY, "1"); } catch (_) {}
     } else {
-      root.removeAttribute("data-sidebar");
-      try { localStorage.removeItem(COLLAPSED_KEY); } catch (_) {}
+      root.setAttribute("data-sidebar", "expanded");
+      try { localStorage.setItem(COLLAPSED_KEY, "0"); } catch (_) {}
     }
+    syncCollapseBtn(collapsed);
   }
 
   function initResize() {
     var handle = document.querySelector("[data-sidebar-resize]");
     if (!handle) return;
+    resizeHandle = handle;
+
+    var sidebarEl = document.querySelector(".sidebar");
+    handle.setAttribute(
+      "aria-valuenow",
+      String(sidebarEl ? sidebarEl.offsetWidth : 248)
+    );
+
+    handle.addEventListener("keydown", function (evt) {
+      if (isCollapsed()) return;
+      var sidebar = document.querySelector(".sidebar");
+      var current = sidebar ? sidebar.offsetWidth : 248;
+      switch (evt.key) {
+        case "ArrowLeft":  setWidth(current - 16); break;
+        case "ArrowRight": setWidth(current + 16); break;
+        case "Home":       setWidth(MIN); break;
+        case "End":        setWidth(MAX); break;
+        default: return;
+      }
+      evt.preventDefault();
+    });
 
     var dragging = false;
     var startX = 0;
@@ -79,6 +115,9 @@
   function initCollapse() {
     var btn = document.querySelector("[data-sidebar-collapse]");
     if (!btn) return;
+    // Collapsed state may have been restored pre-paint by the base.html
+    // bootstrap; make the button's label/expanded state agree with it.
+    syncCollapseBtn(isCollapsed());
     btn.addEventListener("click", function () {
       setCollapsed(!isCollapsed());
     });

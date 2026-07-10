@@ -71,29 +71,53 @@
   align-items: center;
 }
 
+.fleet-summary {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-muted);
+  margin: 0 0 var(--space-3);
+}
+
+/* Column template lives on the list; rows adopt it via subgrid so cells
+   align across the whole fleet: state | name | port | cpu | mem | uptime | actions */
 .server-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: var(--space-2);
+  grid-template-columns:
+    minmax(88px, max-content)
+    minmax(0, 1fr)
+    max-content
+    max-content
+    max-content
+    max-content
+    max-content;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
 }
 
 .server-card {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-3) var(--space-4);
   background: var(--bg-surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
-  transition: border-color var(--motion-fast) var(--ease),
-              transform var(--motion-fast) var(--ease);
+  transition: border-color var(--motion-fast) var(--ease);
 }
 
 .server-card:hover {
   border-color: var(--border-medium);
+}
+
+.server-card__id {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .server-card__name {
@@ -101,10 +125,21 @@
   font-size: var(--fs-md);
   color: var(--fg-primary);
   text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .server-card__name:hover {
-  color: var(--accent);
+  color: var(--accent-text);
+}
+
+.server-card__port,
+.server-card__cpu,
+.server-card__uptime {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
 }
 
 .server-card__memory {
@@ -112,6 +147,25 @@
   font-size: var(--fs-sm);
   color: var(--fg-secondary);
   font-variant-numeric: tabular-nums;
+}
+
+.server-card__actions {
+  display: inline-flex;
+  gap: var(--space-1);
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  /* Narrow: keep state, name, memory; drop the ops columns. */
+  .server-list {
+    grid-template-columns: minmax(88px, max-content) minmax(0, 1fr) max-content;
+  }
+  .server-card__port,
+  .server-card__cpu,
+  .server-card__uptime,
+  .server-card__actions {
+    display: none;
+  }
 }
 
 
@@ -130,6 +184,9 @@
   color: var(--fg-secondary);
   border: 1px solid var(--border-soft);
   white-space: nowrap;
+  transition: background var(--motion-base) var(--ease),
+              color var(--motion-base) var(--ease),
+              border-color var(--motion-base) var(--ease);
 }
 
 .state-pill::before {
@@ -164,6 +221,56 @@
 
 
 /* ---- Server detail page ------------------------------------------------ */
+.server-detail-layout {
+  display: grid;
+  gap: var(--space-5);
+}
+
+/* Sticky command header: keeps name, live state, and lifecycle actions
+   reachable while scrolled deep into logs/files. The negative top margin +
+   matching padding covers .page-main's top padding so content doesn't
+   peek above the header while stuck. */
+.detail-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--bg-page);
+  display: grid;
+  gap: var(--space-2);
+  margin-top: calc(-1 * var(--space-8));
+  padding-top: var(--space-6);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.detail-header__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+/* Inside the sticky header the lifecycle row sheds its card chrome. */
+.detail-header .lifecycle-row {
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.detail-header .detail-title {
+  margin: 0;
+}
+
+/* Configuration cards (variables/migrate + bindings) pair up side by side
+   instead of consuming a full-width row each. */
+.detail-config {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-5);
+  align-items: start;
+}
+
 .detail-back {
   display: inline-flex;
   align-items: center;
@@ -284,6 +391,74 @@
   100% { opacity: 0; }
 }
 
+/* Under reduced motion the global 0.01ms clamp + `forwards` would park the
+   error at opacity 0 before anyone reads it. Show it statically instead;
+   the next lifecycle OOB swap clears it. */
+@media (prefers-reduced-motion: reduce) {
+  .lifecycle-flash--error {
+    animation: none;
+  }
+}
+
+
+/* ---- Lazy-mount slots (skeletons) -------------------------------------- */
+/* hx-trigger="load" sections reserve their final footprint so the page
+   doesn't reflow as swaps land; the outerHTML swap discards the class. */
+.hx-slot {
+  min-height: var(--slot-h, 160px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+}
+
+.hx-slot--players { --slot-h: 220px; }
+.hx-slot--migrate { --slot-h: 320px; }
+
+.skeleton {
+  display: block;
+  background: var(--bg-sunken);
+  border-radius: var(--radius-xs);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton--eyebrow { width: 88px;  height: 12px; }
+.skeleton--bar     { width: 100%;  height: 6px; margin-top: var(--space-2); }
+.skeleton--line    { width: 60%;   height: 12px; }
+.skeleton--block   { width: 100%;  height: 96px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, var(--skeleton-sheen), transparent);
+    animation: skeleton-sheen 1.6s var(--ease) infinite;
+  }
+
+  @keyframes skeleton-sheen {
+    to { transform: translateX(100%); }
+  }
+}
+
+/* Lazy cards fade in on first mount. #server-resources is excluded: it
+   re-swaps every 5s and must not blink. */
+#server-players.htmx-added,
+#migrate-card.htmx-added {
+  opacity: 0;
+}
+
+#server-players,
+#migrate-card {
+  opacity: 1;
+  transition: opacity var(--motion-fast) var(--ease);
+}
+
 
 /* ---- Resources card ---------------------------------------------------- */
 .resources-card {
@@ -352,7 +527,7 @@
 
 .resources-card__grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-3) var(--space-6);
 }
 
@@ -486,6 +661,7 @@
   gap: var(--space-2);
 }
 
+.bindings-form__error,
 .variables-form__error,
 .migrate-card__error {
   color: var(--danger-fg);

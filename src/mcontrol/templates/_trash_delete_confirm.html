@@ -15,17 +15,15 @@
         <span class="t-eyebrow">Type <code>{{ original_name }}</code> to confirm</span>
         <input type="text"
                name="confirm_name"
+               value="{{ confirm_name or '' }}"
                autocomplete="off"
                autofocus
                required>
+        {% if error %}<small class="trash-modal__error">{{ error }}</small>{% endif %}
       </label>
       <div class="trash-modal__actions">
-        <button type="submit" class="trash-modal__btn--danger">Delete now</button>
-        <a class="btn btn--ghost"
-           href="#"
-           hx-get="/trash"
-           hx-target="body"
-           hx-swap="outerHTML">Cancel</a>
+        <button type="submit" class="btn btn--danger-solid">Delete now</button>
+        <button type="button" class="btn btn--ghost" data-modal-close>Cancel</button>
       </div>
     </form>
   </div>

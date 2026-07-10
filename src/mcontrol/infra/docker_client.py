@@ -108,19 +108,41 @@ async def find_network_name(
     return None
 
 
+# Concurrent holders (console SSE + one-shot RCON commands for the same
+# server) share one network membership; without the refcount, one caller's
+# finally-block detach yanks the network out from under the other's live
+# RCON connection.
+_network_refcounts: dict[str, int] = {}
+_network_refcounts_lock = asyncio.Lock()
+
+
 async def attach_self_to_network(
     docker: aiodocker.Docker, network_name: str
 ) -> None:
-    """Connect the mcontrol container to the given docker network. Idempotent
-    in practice: if already connected, the API returns 403 which we suppress."""
-    network = await docker.networks.get(network_name)
-    with suppress(Exception):
-        await network.connect(container=self_container_id())
+    """Connect the mcontrol container to the given docker network. Refcounted:
+    only the 0→1 attach actually connects. Idempotent in practice: if already
+    connected, the API returns 403 which we suppress."""
+    async with _network_refcounts_lock:
+        count = _network_refcounts.get(network_name, 0)
+        if count == 0:
+            network = await docker.networks.get(network_name)
+            with suppress(Exception):
+                await network.connect(container=self_container_id())
+        _network_refcounts[network_name] = count + 1
 
 
 async def detach_self_from_network(
     docker: aiodocker.Docker, network_name: str
 ) -> None:
-    network = await docker.networks.get(network_name)
-    with suppress(Exception):
-        await network.disconnect(container=self_container_id())
+    """Refcounted counterpart: only the 1→0 detach actually disconnects.
+    Floor at 0. an unpaired detach is a no-op."""
+    async with _network_refcounts_lock:
+        count = _network_refcounts.get(network_name, 0)
+        if count > 1:
+            _network_refcounts[network_name] = count - 1
+            return
+        _network_refcounts.pop(network_name, None)
+        if count == 1:
+            network = await docker.networks.get(network_name)
+            with suppress(Exception):
+                await network.disconnect(container=self_container_id())

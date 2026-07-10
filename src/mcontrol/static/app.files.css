@@ -16,12 +16,22 @@
   justify-content: space-between;
 }
 
+/* Positioning context for the floating "new lines" jump chip. */
+.log-pane__body,
+.console-pane__body {
+  position: relative;
+  display: grid;
+}
+
 .log-pane__stream,
 .console-pane__stream {
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-soft);
+  background: var(--bg-terminal);
+  border: 1px solid var(--border-terminal);
   border-radius: var(--radius-sm);
-  color: var(--fg-primary);
+  color: var(--fg-terminal);
+  /* Dark scrollbars/controls even in light theme: the terminal surface
+     is a deliberate dark island in both themes. */
+  color-scheme: dark;
   padding: var(--space-3) var(--space-4);
   height: 18rem;
   overflow-y: auto;
@@ -38,6 +48,61 @@
 .log-pane__stream {
   white-space: pre;
   overflow-x: auto;
+}
+
+.log-line--warn      { color: var(--log-warn); }
+.log-line--error,
+.console-line--error { color: var(--log-error); }
+.log-line--dim,
+.console-line--dim   { color: var(--fg-terminal-dim); }
+.console-line--cmd   { color: var(--log-cmd); font-weight: 600; }
+
+/* Connection state chip in the pane header (dot mirrors the state-pill
+   idiom; state-pulse keyframes live in app.server.css). */
+.pane-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+}
+
+.pane-status__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--fg-muted);
+  flex: none;
+}
+
+.pane-status[data-state="live"] .pane-status__dot         { background: var(--success-fg); }
+.pane-status[data-state="connecting"] .pane-status__dot,
+.pane-status[data-state="reconnecting"] .pane-status__dot { background: var(--warning-fg); animation: state-pulse 1.4s var(--ease) infinite; }
+.pane-status[data-state="closed"] .pane-status__dot       { background: var(--fg-muted); }
+
+/* Floating "N new lines" chip: shown when the user has scrolled up and
+   fresh output lands below the fold. */
+.pane-jump {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-3);
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-terminal);
+  background: var(--bg-terminal);
+  color: var(--fg-terminal);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: color var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease);
+}
+
+.pane-jump:hover {
+  color: var(--accent);
+  border-color: var(--border-strong);
 }
 
 .console-pane__input {
@@ -138,7 +203,7 @@
 .file-tree__toggle:hover,
 .file-tree__entry--file > a:hover,
 .file-tree__entry--symlink > a:hover {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .file-tree__entry--file > a,
@@ -225,7 +290,7 @@
 .file-tree__menu-item:hover,
 .file-tree__menu-item:focus-visible {
   background: var(--bg-sunken);
-  color: var(--accent);
+  color: var(--accent-text);
   outline: none;
 }
 
@@ -532,10 +597,12 @@
   100%     { opacity: 0; }
 }
 
+/* Reduced motion means less movement, not less information: show the
+   confirmation statically instead of fading (the next swap clears it). */
 @media (prefers-reduced-motion: reduce) {
   .file-view__saved {
     animation: none;
-    opacity: 0;
+    opacity: 1;
   }
 }
 
@@ -558,7 +625,7 @@
   border: 0;
   padding: 0;
   font: inherit;
-  color: var(--accent);
+  color: var(--accent-text);
   cursor: pointer;
   text-decoration: underline;
 }
@@ -594,32 +661,6 @@
   gap: var(--space-2);
 }
 
-.file-view__action {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-medium);
-  color: var(--fg-primary);
-  cursor: pointer;
-  padding: 6px var(--space-3);
-  font: inherit;
-  font-size: var(--fs-sm);
-  border-radius: var(--radius-xs);
-  text-decoration: none;
-}
-
-.file-view__action:hover {
-  background: var(--bg-sunken);
-  color: var(--accent);
-}
-
-.file-view__action--danger {
-  color: var(--danger-fg);
-}
-
-.file-view__action--danger:hover {
-  background: var(--danger-bg);
-  color: var(--danger-fg);
-}
-
 
 /* ---- File editor (CodeMirror) ----------------------------------------- */
 .file-editor {
@@ -638,6 +679,36 @@
   font-size: var(--fs-sm);
   overflow: hidden;
   background: var(--bg-surface);
+}
+
+/* Theme the stock-light CodeMirror chrome via tokens. The extra
+   .cm-editor / full-path selectors out-specify CodeMirror's injected
+   base theme, which lands in adoptedStyleSheets and would otherwise
+   win every equal-specificity tie. */
+.file-editor__cm.cm-editor .cm-gutters {
+  background: var(--bg-sunken);
+  color: var(--fg-muted);
+  border-right: 1px solid var(--border-soft);
+}
+
+/* Translucent, not --bg-sunken: the selection layer paints *beneath*
+   the content, so an opaque active-line background would hide any
+   selection on that line. */
+.file-editor__cm.cm-editor .cm-activeLine {
+  background: var(--code-active-line);
+}
+
+.file-editor__cm.cm-editor .cm-activeLineGutter {
+  background: var(--code-active-line);
+}
+
+.file-editor__cm.cm-editor .cm-cursor {
+  border-left-color: var(--fg-primary);
+}
+
+.file-editor__cm.cm-editor .cm-selectionBackground,
+.file-editor__cm.cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background: var(--accent-soft);
 }
 
 .file-editor__actions {

@@ -144,7 +144,7 @@
 }
 
 .players-page__import-btn:hover {
-  background: var(--bg-surface);
+  border-color: var(--info-fg);
 }
 
 .players-page__add {
@@ -189,7 +189,10 @@
 .players-page__table,
 .players-card__table {
   width: 100%;
-  border-collapse: collapse;
+  /* separate (not collapse) so border-radius + overflow clipping work;
+     cell rules come from th/td border-bottom, so nothing doubles up. */
+  border-collapse: separate;
+  border-spacing: 0;
   background: var(--bg-surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
@@ -247,6 +250,32 @@
 
 .players-page__wl-off {
   font-size: var(--fs-xs);
+}
+
+
+/* ---- Who's-online chip (players-card header) --------------------------- */
+.online-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 10px 4px 8px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  background: var(--success-bg);
+  color: var(--success-fg);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.online-chip__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: currentColor;
 }
 
 
@@ -373,36 +402,6 @@
   margin: 0;
 }
 
-.player-remove-modal__btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 14px;
-  min-height: 36px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-medium);
-  background: var(--bg-surface);
-  color: var(--fg-primary);
-  font: inherit;
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.player-remove-modal__btn:hover {
-  background: var(--bg-sunken);
-}
-
-.player-remove-modal__btn--danger {
-  border-color: var(--danger-border);
-  color: var(--danger-fg);
-}
-
-.player-remove-modal__btn--danger:hover {
-  background: var(--danger-bg);
-}
-
-
 /* ---- Trash page ------------------------------------------------------- */
 .trash-page__hint {
   color: var(--fg-secondary);
@@ -412,32 +411,6 @@
 
 .trash-page__empty {
   margin: 0;
-}
-
-.trash-page__empty-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  background: var(--bg-surface);
-  border: 1px solid var(--danger-border);
-  color: var(--danger-fg);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--fs-sm);
-  font-weight: 500;
-}
-
-.trash-page__empty-btn:hover:not(:disabled) {
-  background: var(--danger-bg);
-}
-
-.trash-page__empty-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  border-color: var(--border-medium);
-  color: var(--fg-muted);
 }
 
 .trash-list {
@@ -515,34 +488,17 @@
   gap: var(--space-3);
 }
 
+.trash-modal__error {
+  color: var(--danger-fg);
+  font-size: var(--fs-xs);
+}
+
 .trash-modal__actions {
   display: flex;
   gap: var(--space-2);
   align-items: center;
   flex-wrap: wrap;
 }
-
-.trash-modal__btn--danger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 14px;
-  min-height: 36px;
-  background: var(--danger-border);
-  color: var(--fg-inverse);
-  border: 1px solid var(--danger-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--fs-sm);
-  font-weight: 500;
-}
-
-.trash-modal__btn--danger:hover {
-  background: var(--danger-fg);
-  border-color: var(--danger-fg);
-}
-
 
 /* ---- Error pages ------------------------------------------------------ */
 .error-page {

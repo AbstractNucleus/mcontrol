@@ -60,6 +60,39 @@ async def test_lifespan_does_not_block_startup_on_discovery_failure(
     )
 
 
+async def test_lifespan_constructs_docker_client_with_timeout(
+    env, monkeypatch, tmp_path
+):
+    """A wedged daemon must not hang one-shot calls forever; the shared
+    client is built with an explicit aiohttp.ClientTimeout."""
+    monkeypatch.setenv("SERVER_BASE_PATH", str(tmp_path))
+
+    from mcontrol import main
+    from mcontrol.domain import discovery
+    from tests.conftest import make_fake_docker
+
+    captured: dict = {}
+    fake = make_fake_docker()
+
+    def factory(*_args, **kwargs):
+        captured.update(kwargs)
+        return fake
+
+    monkeypatch.setattr(main.aiodocker, "Docker", factory)
+
+    async def _noop(_docker, _base_path):
+        return 0
+
+    monkeypatch.setattr(discovery, "run_discovery", _noop)
+
+    app = main.create_app()
+    async with app.router.lifespan_context(app):
+        pass
+
+    timeout = captured["timeout"]
+    assert (timeout.connect, timeout.sock_read, timeout.total) == (5, 30, 60)
+
+
 async def test_lifespan_closes_docker_client_on_shutdown(
     env, monkeypatch, tmp_path, fake_docker_factory
 ):

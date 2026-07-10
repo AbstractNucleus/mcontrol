@@ -36,7 +36,6 @@ import aiodocker
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import __version__
 from mcontrol.infra import db_async
 from mcontrol.routes._dependencies import get_docker, get_player_or_404
 from mcontrol.services import membership_service
@@ -59,7 +58,6 @@ def _ctx(
     flash: dict | None = None,
 ) -> dict:
     return {
-        "version": __version__,
         "roster": view["roster"],
         "unknown_count": view["unknown_count"],
         "form": form or {"name": ""},

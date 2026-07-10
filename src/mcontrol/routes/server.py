@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import __version__
 from mcontrol.domain import health, lifecycle_state
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.templates import templates
@@ -18,7 +17,6 @@ async def server_detail(
         request=request,
         name="server_detail.html",
         context={
-            "version": __version__,
             "server": server,
             "state": state,
             "lifecycle": lifecycle_state.view(state),

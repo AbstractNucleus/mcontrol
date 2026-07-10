@@ -1,0 +1,25 @@
+{#
+  Who's-online chip for the players-card header. Poll-refreshed via its
+  own hx-trigger (60s — each RCON one-shot does a network attach/detach,
+  so the cadence stays honest about cost). Context: `server`, `running`,
+  and on RCON success `ok`/`online`/`max_players`/`names`.
+#}
+{% if ok %}
+<span id="online-chip"
+      class="online-chip"
+      hx-get="/servers/{{ server.name }}/players/online"
+      hx-trigger="every 60s"
+      hx-swap="outerHTML"
+      {% if names %}title="{{ names | join(', ') }}"{% endif %}>
+  <span class="online-chip__dot" aria-hidden="true"></span>
+  {{ online }}/{{ max_players }} online
+</span>
+{% elif running %}
+<span id="online-chip"
+      class="state-pill state-pill--running"
+      hx-get="/servers/{{ server.name }}/players/online"
+      hx-trigger="every 60s"
+      hx-swap="outerHTML">live (RCON)</span>
+{% else %}
+<span id="online-chip" class="state-pill state-pill--unknown">offline (file edit)</span>
+{% endif %}

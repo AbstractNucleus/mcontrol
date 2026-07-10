@@ -23,7 +23,8 @@
   <form class="migrate-card__form"
         hx-post="/servers/{{ server.name }}/migrate"
         hx-target="#migrate-card"
-        hx-swap="outerHTML">
+        hx-swap="outerHTML"
+        hx-disabled-elt="find button[type='submit']">
     <label>
       <span class="t-eyebrow">Memory budget (GB)</span>
       <input type="number"
@@ -71,7 +72,7 @@
                 title="Stop the server before migrating.">Migrate to scaffolded shape</button>
         <small class="migrate-card__hint">Stop the server first.</small>
       {% else %}
-        <button type="submit" class="btn btn--primary">Migrate to scaffolded shape</button>
+        <button type="submit" class="btn btn--primary">Migrate to scaffolded shape{% include "_spinner.html" %}</button>
       {% endif %}
     </div>
   </form>

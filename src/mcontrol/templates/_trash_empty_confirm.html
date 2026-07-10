@@ -21,27 +21,21 @@
           <span class="t-eyebrow">Type <code>EMPTY</code> to confirm</span>
           <input type="text"
                  name="confirm"
+                 value="{{ confirm or '' }}"
                  autocomplete="off"
                  autofocus
                  required>
+          {% if error %}<small class="trash-modal__error">{{ error }}</small>{% endif %}
         </label>
         <div class="trash-modal__actions">
-          <button type="submit" class="trash-modal__btn--danger">Empty trash</button>
-          <a class="btn btn--ghost"
-             href="#"
-             hx-get="/trash"
-             hx-target="body"
-             hx-swap="outerHTML">Cancel</a>
+          <button type="submit" class="btn btn--danger-solid">Empty trash</button>
+          <button type="button" class="btn btn--ghost" data-modal-close>Cancel</button>
         </div>
       </form>
     {% else %}
       <p class="t-body">Nothing to sweep: no tombstones older than {{ purge_age_days }} days.</p>
       <div class="trash-modal__actions">
-        <a class="btn btn--ghost"
-           href="#"
-           hx-get="/trash"
-           hx-target="body"
-           hx-swap="outerHTML">Close</a>
+        <button type="button" class="btn btn--ghost" data-modal-close>Close</button>
       </div>
     {% endif %}
   </div>

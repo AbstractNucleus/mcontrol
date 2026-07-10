@@ -32,7 +32,10 @@
     <div class="resources-card__bar">
       {% if ok %}
         {% set _bar_class = 'resources-card__bar-fill--danger' if mem_percent >= 90 else ('resources-card__bar-fill--warning' if mem_percent >= 75 else '') %}
-        <div class="resources-card__bar-fill {{ _bar_class }}" style="width: {{ mem_percent|round(1) }}%"></div>
+        {# Stable id: htmx settle copies the outgoing style/class onto the
+           fresh element, so the width/color transitions animate between
+           polls instead of remounting at final width. #}
+        <div id="resources-bar-fill" class="resources-card__bar-fill {{ _bar_class }}" style="width: {{ mem_percent|round(1) }}%"></div>
       {% endif %}
     </div>
   </div>
@@ -43,6 +46,16 @@
       <dd>
         {% if ok %}
           {{ "%.1f"|format(cpu_percent) }} %
+        {% else %}
+          <span class="t-muted">-</span>
+        {% endif %}
+      </dd>
+    </div>
+    <div class="resources-card__row">
+      <dt>Uptime</dt>
+      <dd>
+        {% if started_at %}
+          {{ started_at | uptime }}
         {% else %}
           <span class="t-muted">-</span>
         {% endif %}

@@ -59,6 +59,26 @@ async def save(
 
     await atomic_write_text_async(target, normalized)
     new_st = target.stat()
+
+    if force:
+        # The only force=true caller is the conflict banner's Overwrite
+        # button, whose hx-target is #file-view (not the form's meta slot),
+        # so returning just the meta fragment would leave the pane with no
+        # editor. Re-render the full view with the fresh content + mtime.
+        return templates.TemplateResponse(
+            request=request,
+            name="_file_view.html",
+            context={
+                "mode": "text",
+                "server_name": name,
+                "filename": rel,
+                "content": normalized,
+                "size": new_st.st_size,
+                "mtime_ns": new_st.st_mtime_ns,
+                "saved": True,
+            },
+        )
+
     # Issue #57: success returns only the meta fragment so the swap doesn't
     # destroy the CodeMirror EditorView. The fragment carries the fresh
     # mtime_ns for the next save and the `saved` indicator.

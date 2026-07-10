@@ -5,6 +5,14 @@ import pytest
 from mcontrol.infra import docker_client
 
 
+@pytest.fixture(autouse=True)
+def _reset_network_refcounts():
+    """The attach/detach refcounts are module state; keep tests isolated."""
+    docker_client._network_refcounts.clear()
+    yield
+    docker_client._network_refcounts.clear()
+
+
 class _FakeSummary:
     """Mimics aiodocker.DockerContainer with a populated `_container` dict
     (the /containers/json summary), which is what container_states_by_name
@@ -226,6 +234,9 @@ async def test_detach_self_from_network_calls_disconnect(env, monkeypatch):
         def __init__(self, name):
             self.name = name
 
+        async def connect(self, *, container):
+            pass
+
         async def disconnect(self, *, container):
             disconnected.append((self.name, container))
 
@@ -234,6 +245,73 @@ async def test_detach_self_from_network_calls_disconnect(env, monkeypatch):
     docker.networks.get = AsyncMock(side_effect=lambda name: _Network(name))
     monkeypatch.setenv("HOSTNAME", "selfid")
 
+    await docker_client.attach_self_to_network(docker, "atm10_default")
     await docker_client.detach_self_from_network(docker, "atm10_default")
 
     assert disconnected == [("atm10_default", "selfid")]
+
+
+class _CountingNetwork:
+    def __init__(self, name, connects, disconnects):
+        self.name = name
+        self._connects = connects
+        self._disconnects = disconnects
+
+    async def connect(self, *, container):
+        self._connects.append((self.name, container))
+
+    async def disconnect(self, *, container):
+        self._disconnects.append((self.name, container))
+
+
+def _refcount_docker(connects: list, disconnects: list) -> MagicMock:
+    docker = MagicMock()
+    docker.networks = MagicMock()
+    docker.networks.get = AsyncMock(
+        side_effect=lambda name: _CountingNetwork(name, connects, disconnects)
+    )
+    return docker
+
+
+async def test_attach_detach_are_refcounted(env, monkeypatch):
+    """Two holders (console SSE + one-shot RCON) share one membership:
+    the second attach doesn't re-connect and the first detach doesn't
+    disconnect; only the final detach does."""
+    connects: list = []
+    disconnects: list = []
+    docker = _refcount_docker(connects, disconnects)
+    monkeypatch.setenv("HOSTNAME", "selfid")
+
+    await docker_client.attach_self_to_network(docker, "atm10_default")
+    await docker_client.attach_self_to_network(docker, "atm10_default")
+    assert connects == [("atm10_default", "selfid")]
+
+    await docker_client.detach_self_from_network(docker, "atm10_default")
+    assert disconnects == []
+
+    await docker_client.detach_self_from_network(docker, "atm10_default")
+    assert disconnects == [("atm10_default", "selfid")]
+
+
+async def test_detach_without_attach_is_a_noop(env, monkeypatch):
+    disconnects: list = []
+    docker = _refcount_docker([], disconnects)
+    monkeypatch.setenv("HOSTNAME", "selfid")
+
+    await docker_client.detach_self_from_network(docker, "atm10_default")
+
+    assert disconnects == []
+
+
+async def test_refcounts_are_per_network(env, monkeypatch):
+    connects: list = []
+    disconnects: list = []
+    docker = _refcount_docker(connects, disconnects)
+    monkeypatch.setenv("HOSTNAME", "selfid")
+
+    await docker_client.attach_self_to_network(docker, "atm10_default")
+    await docker_client.attach_self_to_network(docker, "moni_default")
+    await docker_client.detach_self_from_network(docker, "atm10_default")
+
+    assert connects == [("atm10_default", "selfid"), ("moni_default", "selfid")]
+    assert disconnects == [("atm10_default", "selfid")]

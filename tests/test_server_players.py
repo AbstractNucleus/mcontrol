@@ -406,3 +406,75 @@ async def test_toggle_op_running_uses_rcon_op_and_deop(
     )
 
     assert commands == ["op Notch", "deop Notch"]
+
+
+# ---------------------------------------------------------------------------
+# Who's-online chip
+# ---------------------------------------------------------------------------
+
+
+async def test_online_chip_renders_count_and_names(
+    client, fake_db, tmp_path, monkeypatch
+):
+    from mcontrol.infra import server_rcon
+
+    server_dir = tmp_path / "atm10"
+    (server_dir / "server").mkdir(parents=True)
+    fake_db["servers"]["atm10"] = {
+        "name": "atm10", "container_name": None,
+        "dir": str(server_dir), "state": "running",
+    }
+
+    async def fake_run(_docker, _server, command):
+        assert command == "list"
+        return "There are 2 of a max of 20 players online: Steve, Alex"
+
+    monkeypatch.setattr(server_rcon, "run_command", fake_run)
+
+    response = await client.get("/servers/atm10/players/online")
+
+    body = response.text
+    assert response.status_code == 200
+    assert "2/20 online" in body
+    assert 'title="Steve, Alex"' in body
+    assert 'hx-trigger="every 60s"' in body
+
+
+async def test_online_chip_degrades_to_live_pill_when_rcon_down(
+    client, fake_db, tmp_path, monkeypatch
+):
+    from mcontrol.infra import server_rcon
+
+    server_dir = tmp_path / "atm10"
+    (server_dir / "server").mkdir(parents=True)
+    fake_db["servers"]["atm10"] = {
+        "name": "atm10", "container_name": None,
+        "dir": str(server_dir), "state": "running",
+    }
+
+    async def fake_run(_docker, _server, command):
+        raise server_rcon.RconUnavailable("rcon disabled")
+
+    monkeypatch.setattr(server_rcon, "run_command", fake_run)
+
+    response = await client.get("/servers/atm10/players/online")
+
+    assert response.status_code == 200
+    assert "live (RCON)" in response.text
+    assert "online-chip__dot" not in response.text
+
+
+async def test_online_chip_offline_server_shows_offline_pill(
+    client, fake_db, tmp_path
+):
+    server_dir = tmp_path / "atm10"
+    (server_dir / "server").mkdir(parents=True)
+    fake_db["servers"]["atm10"] = {
+        "name": "atm10", "container_name": None,
+        "dir": str(server_dir), "state": "exited",
+    }
+
+    response = await client.get("/servers/atm10/players/online")
+
+    assert response.status_code == 200
+    assert "offline (file edit)" in response.text

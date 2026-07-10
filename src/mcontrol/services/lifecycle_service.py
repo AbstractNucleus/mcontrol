@@ -28,26 +28,33 @@ _LISTENER_PROBE_INTERVAL_S = 0.25
 _LISTENER_PROBE_CONNECT_TIMEOUT_S = 0.5
 
 
+def _connect_once(port: int) -> bool:
+    try:
+        with socket.create_connection(
+            ("127.0.0.1", port), timeout=_LISTENER_PROBE_CONNECT_TIMEOUT_S
+        ):
+            return True
+    except OSError:
+        return False
+
+
 async def probe_listener(port: int) -> bool:
     """Return True if a TCP connect to 127.0.0.1:port succeeds within
     the probe deadline. Connects are run in a thread to avoid blocking
     the event loop."""
     deadline = time.monotonic() + _LISTENER_PROBE_DEADLINE_S
 
-    def _connect_once() -> bool:
-        try:
-            with socket.create_connection(
-                ("127.0.0.1", port), timeout=_LISTENER_PROBE_CONNECT_TIMEOUT_S
-            ):
-                return True
-        except OSError:
-            return False
-
     while time.monotonic() < deadline:
-        if await asyncio.to_thread(_connect_once):
+        if await asyncio.to_thread(_connect_once, port):
             return True
         await asyncio.sleep(_LISTENER_PROBE_INTERVAL_S)
     return False
+
+
+async def probe_listener_once(port: int) -> bool:
+    """Single-shot probe for the resources-poll reconciler; the deadline
+    probe above would stall the 5s card refresh."""
+    return await asyncio.to_thread(_connect_once, port)
 
 
 async def start_server(

@@ -20,7 +20,6 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol import __version__
 from mcontrol.domain import tombstones
 from mcontrol.infra.resources import format_bytes
 from mcontrol.settings import Settings
@@ -58,7 +57,6 @@ def _list_view(base: Path) -> dict:
     sweepable = [t for t in rows if t.age_seconds >= cutoff]
     sweep_bytes = sum(t.bytes for t in sweepable)
     return {
-        "version": __version__,
         "tombstones": [
             {
                 "dir_name": t.dir_name,
@@ -74,10 +72,31 @@ def _list_view(base: Path) -> dict:
     }
 
 
+def _sweepable_view(base: Path) -> dict:
+    cutoff = tombstones.DEFAULT_PURGE_AGE_DAYS * 86400
+    sweepable = [
+        t for t in tombstones.list_tombstones(base) if t.age_seconds >= cutoff
+    ]
+    return {
+        "sweepable": [
+            {
+                "dir_name": t.dir_name,
+                "original_name": t.original_name,
+                "age_human": _humanize_age(t.age_seconds),
+                "bytes_human": format_bytes(t.bytes),
+            }
+            for t in sweepable
+        ],
+        "purge_age_days": tombstones.DEFAULT_PURGE_AGE_DAYS,
+    }
+
+
 @router.get("/trash", response_class=HTMLResponse)
 async def get_page(request: Request) -> HTMLResponse:
+    # Full-tree tombstone walk; keep it off the event loop.
+    context = await asyncio.to_thread(_list_view, _base(request))
     return templates.TemplateResponse(
-        request=request, name="trash.html", context=_list_view(_base(request))
+        request=request, name="trash.html", context=context
     )
 
 
@@ -85,35 +104,25 @@ async def get_page(request: Request) -> HTMLResponse:
 async def empty_confirm(request: Request) -> HTMLResponse:
     """Modal partial. the count + bytes preview before the operator
     types 'EMPTY' to confirm."""
-    base = _base(request)
-    cutoff = tombstones.DEFAULT_PURGE_AGE_DAYS * 86400
-    sweepable = [
-        t for t in tombstones.list_tombstones(base) if t.age_seconds >= cutoff
-    ]
+    context = await asyncio.to_thread(_sweepable_view, _base(request))
     return templates.TemplateResponse(
         request=request,
         name="_trash_empty_confirm.html",
-        context={
-            "sweepable": [
-                {
-                    "dir_name": t.dir_name,
-                    "original_name": t.original_name,
-                    "age_human": _humanize_age(t.age_seconds),
-                    "bytes_human": format_bytes(t.bytes),
-                }
-                for t in sweepable
-            ],
-            "purge_age_days": tombstones.DEFAULT_PURGE_AGE_DAYS,
-        },
+        context=context,
     )
 
 
 @router.post("/trash/empty", response_class=HTMLResponse)
 async def empty(request: Request, confirm: str = Form("")) -> HTMLResponse:
     if confirm.strip() != "EMPTY":
-        raise HTTPException(
+        context = await asyncio.to_thread(_sweepable_view, _base(request))
+        context["error"] = "Type EMPTY (uppercase) to confirm."
+        context["confirm"] = confirm
+        return templates.TemplateResponse(
+            request=request,
+            name="_trash_empty_confirm.html",
+            context=context,
             status_code=422,
-            detail="Type EMPTY (uppercase) to confirm.",
         )
     await asyncio.to_thread(tombstones.purge_older_than, _base(request))
     response = HTMLResponse("", status_code=200)
@@ -144,9 +153,16 @@ async def delete(
         raise HTTPException(status_code=404, detail="Not a tombstone")
     original_name, _ts = parsed
     if confirm_name.strip() != original_name:
-        raise HTTPException(
+        return templates.TemplateResponse(
+            request=request,
+            name="_trash_delete_confirm.html",
+            context={
+                "dir_name": dir_name,
+                "original_name": original_name,
+                "confirm_name": confirm_name,
+                "error": f"Type the server name ({original_name!r}) to confirm.",
+            },
             status_code=422,
-            detail=f"Type the server name ({original_name!r}) to confirm.",
         )
     try:
         await asyncio.to_thread(tombstones.purge_one, _base(request), dir_name)

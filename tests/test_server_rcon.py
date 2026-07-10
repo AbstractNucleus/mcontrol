@@ -63,6 +63,65 @@ async def test_run_command_raises_when_no_docker_network(tmp_path, monkeypatch):
         await server_rcon.run_command(object(), server, "whitelist add Notch")
 
 
+@pytest.fixture
+def rcon_network_ok(monkeypatch):
+    """Stub the docker-network dance so tests can exercise the RCON leg."""
+    from mcontrol.infra import docker_client
+
+    async def fake_find(_docker, _name):
+        return "mcnet"
+
+    async def _noop(_docker, _network):
+        return None
+
+    monkeypatch.setattr(docker_client, "find_network_name", fake_find)
+    monkeypatch.setattr(docker_client, "attach_self_to_network", _noop)
+    monkeypatch.setattr(docker_client, "detach_self_from_network", _noop)
+
+
+async def test_run_command_maps_connect_timeout_to_unavailable(
+    tmp_path, monkeypatch, rcon_network_ok
+):
+    server = _server_with_props(
+        tmp_path, "enable-rcon=true\nrcon.password=secret\n"
+    )
+
+    from mcontrol.infra import rcon
+
+    async def fake_connect(_host, _port, _password):
+        raise TimeoutError()
+
+    monkeypatch.setattr(rcon, "connect", fake_connect)
+
+    with pytest.raises(server_rcon.RconUnavailable, match="timed out"):
+        await server_rcon.run_command(object(), server, "whitelist add Notch")
+
+
+async def test_run_command_maps_command_timeout_to_unavailable(
+    tmp_path, monkeypatch, rcon_network_ok
+):
+    server = _server_with_props(
+        tmp_path, "enable-rcon=true\nrcon.password=secret\n"
+    )
+
+    from mcontrol.infra import rcon
+
+    class _Conn:
+        async def run(self, _command):
+            raise TimeoutError()
+
+        async def close(self):
+            return None
+
+    async def fake_connect(_host, _port, _password):
+        return _Conn()
+
+    monkeypatch.setattr(rcon, "connect", fake_connect)
+
+    with pytest.raises(server_rcon.RconUnavailable, match="timed out"):
+        await server_rcon.run_command(object(), server, "whitelist add Notch")
+
+
 # ---------------------------------------------------------------------------
 # Stale-password detection (issue 119)
 # ---------------------------------------------------------------------------

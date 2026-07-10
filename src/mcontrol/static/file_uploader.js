@@ -181,12 +181,12 @@ function showUploadProgress(onCancel) {
   const s = status();
   if (!s) return { update() {} };
   s.innerHTML = `<div class="file-upload-progress" id="file-upload-progress">
-       <p class="t-caption file-upload-progress__caption" data-upload-caption>Uploading… 0%</p>
+       <p class="t-caption file-upload-progress__caption" role="status" data-upload-caption>Uploading… 0%</p>
        <div class="file-upload-progress__bar">
          <div class="file-upload-progress__fill" data-upload-fill style="width: 0%"></div>
        </div>
        <div class="file-upload-progress__actions">
-         <button type="button" class="file-action-form__btn" data-upload-cancel>Cancel</button>
+         <button type="button" class="btn btn--sm file-action-form__btn" data-upload-cancel>Cancel</button>
        </div>
      </div>`;
   const caption = s.querySelector("[data-upload-caption]");
@@ -250,7 +250,7 @@ function showConflict(html, onOverwrite) {
 function showError(msg) {
   const s = status();
   if (!s) return;
-  s.innerHTML = `<div class="file-upload-error t-caption">${escapeHtml(msg)}</div>`;
+  s.innerHTML = `<div class="file-upload-error t-caption" role="alert">${escapeHtml(msg)}</div>`;
 }
 
 // Surface the backend's `detail` field (FastAPI's HTTPException shape)
@@ -324,16 +324,16 @@ function showDeleteConfirm(ds) {
          <p class="t-caption">Delete folder <code>${safeName}/</code> and everything inside?</p>
          <p class="t-caption">Type <code>${safeName}</code> to confirm:</p>
          <div class="file-delete-confirm__actions">
-           <input type="text" autocomplete="off" data-confirm-input>
-           <button type="button" class="file-delete-confirm__btn file-delete-confirm__btn--danger" data-confirm-submit disabled>Delete</button>
-           <button type="button" class="file-delete-confirm__btn" data-confirm-cancel>Cancel</button>
+           <input type="text" autocomplete="off" aria-label="Type the name to confirm deletion" data-confirm-input>
+           <button type="button" class="btn btn--sm btn--danger-solid file-delete-confirm__btn file-delete-confirm__btn--danger" data-confirm-submit disabled>Delete</button>
+           <button type="button" class="btn btn--sm file-delete-confirm__btn" data-confirm-cancel>Cancel</button>
          </div>
        </div>`
     : `<div class="file-delete-confirm" id="file-delete-confirm">
          <p class="t-caption">Delete <code>${safeName}</code>?</p>
          <div class="file-delete-confirm__actions">
-           <button type="button" class="file-delete-confirm__btn file-delete-confirm__btn--danger" data-confirm-submit>Delete</button>
-           <button type="button" class="file-delete-confirm__btn" data-confirm-cancel>Cancel</button>
+           <button type="button" class="btn btn--sm btn--danger file-delete-confirm__btn file-delete-confirm__btn--danger" data-confirm-submit>Delete</button>
+           <button type="button" class="btn btn--sm file-delete-confirm__btn" data-confirm-cancel>Cancel</button>
          </div>
        </div>`;
 
@@ -362,9 +362,9 @@ function showMkdirForm(parentPath) {
   s.innerHTML = `<div class="file-action-form" id="file-mkdir-form">
        <p class="t-caption">New folder in <code>${escapeHtml(label)}</code>:</p>
        <div class="file-action-form__actions">
-         <input type="text" autocomplete="off" placeholder="folder name" data-mkdir-input>
-         <button type="button" class="file-action-form__btn" data-mkdir-submit>Create</button>
-         <button type="button" class="file-action-form__btn" data-mkdir-cancel>Cancel</button>
+         <input type="text" autocomplete="off" placeholder="folder name" aria-label="Folder name" data-mkdir-input>
+         <button type="button" class="btn btn--sm file-action-form__btn" data-mkdir-submit>Create</button>
+         <button type="button" class="btn btn--sm file-action-form__btn" data-mkdir-cancel>Cancel</button>
        </div>
      </div>`;
 
@@ -455,9 +455,9 @@ function showRenameForm(path, currentName) {
   s.innerHTML = `<div class="file-action-form" id="file-rename-form">
        <p class="t-caption">Rename <code>${escapeHtml(currentName)}</code> to:</p>
        <div class="file-action-form__actions">
-         <input type="text" autocomplete="off" data-rename-input>
-         <button type="button" class="file-action-form__btn" data-rename-submit>Rename</button>
-         <button type="button" class="file-action-form__btn" data-rename-cancel>Cancel</button>
+         <input type="text" autocomplete="off" aria-label="New name" data-rename-input>
+         <button type="button" class="btn btn--sm file-action-form__btn" data-rename-submit>Rename</button>
+         <button type="button" class="btn btn--sm file-action-form__btn" data-rename-cancel>Cancel</button>
        </div>
      </div>`;
 
@@ -536,8 +536,8 @@ function showMoveModal(sourcePath, sourceName) {
          Selected: <code data-move-selection>(none)</code>
        </p>
        <div class="file-move-modal__actions">
-         <button type="button" class="file-action-form__btn" data-move-submit disabled>Move here</button>
-         <button type="button" class="file-action-form__btn" data-move-cancel>Cancel</button>
+         <button type="button" class="btn btn--sm file-action-form__btn" data-move-submit disabled>Move here</button>
+         <button type="button" class="btn btn--sm file-action-form__btn" data-move-cancel>Cancel</button>
        </div>
      </div>`;
 

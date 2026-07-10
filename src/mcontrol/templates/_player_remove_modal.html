@@ -20,10 +20,11 @@
       <form hx-post="/players/{{ player.uuid }}/remove"
             hx-target="#players-main"
             hx-swap="outerHTML"
+            hx-disabled-elt="find button[type='submit']"
             class="player-remove-modal__form">
         <input type="hidden" name="scope" value="roster">
-        <button type="submit" class="player-remove-modal__btn">
-          Roster only
+        <button type="submit" class="btn">
+          Roster only{% include "_spinner.html" %}
         </button>
         <p class="t-caption">Removes the row only. Disk is untouched.</p>
       </form>
@@ -32,18 +33,19 @@
         <form hx-post="/players/{{ player.uuid }}/remove"
               hx-target="#players-main"
               hx-swap="outerHTML"
+              hx-disabled-elt="find button[type='submit']"
               class="player-remove-modal__form">
           <input type="hidden" name="scope" value="all">
           <button type="submit"
-                  class="player-remove-modal__btn player-remove-modal__btn--danger">
-            Remove from all servers
+                  class="btn btn--danger">
+            Remove from all servers{% include "_spinner.html" %}
           </button>
           <p class="t-caption">Runs whitelist remove / deop on each server, then deletes the row.</p>
         </form>
       {% endif %}
 
       <button type="button"
-              class="player-remove-modal__btn"
+              class="btn"
               data-modal-close>
         Cancel
       </button>

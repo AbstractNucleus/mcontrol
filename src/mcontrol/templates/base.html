@@ -34,8 +34,12 @@
       try {
         var w = localStorage.getItem("sidebar-width");
         if (w) document.documentElement.style.setProperty("--sidebar-width", w);
-        if (localStorage.getItem("sidebar-collapsed") === "1") {
+        var collapsed = localStorage.getItem("sidebar-collapsed");
+        if (collapsed === "1") {
           document.documentElement.setAttribute("data-sidebar", "collapsed");
+        } else if (collapsed === "0") {
+          // Explicit expand survives the <768px auto-collapse media query.
+          document.documentElement.setAttribute("data-sidebar", "expanded");
         }
       } catch (_) {}
     })();
@@ -44,31 +48,33 @@
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/favicon.svg">
   <link rel="manifest" href="/static/site.webmanifest">
+  {# app.css's @import chain hid the ?v cache-buster from every module;
+     link each module directly so deploys actually invalidate. Order
+     matches the old @import cascade. #}
   <link rel="stylesheet" href="/static/tokens.css?v={{ version }}">
-  <link rel="stylesheet" href="/static/app.css?v={{ version }}">
-  <script src="/static/htmx.min.js" defer></script>
-  <script src="/static/htmx-ext-sse.js" defer></script>
+  <link rel="stylesheet" href="/static/app.shell.css?v={{ version }}">
+  <link rel="stylesheet" href="/static/app.controls.css?v={{ version }}">
+  <link rel="stylesheet" href="/static/app.server.css?v={{ version }}">
+  <link rel="stylesheet" href="/static/app.files.css?v={{ version }}">
+  <link rel="stylesheet" href="/static/app.misc.css?v={{ version }}">
+  <script src="/static/htmx.min.js?v={{ version }}" defer></script>
+  <script src="/static/htmx-ext-sse.js?v={{ version }}" defer></script>
+  <script src="/static/errors.js?v={{ version }}" defer></script>
   <script src="/static/theme.js?v={{ version }}" defer></script>
   <script src="/static/sidebar.js?v={{ version }}" defer></script>
   <script src="/static/flash.js?v={{ version }}" defer></script>
   <script src="/static/modals.js?v={{ version }}" defer></script>
+  <script src="/static/focus.js?v={{ version }}" defer></script>
   <script src="/static/lifecycle.js?v={{ version }}" defer></script>
+  <script src="/static/streams.js?v={{ version }}" defer></script>
+  <script src="/static/switcher.js?v={{ version }}" defer></script>
   {% block head_scripts %}{% endblock %}
-  <script>
-    // The file-save endpoint returns HTTP 409 with a swappable conflict
-    // partial. Tell htmx to swap on 409 instead of treating it as an error.
-    document.addEventListener("htmx:beforeSwap", function (evt) {
-      if (evt.detail.xhr && evt.detail.xhr.status === 409) {
-        evt.detail.shouldSwap = true;
-        evt.detail.isError = false;
-      }
-    });
-  </script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   <div class="app-shell">
     {% include "_sidebar.html" %}
-    <main class="page-main">
+    <main id="main" class="page-main" tabindex="-1">
       {% block main %}{% endblock %}
     </main>
   </div>

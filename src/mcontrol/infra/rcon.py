@@ -32,6 +32,11 @@ _AUTH_RESPONSE = 2
 _EXECCOMMAND = 2
 _RESPONSE_VALUE = 0
 
+# A wedged RCON port must not hang requests forever (or hold the
+# per-server console lock). Timeouts raise TimeoutError to the caller.
+_CONNECT_TIMEOUT_S = 5.0
+_COMMAND_TIMEOUT_S = 10.0
+
 
 class RconError(RuntimeError):
     pass
@@ -55,6 +60,15 @@ class _RconConnection:
     async def run(self, command: str) -> str:
         if self._closed:
             raise RconClosedError("connection has been closed")
+        try:
+            return await asyncio.wait_for(self._exchange(command), _COMMAND_TIMEOUT_S)
+        except TimeoutError:
+            # A half-read response would desync every later exchange on
+            # this connection, so a timed-out command closes it.
+            await self.close()
+            raise
+
+    async def _exchange(self, command: str) -> str:
         packet_id = next(self._ids)
         await self._send(packet_id, _EXECCOMMAND, command.encode("utf-8"))
         sentinel_id = next(self._ids)
@@ -98,12 +112,20 @@ class _RconConnection:
 
 async def connect(host: str, port: int, password: str) -> _RconConnection:
     """Open and authenticate an RCON connection. Raises AuthenticationError
-    if the server rejects the password."""
-    reader, writer = await asyncio.open_connection(host, port)
+    if the server rejects the password, TimeoutError if the port hangs."""
+    reader, writer = await asyncio.wait_for(
+        asyncio.open_connection(host, port), _CONNECT_TIMEOUT_S
+    )
     conn = _RconConnection(reader, writer)
     auth_id = next(conn._ids)
     await conn._send(auth_id, _AUTH, password.encode("utf-8"))
-    response_id, response_type, _ = await conn._read()
+    try:
+        response_id, response_type, _ = await asyncio.wait_for(
+            conn._read(), _CONNECT_TIMEOUT_S
+        )
+    except TimeoutError:
+        await conn.close()
+        raise
     if response_type != _AUTH_RESPONSE:
         await conn.close()
         raise RconError(f"expected AUTH_RESPONSE, got {response_type}")

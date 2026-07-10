@@ -13,6 +13,7 @@
              name="memory_budget_gb"
              min="2"
              value="{{ vars.memory_budget_gb if vars.memory_budget_gb is not none else '' }}"
+             autofocus
              required>
       {% if errors.memory_budget_gb %}<small class="variables-form__error">{{ errors.memory_budget_gb }}</small>{% endif %}
     </label>

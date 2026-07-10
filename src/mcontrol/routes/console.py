@@ -24,6 +24,7 @@ from pathlib import Path
 import aiodocker
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
+from markupsafe import escape
 
 from mcontrol.domain import server_props
 from mcontrol.infra import db, docker_client, rcon, server_rcon
@@ -39,12 +40,38 @@ _output_queues: dict[str, asyncio.Queue] = {}
 # Server name → Lock held for the entire lifetime of an open SSE stream.
 # Prevents two concurrent clients from racing on _active_connections.
 _connection_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+# Server name → Lock serialising POSTed commands: concurrent submits on one
+# RCON connection interleave protocol packets and desync it.
+_submit_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 _RCON_DISABLED_MSG = (
-    b"data: [info] RCON is not enabled for this server. Set "
-    b"enable-rcon=true and rcon.password=... in server/server.properties, "
-    b"then restart.\n\n"
+    "[info] RCON is not enabled for this server. Set "
+    "enable-rcon=true and rcon.password=... in server/server.properties, "
+    "then restart."
 )
+
+# Terminal event: the pane's sse-close attribute shuts the EventSource down
+# cleanly instead of auto-reconnecting and replaying the error forever.
+_CLOSED = b"event: closed\ndata: \n\n"
+
+
+def _payload(line: str) -> str:
+    """HTML-escaped, classified console line (the client swaps HTML)."""
+    if line.startswith("> "):
+        css = "console-line console-line--cmd"
+    elif line.startswith("[error]"):
+        css = "console-line console-line--error"
+    elif line.startswith("[info]"):
+        css = "console-line console-line--dim"
+    else:
+        css = "console-line"
+    return f'<span class="{css}">{escape(line)}</span>'
+
+
+def _message(line: str) -> bytes:
+    # Two "data:" lines: the joined payload ends with \n so each line lands
+    # on its own row under hx-swap="beforeend" (same trick as logs.py).
+    return f"data: {_payload(line)}\ndata: \n\n".encode()
 
 
 def _read_rcon_properties(props_path: Path) -> tuple[bool, str]:
@@ -68,18 +95,21 @@ async def _stream(
 ) -> AsyncIterator[bytes]:
     enabled, password = _read_rcon_properties(server_dir / "server" / "server.properties")
     if not enabled or not password:
-        yield _RCON_DISABLED_MSG
+        yield _message(_RCON_DISABLED_MSG)
+        yield _CLOSED
         return
 
     lock = _connection_locks[name]
     if lock.locked():
-        yield b"data: [error] console already open in another tab\n\n"
+        yield _message("[error] console already open in another tab")
+        yield _CLOSED
         return
     await lock.acquire()
     try:
         network_name = await docker_client.find_network_name(docker, container_name)
         if network_name is None:
-            yield b"data: [error] no docker network found for container\n\n"
+            yield _message("[error] no docker network found for container")
+            yield _CLOSED
             return
 
         await docker_client.attach_self_to_network(docker, network_name)
@@ -91,7 +121,7 @@ async def _stream(
             _output_queues[name] = queue
 
             try:
-                yield b"data: [info] rcon connected\n\n"
+                yield _message("[info] rcon connected")
                 # Poll for client disconnect alongside queue reads. Short timeout
                 # keeps the loop responsive when the SSE consumer goes away.
                 while True:
@@ -102,7 +132,7 @@ async def _stream(
                     except TimeoutError:
                         yield b": keepalive\n\n"
                         continue
-                    yield f"data: {line}\n\n".encode()
+                    yield _message(line)
             finally:
                 _active_connections.pop(name, None)
                 _output_queues.pop(name, None)
@@ -136,11 +166,20 @@ async def stream(
 async def submit(name: str, command: str = Form(...)) -> HTMLResponse:
     if name not in _active_connections:
         raise HTTPException(status_code=409, detail="open the console first")
-    conn = _active_connections[name]
-    queue = _output_queues[name]
-    response = await conn.run(command)
-    # Echo the command + response into the SSE stream.
-    await queue.put(f"> {command}")
-    if response:
-        await queue.put(response)
+    async with _submit_locks[name]:
+        if name not in _active_connections:
+            raise HTTPException(status_code=409, detail="open the console first")
+        conn = _active_connections[name]
+        queue = _output_queues[name]
+        try:
+            response = await conn.run(command)
+        except TimeoutError:
+            raise HTTPException(
+                status_code=504, detail="RCON command timed out"
+            ) from None
+        # Echo the command + response into the SSE stream. Responses may be
+        # multi-line; queue per line so SSE framing stays intact.
+        await queue.put(f"> {command}")
+        for line in (response or "").splitlines():
+            await queue.put(line)
     return HTMLResponse("", status_code=204)

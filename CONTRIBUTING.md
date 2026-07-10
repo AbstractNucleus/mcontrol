@@ -59,7 +59,7 @@ Stub collaborators with `monkeypatch` so tests never hit a real DB or Docker soc
 
 ```python
 async def test_example_renders(client, monkeypatch):
-    from mcontrol import db
+    from mcontrol.infra import db
 
     monkeypatch.setattr(db, "list_servers", lambda: [{"name": "atm10", "state": "running"}])
 
@@ -75,5 +75,5 @@ See `tests/test_home.py` or `tests/test_server_detail.py` for worked examples of
 
 - **Surgical changes only.** Touch what the issue requires; don't clean up adjacent code.
 - **No inline styles.** Components consume `--token-name` variables; new colours go in the semantic layer of `src/mcontrol/static/tokens.css`.
-- **Route modules are thin.** Business logic lives in domain modules (`db.py`, `discovery.py`, etc.); routes wire HTTP to those modules.
+- **Route modules are thin.** HTTP wiring lives in `src/mcontrol/routes/`; business logic in `src/mcontrol/services/` and `src/mcontrol/domain/`; storage and Docker adapters in `src/mcontrol/infra/`.
 - **Comments are sparse.** Default to no comments. Add one only when the *why* is non-obvious: a hidden constraint, a workaround, a surprising invariant.

@@ -1,22 +1,34 @@
 <section class="console-pane">
   <header class="console-pane__head">
     <p class="t-eyebrow">RCON Console</p>
-    <span class="t-caption t-muted">live</span>
+    <span class="pane-status" data-stream-status data-state="connecting">
+      <span class="pane-status__dot" aria-hidden="true"></span>
+      <span class="pane-status__label" data-stream-status-label>connecting…</span>
+    </span>
   </header>
-  <pre id="console-stream"
-       class="console-pane__stream"
-       role="log"
-       aria-live="polite"
-       aria-atomic="false"
-       aria-label="RCON console output"
-       hx-ext="sse"
-       sse-connect="/servers/{{ server.name }}/rcon"
-       sse-swap="message"
-       hx-swap="beforeend"></pre>
+  <div class="console-pane__body">
+    <pre id="console-stream"
+         class="console-pane__stream"
+         role="log"
+         aria-live="polite"
+         aria-atomic="false"
+         aria-label="RCON console output"
+         hx-ext="sse"
+         sse-connect="/servers/{{ server.name }}/rcon"
+         sse-swap="message"
+         sse-close="closed"
+         hx-swap="beforeend"
+         data-stream-scroll></pre>
+    <button type="button" class="pane-jump" data-stream-jump hidden>
+      <span data-stream-jump-count>0</span> new lines ↓
+    </button>
+  </div>
   <form class="console-pane__input"
+        data-console-form="{{ server.name }}"
         hx-post="/servers/{{ server.name }}/rcon"
-        hx-swap="none">
+        hx-swap="none"
+        hx-disabled-elt="find button[type='submit']">
     <input type="text" name="command" aria-label="RCON command" placeholder="say hello" autocomplete="off" required>
-    <button type="submit" class="btn btn--primary">Send</button>
+    <button type="submit" class="btn btn--primary">Send{% include "_spinner.html" %}</button>
   </form>
 </section>

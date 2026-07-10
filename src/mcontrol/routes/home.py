@@ -6,7 +6,6 @@ import aiodocker
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from mcontrol import __version__
 from mcontrol.domain import discovery
 from mcontrol.infra import db, db_async, resources
 from mcontrol.routes._dependencies import get_docker
@@ -38,6 +37,19 @@ def _format_memory(stats: object) -> str | None:
     )
 
 
+def _row_view(row: dict, stats: object) -> dict:
+    ok = isinstance(stats, dict) and stats.get("status") == "ok"
+    return {
+        **row,
+        "memory": _format_memory(stats),
+        "cpu": f"{stats['cpu_percent']:.1f} %" if ok else None,
+        "mem_used": stats["mem_used"] if ok else 0,
+        "mem_limit": stats["mem_limit"] if ok else 0,
+        "started_at": stats.get("started_at") if ok else None,
+        "port": (row.get("variables") or {}).get("port"),
+    }
+
+
 @router.get("/", response_class=HTMLResponse)
 async def home(
     request: Request,
@@ -55,14 +67,26 @@ async def home(
     )
 
     rows = [
-        {**row, "memory": _format_memory(stats)}
+        _row_view(row, stats)
         for row, stats in zip(servers, stats_results, strict=True)
     ]
+
+    mem_limit = sum(r["mem_limit"] for r in rows)
+    summary = {
+        "total": len(rows),
+        "running": sum(1 for r in rows if r.get("state") == "running"),
+        "memory": (
+            f"{resources.format_bytes(sum(r['mem_used'] for r in rows))}"
+            f" / {resources.format_bytes(mem_limit)}"
+            if mem_limit
+            else None
+        ),
+    }
 
     return templates.TemplateResponse(
         request=request,
         name="home.html",
-        context={"version": __version__, "servers": rows},
+        context={"servers": rows, "summary": summary},
     )
 
 

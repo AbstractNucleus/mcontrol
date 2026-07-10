@@ -193,6 +193,13 @@ async def test_post_empty_rejects_when_confirm_text_wrong(trash_client):
 
     assert response.status_code == 422
     assert stale.exists()
+    # Re-renders the confirm modal inline with the error and the typed value.
+    body = response.text
+    assert "Type EMPTY (uppercase) to confirm." in body
+    assert "trash-modal__error" in body
+    assert 'role="dialog"' in body
+    assert 'value="empty"' in body
+    assert "stale" in body  # sweepable context rebuilt
 
 
 async def test_post_empty_rejects_when_confirm_missing(trash_client):
@@ -204,6 +211,10 @@ async def test_post_empty_rejects_when_confirm_missing(trash_client):
 
     assert response.status_code == 422
     assert stale.exists()
+    body = response.text
+    assert "Type EMPTY (uppercase) to confirm." in body
+    assert "trash-modal__error" in body
+    assert 'role="dialog"' in body
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +247,12 @@ async def test_post_delete_rejects_when_confirm_name_mismatched(trash_client):
 
     assert response.status_code == 422
     assert tomb.exists()
+    # Re-renders the confirm modal inline with the error and the typed value.
+    body = response.text
+    assert "Type the server name" in body
+    assert "trash-modal__error" in body
+    assert 'role="dialog"' in body
+    assert 'value="wrongname"' in body
 
 
 async def test_post_delete_returns_404_for_non_tombstone_dir_name(trash_client):

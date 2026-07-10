@@ -16,7 +16,7 @@ carrying two HTMX swap targets:
 """
 
 import aiodocker
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol.domain import lifecycle_state
@@ -27,6 +27,10 @@ from mcontrol.templates import templates
 router = APIRouter()
 
 _TIMEOUT_MSG = "Docker timed out; the container may still be starting. Try again."
+
+
+def _docker_error_msg(exc: aiodocker.DockerError) -> str:
+    return f"Docker error: {exc.message}. Check Bindings or run docker compose up."
 
 
 def _pill_and_buttons(server: dict, state: str, *, flash: str | None = None) -> HTMLResponse:
@@ -45,8 +49,35 @@ def _pill_and_buttons(server: dict, state: str, *, flash: str | None = None) -> 
     return HTMLResponse(pill + buttons + flash_html)
 
 
+def _fleet_row(server: dict, state: str, *, flash: str | None = None) -> HTMLResponse:
+    """Home-page quick-action response: the whole row re-renders with the
+    new state (live stats arrive on the next page load, so memory/CPU show
+    a dash). Errors toast into #flash-stack — the row has no flash slot."""
+    row = {
+        **server,
+        "state": state,
+        "port": (server.get("variables") or {}).get("port"),
+    }
+    html = templates.get_template("_fleet_row.html").render({"server": row})
+    if flash:
+        toast = templates.get_template("_flash.html").render(
+            {"flash": {"kind": "error", "message": flash}}
+        )
+        html += f'<div hx-swap-oob="beforeend: #flash-stack">{toast}</div>'
+    return HTMLResponse(html)
+
+
+def _respond(
+    request: Request, server: dict, state: str, *, flash: str | None = None
+) -> HTMLResponse:
+    if (request.headers.get("hx-target") or "").startswith("fleet-row-"):
+        return _fleet_row(server, state, flash=flash)
+    return _pill_and_buttons(server, state, flash=flash)
+
+
 @router.post("/servers/{name}/lifecycle/start", response_class=HTMLResponse)
 async def start(
+    request: Request,
     name: str,
     server: dict = Depends(get_server_or_404),
     docker: aiodocker.Docker = Depends(get_docker),
@@ -54,12 +85,17 @@ async def start(
     try:
         new_state = await lifecycle_service.start_server(docker, server, name)
     except TimeoutError:
-        return _pill_and_buttons(server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
-    return _pill_and_buttons(server, new_state)
+        return _respond(request, server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
+    except aiodocker.DockerError as exc:
+        return _respond(
+            request, server, server.get("state") or "unknown", flash=_docker_error_msg(exc)
+        )
+    return _respond(request, server, new_state)
 
 
 @router.post("/servers/{name}/lifecycle/stop", response_class=HTMLResponse)
 async def stop(
+    request: Request,
     name: str,
     server: dict = Depends(get_server_or_404),
     docker: aiodocker.Docker = Depends(get_docker),
@@ -67,12 +103,17 @@ async def stop(
     try:
         new_state = await lifecycle_service.stop_server(docker, server, name)
     except TimeoutError:
-        return _pill_and_buttons(server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
-    return _pill_and_buttons(server, new_state)
+        return _respond(request, server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
+    except aiodocker.DockerError as exc:
+        return _respond(
+            request, server, server.get("state") or "unknown", flash=_docker_error_msg(exc)
+        )
+    return _respond(request, server, new_state)
 
 
 @router.post("/servers/{name}/lifecycle/restart", response_class=HTMLResponse)
 async def restart(
+    request: Request,
     name: str,
     server: dict = Depends(get_server_or_404),
     docker: aiodocker.Docker = Depends(get_docker),
@@ -80,5 +121,9 @@ async def restart(
     try:
         new_state = await lifecycle_service.restart_server(docker, server, name)
     except TimeoutError:
-        return _pill_and_buttons(server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
-    return _pill_and_buttons(server, new_state)
+        return _respond(request, server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
+    except aiodocker.DockerError as exc:
+        return _respond(
+            request, server, server.get("state") or "unknown", flash=_docker_error_msg(exc)
+        )
+    return _respond(request, server, new_state)

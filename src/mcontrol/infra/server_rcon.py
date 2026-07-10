@@ -112,11 +112,17 @@ async def run_command(docker: aiodocker.Docker, server: dict, command: str) -> s
             conn = await rcon.connect(container_name, _RCON_PORT, password)
         except rcon.AuthenticationError as exc:
             raise RconUnavailable("RCON authentication failed.") from exc
+        except TimeoutError as exc:
+            # TimeoutError subclasses OSError, so this must come first to
+            # keep the operator-facing message specific.
+            raise RconUnavailable(f"RCON connect to {container_name} timed out.") from exc
         except OSError as exc:
             raise RconUnavailable(f"Could not reach {container_name}: {exc}") from exc
         record_authed_password(server["name"], password)
         try:
             return await conn.run(command)
+        except TimeoutError as exc:
+            raise RconUnavailable("RCON command timed out.") from exc
         finally:
             await conn.close()
     finally:

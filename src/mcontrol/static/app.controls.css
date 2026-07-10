@@ -119,6 +119,15 @@
   vertical-align: middle;
 }
 
+/* Loading indication is essential motion (WCAG-exempt): keep spinning under
+   reduced motion, just slower, instead of freezing into a broken glyph. */
+@media (prefers-reduced-motion: reduce) {
+  .btn-spinner {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
 
 /* ---- Inputs ----------------------------------------------------------- */
 .input,
