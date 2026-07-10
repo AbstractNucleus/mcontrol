@@ -114,7 +114,7 @@ async def add_to_roster(request: Request, name: str = Form(...)) -> HTMLResponse
                 form={"name": name},
                 errors={"name": "Mojang lookup failed; try again."},
             ),
-            status_code=502,
+            status_code=422,
         )
 
     if result["status"] == "not_found":

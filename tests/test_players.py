@@ -256,7 +256,7 @@ async def test_post_returns_422_on_mojang_204(client, fake_db, monkeypatch):
     assert "No Minecraft account with that name" in response.text
 
 
-async def test_post_returns_502_on_mojang_error(client, fake_db, monkeypatch):
+async def test_post_returns_422_on_mojang_error(client, fake_db, monkeypatch):
     async def fake_lookup(name):
         raise mojang.MojangError("upstream broken")
 
@@ -264,7 +264,9 @@ async def test_post_returns_502_on_mojang_error(client, fake_db, monkeypatch):
 
     response = await client.post("/players", data={"name": "Notch"})
 
-    assert response.status_code == 502
+    # 422, not 502: htmx only swaps rescued statuses (409/422 in errors.js),
+    # so the inline error form must ride a rescued status to render.
+    assert response.status_code == 422
     assert "Mojang lookup failed; try again." in response.text
 
 
