@@ -7,6 +7,12 @@
       "runtimeArgs": ["run", "python", "-m", "mcontrol"],
       "port": 8000,
       "autoPort": true
+    },
+    {
+      "name": "mcontrol-mock",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "uvicorn", "dev_mock:app", "--host", "127.0.0.1", "--port", "8000", "--reload"],
+      "port": 8000
     }
   ]
 }
