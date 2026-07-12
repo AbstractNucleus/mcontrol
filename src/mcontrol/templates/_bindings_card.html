@@ -1,6 +1,5 @@
 <section class="bindings-card" id="bindings">
   <header class="bindings-card__head">
-    <p class="t-eyebrow">Bindings</p>
     <a class="bindings-card__edit"
        hx-get="/servers/{{ server.name }}/bindings?edit=1"
        hx-target="#bindings"
@@ -18,5 +17,22 @@
     </dd>
     <dt>Directory</dt>
     <dd>{{ server.dir }}</dd>
+    {# Legacy servers have no Variables card; surface their (usually empty)
+       variables here so the metadata isn't lost when the standalone
+       server-detail strip is retired. #}
+    {% if not server.scaffolded_at %}
+      <dt>Variables</dt>
+      <dd>
+        {% if server.variables %}
+          <ul class="kv-list">
+            {% for key, value in server.variables.items() %}
+              <li>{{ key }} = {{ value }}</li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <span class="t-muted">no variables set</span>
+        {% endif %}
+      </dd>
+    {% endif %}
   </dl>
 </section>

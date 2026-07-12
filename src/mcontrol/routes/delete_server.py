@@ -4,7 +4,7 @@
   POST /servers/{name}/delete   → re-checks state, tombstones <dir>,
                                   deletes the row, returns HX-Redirect /
 
-The Delete button on the detail page is disabled when state='running'.
+The Delete action (detail header ⋯ menu) is disabled when state='running'.
 The POST endpoint re-checks state at request time (returns 409) so a
 race where the operator starts the server in another tab between
 page render and confirm-click still refuses cleanly. The tombstone +
@@ -31,7 +31,6 @@ def _partial(
     request: Request,
     server: dict,
     *,
-    confirm: bool,
     error: str | None = None,
     typed: str = "",
     status_code: int = 200,
@@ -41,7 +40,6 @@ def _partial(
         name="_delete_confirm.html",
         context={
             "server": server,
-            "confirm": confirm,
             "error": error,
             "typed": typed,
         },
@@ -53,9 +51,8 @@ def _partial(
 async def get(
     request: Request,
     server: dict = Depends(get_server_or_404),
-    confirm: int = 0,
 ) -> HTMLResponse:
-    return _partial(request, server, confirm=bool(confirm))
+    return _partial(request, server)
 
 
 @router.post("/servers/{name}/delete", response_class=HTMLResponse)
@@ -87,7 +84,6 @@ async def post(
         return _partial(
             request,
             server,
-            confirm=True,
             error=f"Type the server name ({name!r}) exactly to confirm.",
             typed=confirm_name,
             status_code=422,
@@ -100,7 +96,7 @@ async def post(
 
     response = HTMLResponse("", status_code=200)
     # HTMX picks up this header and navigates the browser to /. The
-    # detail page's #delete-confirm target was the form's swap target;
+    # confirm modal's #server-modal slot was the form's swap target;
     # without HX-Redirect we'd swap an empty body into it and the user
     # would still be on a page whose row no longer exists.
     response.headers["HX-Redirect"] = "/"

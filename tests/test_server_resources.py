@@ -185,11 +185,11 @@ async def test_detail_page_mounts_resources_card_above_metadata(
 
     body = (await client.get("/servers/atm10")).text
 
-    # Order: lifecycle-row → server-resources mount → server-detail dl.
+    # Order: lifecycle-row → server-resources mount → console pane.
     lifecycle_idx = body.index('class="lifecycle-row"')
     resources_idx = body.index('id="server-resources"')
-    detail_dl_idx = body.index('class="server-detail"')
-    assert lifecycle_idx < resources_idx < detail_dl_idx
+    console_idx = body.index('class="console-pane"')
+    assert lifecycle_idx < resources_idx < console_idx
     assert 'hx-get="/servers/atm10/resources"' in body
 
 

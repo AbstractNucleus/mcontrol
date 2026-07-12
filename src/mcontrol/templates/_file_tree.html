@@ -4,6 +4,9 @@
    the next click doesn't have to first dismiss it. The checkbox + name
    stay inline; they're the primary tap targets.
 #}
+{% if not entries %}
+  <li class="file-tree__status file-tree__status--empty">This folder is empty.</li>
+{% endif %}
 {% for entry in entries %}
   {% if entry.kind == 'dir' %}
     <li class="file-tree__entry file-tree__entry--dir"

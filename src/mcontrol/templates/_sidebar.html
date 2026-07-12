@@ -5,6 +5,10 @@
   localStorage; the inline bootstrap in base.html applies it before first
   paint so the rail doesn't flash a default size.
 
+  Servers is a single nav group: the "Servers" link opens the fleet overview
+  and the live server list nests directly beneath it, so there is one
+  "Servers" affordance rather than a nav link plus a duplicate section.
+
   The .topnav__badge class is preserved (on the Trash link) so the existing
   tombstone-badge tests keep passing; the badge is conceptually the same,
   just relocated from the topnav row into the sidebar.
@@ -30,7 +34,28 @@
         <path d="M7 7h.01M7 17h.01"></path>
       </svg>
       <span class="sidebar__nav-label">Servers</span>
+      {% if _sidebar_rows %}<span class="sidebar__nav-count t-num">{{ _sidebar_rows | length }}</span>{% endif %}
     </a>
+
+    {% if _sidebar_rows %}
+      <ul class="sidebar__servers">
+        {% for row in _sidebar_rows %}
+          {% set _is_current = _path.startswith("/servers/") and _path.split("/")[2] == row.name %}
+          <li>
+            <a class="sidebar__server"
+               href="/servers/{{ row.name }}"
+               title="{{ row.name }} ({{ row.state }})"
+               {% if _is_current %}aria-current="page"{% endif %}>
+              <span class="sidebar__server-dot sidebar__server-dot--{{ row.state }}" aria-hidden="true"></span>
+              <span class="sidebar__server-name">{{ row.name }}</span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="sidebar__empty t-caption">No servers yet.</p>
+    {% endif %}
+
     <a class="sidebar__nav-link"
        href="/players"
        title="Players"
@@ -57,27 +82,7 @@
     </a>
   </nav>
 
-  <div class="sidebar__section">
-    <p class="sidebar__section-label t-eyebrow">Servers</p>
-    {% if _sidebar_rows %}
-      <ul class="sidebar__servers">
-        {% for row in _sidebar_rows %}
-          {% set _is_current = _path.startswith("/servers/") and _path.split("/")[2] == row.name %}
-          <li>
-            <a class="sidebar__server"
-               href="/servers/{{ row.name }}"
-               title="{{ row.name }} ({{ row.state }})"
-               {% if _is_current %}aria-current="page"{% endif %}>
-              <span class="sidebar__server-dot sidebar__server-dot--{{ row.state }}" aria-hidden="true"></span>
-              <span class="sidebar__server-name">{{ row.name }}</span>
-            </a>
-          </li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p class="sidebar__empty t-caption">No servers yet.</p>
-    {% endif %}
-  </div>
+  <div class="sidebar__spacer" aria-hidden="true"></div>
 
   <div class="sidebar__footer">
     {% include "_theme_toggle.html" %}

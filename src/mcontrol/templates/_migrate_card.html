@@ -1,12 +1,12 @@
 <section class="migrate-card" id="migrate-card">
   <header class="migrate-card__head">
-    <p class="t-eyebrow">Legacy server</p>
     <span class="state-pill state-pill--unknown">unmigrated</span>
   </header>
 
   <p class="migrate-card__intro">
     This server still uses the legacy Dockerfile + entrypoint shape.
-    Migrate to the scaffolded shape to enable the Variables card and Regenerate flow.
+    Migrate to the scaffolded shape so its docker-compose and start script are
+    generated from managed variables.
   </p>
 
   {% if legacy_filenames %}

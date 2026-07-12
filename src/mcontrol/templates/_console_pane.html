@@ -1,24 +1,30 @@
+{# Unified console: the container's stdout (docker logs, via htmx SSE) and
+   RCON command output share one scroll, with the command bar pinned below —
+   the shape of a real server console. Logs keep htmx's SSE handling;
+   streams.js pipes the RCON stream (data-rcon-src) into the same <pre> via a
+   raw EventSource, which also registers the RCON connection that POSTed
+   commands resolve against. #}
 <section class="console-pane">
   <header class="console-pane__head">
-    <p class="t-eyebrow">RCON Console</p>
     <span class="pane-status" data-stream-status data-state="connecting">
       <span class="pane-status__dot" aria-hidden="true"></span>
       <span class="pane-status__label" data-stream-status-label>connecting…</span>
     </span>
   </header>
   <div class="console-pane__body">
-    <pre id="console-stream"
+    <pre id="console-output"
          class="console-pane__stream"
          role="log"
          aria-live="polite"
          aria-atomic="false"
-         aria-label="RCON console output"
+         aria-label="Server console output"
          hx-ext="sse"
-         sse-connect="/servers/{{ server.name }}/rcon"
+         sse-connect="/servers/{{ server.name }}/logs"
          sse-swap="message"
          sse-close="closed"
          hx-swap="beforeend"
-         data-stream-scroll></pre>
+         data-stream-scroll
+         data-rcon-src="/servers/{{ server.name }}/rcon"></pre>
     <button type="button" class="pane-jump" data-stream-jump hidden>
       <span data-stream-jump-count>0</span> new lines ↓
     </button>
@@ -28,7 +34,7 @@
         hx-post="/servers/{{ server.name }}/rcon"
         hx-swap="none"
         hx-disabled-elt="find button[type='submit']">
-    <input type="text" name="command" aria-label="RCON command" placeholder="say hello" autocomplete="off" required>
+    <input type="text" name="command" aria-label="RCON command" placeholder="type a command, e.g. say hello" autocomplete="off" required>
     <button type="submit" class="btn btn--primary">Send{% include "_spinner.html" %}</button>
   </form>
 </section>

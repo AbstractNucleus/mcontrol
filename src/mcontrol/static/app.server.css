@@ -72,7 +72,7 @@
 }
 
 .fleet-summary {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   color: var(--fg-muted);
   margin: 0 0 var(--space-3);
@@ -121,8 +121,9 @@
 }
 
 .server-card__name {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-md);
+  font-weight: 500;
   color: var(--fg-primary);
   text-decoration: none;
   white-space: nowrap;
@@ -251,6 +252,96 @@
   flex-wrap: wrap;
 }
 
+.detail-header__meta {
+  margin: var(--space-1) 0 0;
+  color: var(--fg-muted);
+}
+
+.detail-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Overflow menu (⋯) for infrequent / destructive server actions (Delete),
+   kept out of the primary lifecycle row so it can't be fat-fingered. */
+.detail-menu {
+  position: relative;
+}
+
+.detail-menu__trigger {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--fg-muted);
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--motion-fast) var(--ease),
+              border-color var(--motion-fast) var(--ease);
+}
+
+.detail-menu__trigger::-webkit-details-marker { display: none; }
+.detail-menu__trigger::marker { content: ""; }
+
+.detail-menu__trigger:hover,
+.detail-menu[open] .detail-menu__trigger {
+  color: var(--fg-primary);
+  border-color: var(--border-medium);
+}
+
+.detail-menu__trigger:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.detail-menu__panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 20;
+  min-width: 11rem;
+  padding: var(--space-1);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  display: grid;
+  gap: 1px;
+}
+
+.detail-menu__item {
+  width: 100%;
+  text-align: left;
+  padding: 6px var(--space-3);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-xs);
+  color: var(--fg-primary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.detail-menu__item:hover:not(:disabled),
+.detail-menu__item:focus-visible {
+  background: var(--bg-sunken);
+  outline: none;
+}
+
+.detail-menu__item--danger { color: var(--danger-fg); }
+.detail-menu__item--danger:hover:not(:disabled) { background: var(--danger-bg); }
+
+.detail-menu__item:disabled {
+  color: var(--fg-muted);
+  cursor: not-allowed;
+}
+
 /* Inside the sticky header the lifecycle row sheds its card chrome. */
 .detail-header .lifecycle-row {
   padding: 0;
@@ -260,15 +351,6 @@
 
 .detail-header .detail-title {
   margin: 0;
-}
-
-/* Configuration cards (variables/migrate + bindings) pair up side by side
-   instead of consuming a full-width row each. */
-.detail-config {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: var(--space-5);
-  align-items: start;
 }
 
 .detail-back {
@@ -297,57 +379,9 @@
 }
 
 .detail-title__name {
-  font-family: var(--font-mono);
-}
-
-.loader-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  background: var(--bg-sunken);
-  color: var(--fg-secondary);
   font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  text-transform: lowercase;
 }
 
-.server-detail {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  column-gap: var(--space-6);
-  row-gap: var(--space-2);
-  margin: 0;
-  padding: var(--space-4) var(--space-5);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-}
-
-.server-detail dt,
-.server-detail dd {
-  margin: 0;
-  font-size: var(--fs-sm);
-  line-height: var(--lh-base);
-}
-
-.server-detail dt {
-  color: var(--fg-muted);
-  font-family: var(--font-sans);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  padding-top: 2px;
-}
-
-.server-detail dd {
-  font-family: var(--font-mono);
-  color: var(--fg-primary);
-  word-break: break-all;
-}
 
 .kv-list {
   list-style: none;
@@ -355,6 +389,176 @@
   padding: 0;
   display: grid;
   gap: var(--space-1);
+}
+
+
+/* ---- Panel board (draggable / collapsible / hideable panes) ------------ */
+/* Two independent columns are the drop containers; each .panel is a
+   draggable item. Server-render order is the default layout; dashboard.js
+   restores any saved arrangement from localStorage and moves nodes between
+   columns. */
+.dashboard {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.dashboard__col {
+  display: grid;
+  gap: var(--space-5);
+  align-content: start;
+  min-width: 0;
+  /* Stay a drop target after its last panel is dragged away. */
+  min-height: 4rem;
+}
+
+/* Below the 2-col breakpoint the columns stack; panels flow single-file. */
+@media (max-width: 900px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Panel is the card frame; inner panes shed their own chrome (below). No
+   overflow:hidden here — it would clip the files ⋯ popover. */
+.panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+}
+
+.panel--dragging {
+  opacity: 0.55;
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.dashboard__col--drop {
+  outline: 2px dashed var(--border-medium);
+  outline-offset: 4px;
+  border-radius: var(--radius-md);
+}
+
+.panel__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+  border-bottom: 1px solid var(--border-soft);
+  user-select: none;
+}
+
+.panel[data-collapsed="true"] .panel__bar {
+  border-bottom-color: transparent;
+}
+
+.panel__grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  color: var(--fg-muted);
+  border-radius: var(--radius-xs);
+  cursor: grab;
+}
+
+.panel__grip:hover { color: var(--fg-secondary); }
+.panel--dragging .panel__grip { cursor: grabbing; }
+
+.panel__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease),
+              background var(--motion-fast) var(--ease);
+}
+
+.panel__btn:hover {
+  color: var(--fg-primary);
+  background: var(--bg-sunken);
+}
+
+.panel__btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.panel__chevron {
+  transition: transform var(--motion-fast) var(--ease);
+}
+
+.panel[data-collapsed="true"] .panel__chevron {
+  transform: rotate(-90deg);
+}
+
+.panel__body {
+  padding: var(--space-5);
+}
+
+.panel[data-collapsed="true"] .panel__body {
+  display: none;
+}
+
+/* Inner panes drop their own card chrome — the panel frame supplies it. */
+.panel__body > .console-pane,
+.panel__body > .files-pane,
+.panel__body > .players-card,
+.panel__body > .bindings-card,
+.panel__body > .migrate-card,
+.panel__body > .hx-slot {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
+/* The eyebrow title now lives in the panel bar, so each pane's own head
+   carries only its status chip / action / menu — park it at the right. */
+.panel__body > .console-pane > .console-pane__head,
+.panel__body > .players-card > .players-card__head,
+.panel__body > .bindings-card > .bindings-card__head,
+.panel__body > .migrate-card > .migrate-card__head,
+.panel__body > .files-pane > .files-pane__head {
+  justify-content: flex-end;
+}
+
+/* Panels menu (header): per-panel show/hide toggles + reset. */
+.detail-menu__heading {
+  padding: 4px var(--space-3) 2px;
+  margin: 0;
+  color: var(--fg-muted);
+}
+
+.detail-menu__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.detail-menu__toggle input {
+  margin: 0;
+  flex: none;
 }
 
 
@@ -460,61 +664,67 @@
 }
 
 
-/* ---- Resources card ---------------------------------------------------- */
-.resources-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  padding: var(--space-5);
-  display: grid;
+/* ---- Resources strip (live stats, in the sticky detail header) --------- */
+/* A thin status row under the title: memory (mini bar), CPU, uptime, disk.
+   Sits beside "Last seen" and stays visible while the page scrolls. */
+.detail-header__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-top: var(--space-1);
 }
 
-.resources-card__head {
+.resources-strip {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-secondary);
 }
 
-.resources-card__memory {
-  display: grid;
+.resources-strip__item {
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-2);
+  white-space: nowrap;
 }
 
-.resources-card__memory-label {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
+.resources-strip__item--muted {
+  color: var(--fg-muted);
 }
 
-.resources-card__memory-text {
+.resources-strip__key {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
+.resources-strip__val {
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
   color: var(--fg-primary);
-  font-variant-numeric: tabular-nums;
 }
 
-.resources-card__memory-text--empty {
-  color: var(--fg-muted);
-}
-
-.resources-card__memory-pct {
+.resources-strip__pct {
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
   color: var(--fg-muted);
-  font-variant-numeric: tabular-nums;
 }
 
-.resources-card__bar {
-  height: 6px;
+.resources-strip__bar {
+  width: 4.5rem;
+  height: 5px;
   background: var(--bg-sunken);
   border-radius: var(--radius-full);
   overflow: hidden;
 }
 
-.resources-card__bar-fill {
+.resources-strip__bar-fill {
+  display: block;
   height: 100%;
   background: var(--accent);
   border-radius: inherit;
@@ -522,41 +732,17 @@
               background var(--motion-base) var(--ease);
 }
 
-.resources-card__bar-fill--warning { background: var(--warning-fg); }
-.resources-card__bar-fill--danger  { background: var(--danger-fg); }
+.resources-strip__bar-fill--warning { background: var(--warning-fg); }
+.resources-strip__bar-fill--danger  { background: var(--danger-fg); }
 
-.resources-card__grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-3) var(--space-6);
-}
-
-.resources-card__row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.resources-card__row dt {
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--fg-muted);
-  font-weight: 600;
-}
-
-.resources-card__row dd {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  color: var(--fg-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.resources-card__caption {
+.resources-strip__caption {
   font-size: var(--fs-xs);
   color: var(--fg-muted);
+}
+
+/* Last seen sits at the far end of the status row (no extra top margin
+   inside the flex row). */
+.detail-header__status .detail-header__meta {
   margin: 0;
 }
 
@@ -655,8 +841,7 @@
 .bindings-form label,
 .variables-form label,
 .migrate-card__form label,
-.new-server__form label,
-.delete-zone__form label {
+.new-server__form label {
   display: grid;
   gap: var(--space-2);
 }
@@ -672,8 +857,7 @@
 .variables-form__actions,
 .migrate-card__actions,
 .regenerate-diff__actions,
-.new-server__actions,
-.delete-zone__actions {
+.new-server__actions {
   display: flex;
   gap: var(--space-2);
   align-items: center;

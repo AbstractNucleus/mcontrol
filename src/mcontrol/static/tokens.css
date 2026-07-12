@@ -349,6 +349,12 @@
 /* ---- Base elements ----------------------------------------------------- */
 *, *::before, *::after { box-sizing: border-box; }
 
+/* The `hidden` attribute must win over component display rules. A bare
+   `.thing { display: flex }` out-specifies the UA `[hidden]` default, so
+   toggling `hidden` from JS would otherwise leave the element visible
+   (e.g. the file bulk-actions toolbar and the search clear button). */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;

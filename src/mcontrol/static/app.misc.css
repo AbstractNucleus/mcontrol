@@ -38,38 +38,6 @@
 }
 
 
-/* ---- Delete zone ------------------------------------------------------- */
-.delete-zone {
-  padding: var(--space-5);
-  border: 1px solid var(--danger-border);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  display: grid;
-  gap: var(--space-3);
-}
-
-.delete-zone__title {
-  color: var(--danger-fg);
-  margin: 0;
-}
-
-.delete-zone__hint {
-  color: var(--fg-secondary);
-  margin: 0;
-  font-size: var(--fs-sm);
-}
-
-.delete-zone__form {
-  display: grid;
-  gap: var(--space-3);
-}
-
-.delete-zone__error {
-  color: var(--danger-fg);
-  font-size: var(--fs-xs);
-}
-
-
 /* ---- New server form -------------------------------------------------- */
 .new-server {
   display: grid;
@@ -333,9 +301,10 @@
 }
 
 
-/* ---- Player remove modal ---------------------------------------------- */
+/* ---- Overlay modals (player remove, trash, delete-server confirm) ----- */
 .player-remove-modal,
-.trash-modal {
+.trash-modal,
+.confirm-modal {
   position: fixed;
   inset: 0;
   z-index: 100;
@@ -350,7 +319,8 @@
 }
 
 [data-theme="dark"] .player-remove-modal,
-[data-theme="dark"] .trash-modal {
+[data-theme="dark"] .trash-modal,
+[data-theme="dark"] .confirm-modal {
   background: var(--overlay-scrim-strong);
 }
 
@@ -360,7 +330,8 @@
 }
 
 .player-remove-modal__panel,
-.trash-modal__panel {
+.trash-modal__panel,
+.confirm-modal__panel {
   background: var(--bg-surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-xl);
@@ -370,6 +341,39 @@
   display: grid;
   gap: var(--space-4);
   animation: modal-rise var(--motion-base) var(--ease) both;
+}
+
+.confirm-modal__hint {
+  color: var(--fg-secondary);
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.confirm-modal__form {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.confirm-modal__field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.confirm-modal__field input {
+  font-family: var(--font-mono);
+}
+
+.confirm-modal__error {
+  color: var(--danger-fg);
+  font-size: var(--fs-sm);
+}
+
+.confirm-modal__actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 @keyframes modal-rise {

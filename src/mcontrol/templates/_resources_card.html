@@ -1,69 +1,42 @@
-{# Memory bar first (slice 12): OOM is the primary failure operators
-   watch. CPU + Disk follow underneath.
-#}
-<section class="resources-card"
-         id="server-resources"
-         hx-get="/servers/{{ server.name }}/resources"
-         hx-trigger="load, every 5s"
-         hx-swap="outerHTML">
-  <header class="resources-card__head">
-    <p class="t-eyebrow">Resources</p>
-    <p class="resources-card__caption">
-      {% if ok %}
-        updated {{ updated_at }} · every 5 s
-      {% else %}
-        {{ caption }}
-      {% endif %}
-    </p>
-  </header>
-
-  <div class="resources-card__memory">
-    <div class="resources-card__memory-label">
-      <span class="t-eyebrow">Memory</span>
-      {% if ok %}
-        <span class="resources-card__memory-text">
-          {{ format_bytes(mem_used) }} / {{ format_bytes(mem_limit) }}
-          <span class="resources-card__memory-pct">({{ "%.0f"|format(mem_percent) }} %)</span>
-        </span>
-      {% else %}
-        <span class="resources-card__memory-text resources-card__memory-text--empty">-</span>
-      {% endif %}
-    </div>
-    <div class="resources-card__bar">
-      {% if ok %}
-        {% set _bar_class = 'resources-card__bar-fill--danger' if mem_percent >= 90 else ('resources-card__bar-fill--warning' if mem_percent >= 75 else '') %}
-        {# Stable id: htmx settle copies the outgoing style/class onto the
-           fresh element, so the width/color transitions animate between
-           polls instead of remounting at final width. #}
-        <div id="resources-bar-fill" class="resources-card__bar-fill {{ _bar_class }}" style="width: {{ mem_percent|round(1) }}%"></div>
-      {% endif %}
-    </div>
-  </div>
-
-  <dl class="resources-card__grid">
-    <div class="resources-card__row">
-      <dt>CPU</dt>
-      <dd>
-        {% if ok %}
-          {{ "%.1f"|format(cpu_percent) }} %
-        {% else %}
-          <span class="t-muted">-</span>
-        {% endif %}
-      </dd>
-    </div>
-    <div class="resources-card__row">
-      <dt>Uptime</dt>
-      <dd>
-        {% if started_at %}
-          {{ started_at | uptime }}
-        {% else %}
-          <span class="t-muted">-</span>
-        {% endif %}
-      </dd>
-    </div>
-    <div class="resources-card__row">
-      <dt>Disk</dt>
-      <dd>{{ disk_human }}</dd>
-    </div>
-  </dl>
-</section>
+{# Compact live-resources strip for the sticky detail header: memory (with a
+   mini bar that turns amber/red near the limit), CPU, uptime, disk. Same
+   polling slot as before — keeps id + hx-* so it self-swaps every 5s and
+   still doubles as the state reconciler (OOB pill/lifecycle fragments). #}
+<div class="resources-strip"
+     id="server-resources"
+     hx-get="/servers/{{ server.name }}/resources"
+     hx-trigger="load, every 5s"
+     hx-swap="outerHTML"
+     aria-label="Live resource usage">
+  {% if ok %}
+    <span class="resources-strip__item resources-strip__item--mem">
+      <span class="resources-strip__key">Mem</span>
+      <span class="resources-strip__val t-num">{{ format_bytes(mem_used) }} / {{ format_bytes(mem_limit) }}</span>
+      <span class="resources-strip__bar" aria-hidden="true">
+        {% set _bar_class = 'resources-strip__bar-fill--danger' if mem_percent >= 90 else ('resources-strip__bar-fill--warning' if mem_percent >= 75 else '') %}
+        {# Stable id so htmx settle animates the width between polls. #}
+        <span id="resources-bar-fill" class="resources-strip__bar-fill {{ _bar_class }}" style="width: {{ mem_percent|round(1) }}%"></span>
+      </span>
+      <span class="resources-strip__pct t-num">({{ "%.0f"|format(mem_percent) }} %)</span>
+    </span>
+    <span class="resources-strip__item">
+      <span class="resources-strip__key">CPU</span>
+      <span class="resources-strip__val t-num">{{ "%.1f"|format(cpu_percent) }} %</span>
+    </span>
+    <span class="resources-strip__item">
+      <span class="resources-strip__key">Up</span>
+      <span class="resources-strip__val t-num">{% if started_at %}{{ started_at | uptime }}{% else %}-{% endif %}</span>
+    </span>
+    <span class="resources-strip__item">
+      <span class="resources-strip__key">Disk</span>
+      <span class="resources-strip__val t-num">{{ disk_human }}</span>
+    </span>
+    <span class="resources-strip__caption">every 5 s</span>
+  {% else %}
+    <span class="resources-strip__item resources-strip__item--muted">{{ caption }}</span>
+    <span class="resources-strip__item">
+      <span class="resources-strip__key">Disk</span>
+      <span class="resources-strip__val t-num">{{ disk_human }}</span>
+    </span>
+  {% endif %}
+</div>

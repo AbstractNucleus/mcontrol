@@ -17,7 +17,6 @@
   </span>
   <span class="server-card__id">
     <a class="server-card__name" href="/servers/{{ server.name }}">{{ server.name }}</a>
-    {% if server.loader %}<span class="loader-badge">{{ server.loader }}</span>{% endif %}
   </span>
   <span class="server-card__port t-num">{% if server.port %}:{{ server.port }}{% endif %}</span>
   <span class="server-card__cpu t-num">{{ server.cpu or "" }}</span>

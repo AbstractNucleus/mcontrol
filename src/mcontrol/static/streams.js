@@ -78,6 +78,23 @@
     setStatus(evt.target, "closed", "stream ended");
   });
 
+  // ---- RCON output → shared console <pre> -----------------------------
+  // The merged console shows docker logs (htmx SSE, above) and RCON output
+  // in one scroll. Logs keep htmx's handling; RCON is piped in here via a
+  // raw EventSource so both land in the same <pre>. Opening this source is
+  // also what registers the server's RCON connection, so POSTed commands
+  // resolve against it. `closed` is the endpoint's terminal event (RCON
+  // disabled / gone) — shut the source instead of auto-reconnecting.
+  var consoleOut = document.getElementById("console-output");
+  var rconSrc = consoleOut && consoleOut.getAttribute("data-rcon-src");
+  if (consoleOut && rconSrc && typeof EventSource !== "undefined") {
+    var rcon = new EventSource(rconSrc);
+    rcon.onmessage = function (evt) {
+      consoleOut.insertAdjacentHTML("beforeend", evt.data);
+    };
+    rcon.addEventListener("closed", function () { rcon.close(); });
+  }
+
   // ---- Console form: reset on accept + command history ----------------
   var form = document.querySelector("[data-console-form]");
   if (!form) return;

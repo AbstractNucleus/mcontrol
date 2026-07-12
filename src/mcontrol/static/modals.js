@@ -127,8 +127,12 @@
   document.body.addEventListener("htmx:beforeRequest", (evt) => {
     const target = evt.detail && evt.detail.target;
     if (!target || !target.id) return;
-    if (target.id !== "player-modal" && target.id !== "trash-modal") return;
-    const elt = evt.detail.elt || document.activeElement;
+    if (target.id !== "player-modal" && target.id !== "trash-modal" && target.id !== "server-modal") return;
+    let elt = evt.detail.elt || document.activeElement;
+    // When opened from a <details> menu we close on activation, restore
+    // focus to the always-visible summary, not the about-to-be-hidden item.
+    const menu = elt && elt.closest && elt.closest("details.detail-menu");
+    if (menu) elt = menu.querySelector(":scope > summary") || elt;
     if (elt && typeof elt.focus === "function") {
       triggers.set(target.id, elt);
     }
@@ -140,7 +144,7 @@
   document.body.addEventListener("htmx:afterSwap", (evt) => {
     const target = evt.detail && evt.detail.target;
     if (!target || !target.id) return;
-    if (target.id !== "player-modal" && target.id !== "trash-modal") return;
+    if (target.id !== "player-modal" && target.id !== "trash-modal" && target.id !== "server-modal") return;
     const root = target.querySelector(":scope > [data-modal-root]");
     if (root) {
       initModal(root);
@@ -148,5 +152,14 @@
       // Slot was emptied by the swap → restore focus to whatever opened it.
       restoreTrigger(target.id);
     }
+  });
+
+  // Close the detail-header actions popover when one of its items opens a
+  // modal, so it isn't left hanging open behind the overlay.
+  document.addEventListener("click", (evt) => {
+    const item = evt.target.closest && evt.target.closest(".detail-menu__item");
+    if (!item) return;
+    const menu = item.closest("details.detail-menu");
+    if (menu) menu.open = false;
   });
 })();

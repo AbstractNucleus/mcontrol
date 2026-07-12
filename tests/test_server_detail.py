@@ -32,6 +32,28 @@ async def test_server_detail_returns_404_when_unknown(client, fake_get_server):
     assert response.status_code == 404
 
 
+async def test_server_detail_renders_panel_board_scaffolding(client, fake_get_server):
+    fake_get_server["atm10"] = _row("atm10")
+
+    body = (await client.get("/servers/atm10")).text
+
+    # The panel board is the structural contract static/dashboard.js binds to;
+    # a rename/typo here silently breaks drag/collapse/hide/persistence (the JS
+    # degrades quietly), so pin the hooks server-side.
+    assert "data-dashboard" in body
+    # Two columns; applyState maps saved state.columns to them positionally.
+    assert body.count('class="dashboard__col"') == 2
+    # data-pane values are the localStorage persistence keys.
+    for pane in ("console", "players", "files", "bindings"):
+        assert f'data-pane="{pane}"' in body
+    # atm10 is legacy (not scaffolded), so the migrate pane renders too.
+    assert 'data-pane="migrate"' in body
+    for hook in ("panel__grip", "panel__collapse", "panel__hide"):
+        assert hook in body
+    for hook in ("data-panels-menu", "data-panels-list", "data-panels-reset"):
+        assert hook in body
+
+
 async def test_server_detail_renders_known_server(client, fake_get_server):
     fake_get_server["atm10"] = {
         "name": "atm10",
@@ -190,34 +212,56 @@ async def test_server_detail_renders_aria_live_lifecycle_status(
     assert 'visually-hidden' in region
 
 
-async def test_server_detail_renders_log_pane(client, fake_get_server):
+async def test_server_detail_renders_console_pane(client, fake_get_server):
+    """The merged console streams the container's docker logs (htmx SSE) and
+    RCON output into one <pre>. Logs wire over sse-connect; RCON is piped in
+    by streams.js via the raw-EventSource hook (data-rcon-src)."""
     fake_get_server["atm10"] = _row("atm10")
     response = await client.get("/servers/atm10")
     body = response.text
     assert 'sse-connect="/servers/atm10/logs"' in body
 
-    # Live, chronological log feed: screen readers need role="log" + a name.
-    log_stream = _element_chunk(body, "log-stream")
-    assert 'role="log"' in log_stream
-    assert 'aria-live="polite"' in log_stream
-    assert 'aria-atomic="false"' in log_stream
-    assert 'aria-label="Server log output"' in log_stream
+    # One output element fed by both sources; screen readers need role="log".
+    output = _element_chunk(body, "console-output")
+    assert 'data-rcon-src="/servers/atm10/rcon"' in output
+    assert 'role="log"' in output
+    assert 'aria-live="polite"' in output
+    assert 'aria-atomic="false"' in output
+    assert 'aria-label="Server console output"' in output
 
 
-async def test_server_detail_renders_console_pane(client, fake_get_server):
+async def test_server_detail_console_command_input(client, fake_get_server):
+    """The console's command bar submits to the RCON POST endpoint and carries
+    a labeled command field."""
     fake_get_server["atm10"] = _row("atm10")
     response = await client.get("/servers/atm10")
     body = response.text
-    assert 'sse-connect="/servers/atm10/rcon"' in body
     assert 'hx-post="/servers/atm10/rcon"' in body
-
-    # The RCON stream is a live log; the input is a labeled command field.
-    console_stream = _element_chunk(body, "console-stream")
-    assert 'role="log"' in console_stream
-    assert 'aria-live="polite"' in console_stream
-    assert 'aria-atomic="false"' in console_stream
-    assert 'aria-label="RCON console output"' in console_stream
     assert 'aria-label="RCON command"' in body
+
+
+async def test_server_detail_delete_lives_in_header_menu(client, fake_get_server):
+    """Delete is a ⋯-menu item that opens the confirm modal (loaded into
+    #server-modal), not a dedicated full-width danger pane."""
+    fake_get_server["atm10"] = _row("atm10", state="exited")
+    response = await client.get("/servers/atm10")
+    body = response.text
+    assert 'class="detail-menu"' in body
+    assert 'id="server-modal"' in body
+    assert 'hx-get="/servers/atm10/delete"' in body
+    assert 'hx-target="#server-modal"' in body
+    # The old dedicated delete pane is gone.
+    assert "delete-zone" not in body
+
+
+async def test_server_detail_delete_disabled_when_running(client, fake_get_server):
+    """A running server can't be deleted: the menu item is disabled with a hint
+    and carries no modal-open wiring."""
+    fake_get_server["atm10"] = _row("atm10", state="running")
+    response = await client.get("/servers/atm10")
+    body = response.text
+    assert "Stop the server before deleting." in body
+    assert 'hx-get="/servers/atm10/delete"' not in body
 
 
 async def test_server_detail_renders_bindings_card(client, fake_get_server):
@@ -232,30 +276,6 @@ async def test_server_detail_links_back_to_home(client, fake_get_server):
     fake_get_server["atm10"] = _row("atm10")
     response = await client.get("/servers/atm10")
     assert 'href="/"' in response.text
-
-
-async def test_server_detail_renders_loader_badge_when_set(client, fake_get_server):
-    """Issue #123: when a row has a loader value, the detail title bar
-    shows a small badge next to the state pill."""
-    row = _row("atm10")
-    row["loader"] = "forge"
-    fake_get_server["atm10"] = row
-
-    response = await client.get("/servers/atm10")
-    body = response.text
-    assert "loader-badge" in body
-    assert ">forge<" in body
-
-
-async def test_server_detail_omits_loader_badge_when_absent(client, fake_get_server):
-    """A row missing the loader field (legacy rows pre-supabase-server#8
-    backfill, defensive case) should not render the badge."""
-    row = _row("atm10")
-    # _row() does not set 'loader'. keep it that way.
-    fake_get_server["atm10"] = row
-
-    response = await client.get("/servers/atm10")
-    assert "loader-badge" not in response.text
 
 
 async def test_server_detail_legacy_row_has_no_variables_card_or_banner(
@@ -274,7 +294,7 @@ async def test_server_detail_legacy_row_has_no_variables_card_or_banner(
     assert "no variables set" in body or "kv-list" in body
 
 
-async def test_server_detail_scaffolded_row_renders_variables_card(
+async def test_server_detail_scaffolded_row_omits_variables_and_migrate_panes(
     client, fake_get_server, tmp_path
 ):
     from mcontrol.domain import scaffolding
@@ -296,14 +316,16 @@ async def test_server_detail_scaffolded_row_renders_variables_card(
     response = await client.get("/servers/newshire")
     body = response.text
     assert response.status_code == 200
-    assert 'id="variables"' in body
-    assert 'hx-get="/servers/newshire/variables?edit=1"' in body
+    # The Variables card was retired from the panel board; a scaffolded row
+    # shows neither a Variables pane nor the legacy Migrate pane. The
+    # /variables route still exists and is covered by test_variables.py.
+    assert 'id="variables"' not in body
+    assert 'id="migrate-card"' not in body
     # No health banner when files are intact and variables are complete.
     assert "health-banner" not in body
-    # Legacy inline `variables` row is suppressed for scaffolded rows.
-    # (Card carries the canonical view; the kv-list would be redundant.)
-    body_dl = body.split('class="server-detail"', 1)[1].split('</dl>', 1)[0]
-    assert "kv-list" not in body_dl
+    # The Bindings card still suppresses its inline kv-list for scaffolded rows.
+    body_bindings = body.split('class="bindings-card__body"', 1)[1].split("</dl>", 1)[0]
+    assert "kv-list" not in body_bindings
 
 
 async def test_server_detail_renders_health_banner_for_stuck_scaffolding(

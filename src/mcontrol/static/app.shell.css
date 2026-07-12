@@ -258,13 +258,20 @@
   text-overflow: ellipsis;
 }
 
+.sidebar__nav-count {
+  flex: none;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--fg-muted);
+}
+
 [data-sidebar="collapsed"] .sidebar__nav-link {
   justify-content: center;
   padding: 7px;
 }
 
 [data-sidebar="collapsed"] .sidebar__nav-label,
-[data-sidebar="collapsed"] .sidebar__section-label,
+[data-sidebar="collapsed"] .sidebar__nav-count,
 [data-sidebar="collapsed"] .sidebar__servers,
 [data-sidebar="collapsed"] .sidebar__empty,
 [data-sidebar="collapsed"] .theme-toggle,
@@ -272,27 +279,19 @@
   display: none;
 }
 
-.sidebar__section {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  overflow: hidden;
-}
-
-.sidebar__section-label {
-  padding: 0 var(--space-3);
-  margin: var(--space-2) 0 var(--space-1);
-}
-
+/* Server quick-list, nested under the Servers nav item. The left rail +
+   indent read the rows as children of Servers, so there is one "Servers"
+   group rather than a nav link plus a separate duplicate section. Caps its
+   own height and scrolls internally so Players/Trash stay in view. */
 .sidebar__servers {
   list-style: none;
-  margin: 0;
-  padding: 0;
+  margin: 2px 0 var(--space-3) calc(var(--space-3) + 8px);
+  padding: 0 0 0 var(--space-3);
+  border-left: 1px solid var(--border-soft);
   display: flex;
   flex-direction: column;
   gap: 1px;
+  max-height: 42vh;
   overflow-y: auto;
   /* Hide scrollbar chrome unless the list overflows. */
   scrollbar-width: thin;
@@ -305,7 +304,7 @@
   padding: 6px var(--space-3);
   border-radius: var(--radius-sm);
   color: var(--fg-secondary);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-sm);
   text-decoration: none;
   transition: color var(--motion-fast) var(--ease),
@@ -350,7 +349,15 @@
 }
 
 .sidebar__empty {
-  padding: 0 var(--space-3);
+  margin: 2px 0 var(--space-3);
+  padding: 2px var(--space-3) 2px calc(var(--space-6) + var(--space-1));
+}
+
+/* Pushes the footer to the bottom now that the server list no longer
+   flex-grows to fill the rail. */
+.sidebar__spacer {
+  flex: 1;
+  min-height: var(--space-4);
 }
 
 .sidebar__footer {
@@ -495,7 +502,7 @@
   :root:not([data-sidebar="expanded"]) .sidebar__brand-name,
   :root:not([data-sidebar="expanded"]) .sidebar__brand-version,
   :root:not([data-sidebar="expanded"]) .sidebar__nav-label,
-  :root:not([data-sidebar="expanded"]) .sidebar__section-label,
+  :root:not([data-sidebar="expanded"]) .sidebar__nav-count,
   :root:not([data-sidebar="expanded"]) .sidebar__servers,
   :root:not([data-sidebar="expanded"]) .sidebar__empty,
   :root:not([data-sidebar="expanded"]) .theme-toggle {
@@ -669,7 +676,7 @@ input.switcher__input {
   gap: var(--space-3);
   padding: 7px var(--space-3);
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-sm);
   color: var(--fg-secondary);
   cursor: pointer;

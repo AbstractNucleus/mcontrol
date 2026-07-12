@@ -27,6 +27,19 @@ async def test_tree_lists_root_including_hidden_and_scaffold(
     assert "server/" in body
 
 
+async def test_tree_empty_dir_renders_empty_state(
+    client, fake_server, server_dir: Path
+) -> None:
+    """An empty directory renders an explicit empty-state row rather than a
+    blank list, so the pane never sits on a silent void."""
+    response = await client.get("/servers/atm10/files/tree")
+
+    assert response.status_code == 200
+    body = response.text
+    assert "file-tree__status--empty" in body
+    assert "This folder is empty" in body
+
+
 async def test_tree_dir_entries_emit_lazy_hx_get(client, fake_server, server_dir: Path) -> None:
     (server_dir / "config").mkdir()
 

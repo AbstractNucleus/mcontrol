@@ -1,5 +1,4 @@
-/* ---- Log + Console panes ---------------------------------------------- */
-.log-pane,
+/* ---- Console pane (docker logs + RCON output, one scroll) ------------- */
 .console-pane {
   display: grid;
   gap: var(--space-3);
@@ -9,7 +8,6 @@
   padding: var(--space-5);
 }
 
-.log-pane__head,
 .console-pane__head {
   display: flex;
   align-items: baseline;
@@ -17,13 +15,11 @@
 }
 
 /* Positioning context for the floating "new lines" jump chip. */
-.log-pane__body,
 .console-pane__body {
   position: relative;
   display: grid;
 }
 
-.log-pane__stream,
 .console-pane__stream {
   background: var(--bg-terminal);
   border: 1px solid var(--border-terminal);
@@ -33,19 +29,15 @@
      is a deliberate dark island in both themes. */
   color-scheme: dark;
   padding: var(--space-3) var(--space-4);
-  height: 18rem;
+  height: 22rem;
   overflow-y: auto;
-  white-space: pre-wrap;
   margin: 0;
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   line-height: 1.5;
-}
-
-/* Server logs are full of long mod-loader and stack-trace lines; wrapping
-   them turns one logical entry into a hard-to-scan ragged block. Keep
-   each line intact and let the pane scroll horizontally. */
-.log-pane__stream {
+  /* Logs carry long mod-loader / stack-trace lines; wrapping turns one
+     logical entry into a hard-to-scan ragged block. Keep lines intact and
+     scroll horizontally (RCON replies are short, so they rarely need it). */
   white-space: pre;
   overflow-x: auto;
 }
@@ -167,6 +159,37 @@
   list-style: none;
   margin: 0;
   padding-left: var(--space-4);
+}
+
+/* Loading / empty / error placeholders. Sans (not the tree's mono) so they
+   read as interface copy rather than a filename. Not .file-tree__entry, so
+   the keyboard-nav row model skips them. */
+.file-tree__status {
+  list-style: none;
+  padding: var(--space-2) var(--space-1);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+
+.file-tree__status--error {
+  color: var(--danger-fg);
+}
+
+.file-tree__retry {
+  margin-left: var(--space-1);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--accent-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.file-tree__retry:hover {
+  color: var(--fg-primary);
 }
 
 .file-tree__entry {

@@ -71,50 +71,20 @@ def _row(base_dir: Path, *, name: str = "newshire", state: str = "exited") -> di
 # ---- GET ----------------------------------------------------------
 
 
-async def test_get_returns_button_when_state_is_exited(
-    app_client, fake_db, base_dir
-):
+async def test_get_returns_confirm_modal(app_client, fake_db, base_dir):
+    """GET renders the type-name confirm as an overlay dialog; the detail
+    header's ⋯ menu loads it into #server-modal on demand."""
     fake_db["rows"].append(_row(base_dir))
 
     response = await app_client.get("/servers/newshire/delete")
 
     assert response.status_code == 200
     body = response.text
-    assert "Delete server" in body
-    # Button leads to the confirm form.
-    assert 'hx-get="/servers/newshire/delete?confirm=1"' in body
-    # No type-name input yet.
-    assert 'name="confirm_name"' not in body
-
-
-async def test_get_button_disabled_when_state_running(
-    app_client, fake_db, base_dir
-):
-    fake_db["rows"].append(_row(base_dir, state="running"))
-
-    response = await app_client.get("/servers/newshire/delete")
-
-    assert response.status_code == 200
-    body = response.text
-    assert "disabled" in body
-    # No HTMX wire-up on a disabled button.
-    assert 'hx-get="/servers/newshire/delete?confirm=1"' not in body
-    assert "Stop the server" in body
-
-
-async def test_get_confirm_returns_form_with_typename_input(
-    app_client, fake_db, base_dir
-):
-    fake_db["rows"].append(_row(base_dir))
-
-    response = await app_client.get("/servers/newshire/delete?confirm=1")
-
-    assert response.status_code == 200
-    body = response.text
+    assert "data-modal-root" in body
     assert 'name="confirm_name"' in body
     assert 'hx-post="/servers/newshire/delete"' in body
-    # Cancel returns to the button state.
-    assert 'hx-get="/servers/newshire/delete"' in body
+    # Cancel dismisses the modal client-side (no server round-trip).
+    assert "data-modal-close" in body
 
 
 async def test_get_returns_404_for_unknown(app_client, fake_db):
@@ -282,12 +252,15 @@ async def test_post_succeeds_when_dir_already_missing(
 # ---- Detail page wires the partial in -------------------------------
 
 
-async def test_detail_page_includes_delete_zone(app_client, fake_db, base_dir):
+async def test_detail_page_exposes_delete_action(app_client, fake_db, base_dir):
     fake_db["rows"].append(_row(base_dir))
 
     response = await app_client.get("/servers/newshire")
 
     assert response.status_code == 200
     body = response.text
-    assert 'id="delete-zone"' in body
     assert "Delete server" in body
+    # Lives in the header ⋯ menu and opens into the modal slot, not a pane.
+    assert 'class="detail-menu"' in body
+    assert 'id="server-modal"' in body
+    assert 'id="delete-zone"' not in body

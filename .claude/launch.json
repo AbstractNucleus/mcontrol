@@ -4,8 +4,9 @@
     {
       "name": "mcontrol-dev",
       "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "uvicorn", "mcontrol.main:app", "--host", "127.0.0.1", "--port", "8000", "--reload"],
-      "port": 8000
+      "runtimeArgs": ["run", "python", "-m", "mcontrol"],
+      "port": 8000,
+      "autoPort": true
     }
   ]
 }

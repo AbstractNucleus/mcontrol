@@ -42,7 +42,47 @@
   <script src="/static/file_uploader.js?v={{ version }}" defer></script>
   <script src="/static/file_bulk.js?v={{ version }}" defer></script>
   <script src="/static/file_tree_nav.js?v={{ version }}" defer></script>
+  <script src="/static/dashboard.js?v={{ version }}" defer></script>
 {% endblock %}
+
+{#
+  Draggable/collapsible panel shell. The bar (grip + title + collapse + hide)
+  lives in this wrapper so it survives htmx outerHTML swaps of the inner
+  slot (players/bindings/migrate replace their own element, not the panel).
+  dashboard.js reads data-pane for layout persistence.
+#}
+{% macro panel(pane_id, title) %}
+<section class="panel" data-pane="{{ pane_id }}" data-collapsed="false">
+  <header class="panel__bar">
+    <span class="panel__grip" title="Drag to rearrange" aria-hidden="true">
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+        <circle cx="5" cy="4" r="1.3"/><circle cx="11" cy="4" r="1.3"/>
+        <circle cx="5" cy="8" r="1.3"/><circle cx="11" cy="8" r="1.3"/>
+        <circle cx="5" cy="12" r="1.3"/><circle cx="11" cy="12" r="1.3"/>
+      </svg>
+    </span>
+    <span class="panel__title t-eyebrow">{{ title }}</span>
+    <button type="button" class="panel__btn panel__collapse" aria-expanded="true"
+            title="Collapse panel" aria-label="Collapse {{ title }} panel">
+      <svg class="panel__chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+    </button>
+    <button type="button" class="panel__btn panel__hide"
+            title="Hide panel" aria-label="Hide {{ title }} panel">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+        <line x1="1" y1="1" x2="23" y2="23"/>
+      </svg>
+    </button>
+  </header>
+  <div class="panel__body">
+    {{ caller() }}
+  </div>
+</section>
+{% endmacro %}
 
 {% block main %}
 <section class="server-detail-layout">
@@ -63,13 +103,61 @@
       <h1 class="detail-title">
         <span class="detail-title__name">{{ server.name }}</span>
         {% include "_state_pill.html" %}
-        {% if server.loader %}
-          <span class="loader-badge" aria-label="Loader: {{ server.loader }}">{{ server.loader }}</span>
-        {% endif %}
       </h1>
-      <div class="lifecycle-row">
-        {% include "_lifecycle_buttons.html" %}
+      <div class="detail-header__actions">
+        <div class="lifecycle-row">
+          {% include "_lifecycle_buttons.html" %}
+        </div>
+        {# Layout menu: restore hidden panes + reset the saved arrangement.
+           dashboard.js fills [data-panels-list] with a toggle per panel. #}
+        <details class="detail-menu" data-panels-menu hidden>
+          <summary class="detail-menu__trigger" title="Panels" aria-label="Show or hide panels">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="18" rx="1"/>
+              <rect x="14" y="3" width="7" height="18" rx="1"/>
+            </svg>
+          </summary>
+          <div class="detail-menu__panel">
+            <p class="detail-menu__heading t-caption">Panels</p>
+            <div data-panels-list></div>
+            <button type="button" class="detail-menu__item" data-panels-reset>Reset layout</button>
+          </div>
+        </details>
+        <details class="detail-menu">
+          <summary class="detail-menu__trigger" title="More actions" aria-label="More actions">⋯</summary>
+          <div class="detail-menu__panel">
+            {% if server.state == 'running' %}
+              <button type="button"
+                      class="detail-menu__item detail-menu__item--danger"
+                      disabled
+                      title="Stop the server before deleting.">Delete server</button>
+            {% else %}
+              <button type="button"
+                      class="detail-menu__item detail-menu__item--danger"
+                      hx-get="/servers/{{ server.name }}/delete"
+                      hx-target="#server-modal"
+                      hx-swap="innerHTML">Delete server</button>
+            {% endif %}
+          </div>
+        </details>
       </div>
+    </div>
+    <div class="detail-header__status">
+      {# Live resource strip: same polling slot as the old Resources card,
+         relocated into the sticky header so mem/CPU stay visible while you
+         scroll the console/files. Swaps itself every 5s. #}
+      <section id="server-resources"
+               class="resources-strip resources-strip--loading"
+               hx-get="/servers/{{ server.name }}/resources"
+               hx-trigger="load, every 5s"
+               hx-swap="outerHTML"
+               aria-label="Live resource usage">
+        <span class="resources-strip__item resources-strip__item--muted">loading…</span>
+      </section>
+      <p class="detail-header__meta t-caption" title="{{ server.updated_at }}">
+        Last seen {{ server.updated_at | reltime or server.updated_at }}
+      </p>
     </div>
     {#
       Visually-hidden aria-live region for lifecycle state announcements
@@ -89,91 +177,53 @@
     {% include "_health_banner.html" %}
   {% endif %}
 
-  <section id="server-resources"
-           class="hx-slot"
-           hx-get="/servers/{{ server.name }}/resources"
-           hx-trigger="load, every 5s"
-           hx-swap="outerHTML">
-    <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
-    <span class="skeleton skeleton--bar" aria-hidden="true"></span>
-    <span class="skeleton skeleton--line" aria-hidden="true"></span>
-  </section>
+  {#
+    Two-column panel board. Panels are draggable/collapsible/hideable and
+    their arrangement persists via dashboard.js (localStorage). Server-render
+    order is the default layout; the JS restores any saved layout on load.
+    Source order (console after #server-resources) is load-bearing for
+    tests — keep console the first panel.
+  #}
+  <div class="dashboard" data-dashboard data-server="{{ server.name }}">
+    <div class="dashboard__col" data-col>
+      {% call panel('console', 'Console') %}
+        {% include "_console_pane.html" %}
+      {% endcall %}
 
-  <dl class="server-detail">
-    <dt>Directory</dt>
-    <dd>{{ server.dir }}</dd>
+      {% call panel('players', 'Players') %}
+        <section id="server-players"
+                 class="hx-slot hx-slot--players"
+                 hx-get="/servers/{{ server.name }}/players"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+          <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
+          <span class="skeleton skeleton--line" aria-hidden="true"></span>
+          <span class="skeleton skeleton--block" aria-hidden="true"></span>
+        </section>
+      {% endcall %}
+    </div>
 
-    {% if not server.scaffolded_at %}
-      <dt>Variables</dt>
-      <dd>
-        {% if server.variables %}
-          <ul class="kv-list">
-            {% for key, value in server.variables.items() %}
-              <li>{{ key }} = {{ value }}</li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <span class="t-muted">no variables set</span>
-        {% endif %}
-      </dd>
-    {% endif %}
-
-    <dt>Last seen</dt>
-    <dd title="{{ server.updated_at }}">{{ server.updated_at | reltime or server.updated_at }}</dd>
-  </dl>
-
-  {% include "_log_pane.html" %}
-
-  {% include "_console_pane.html" %}
-
-  <section id="server-players"
-           class="hx-slot hx-slot--players"
-           hx-get="/servers/{{ server.name }}/players"
-           hx-trigger="load"
-           hx-swap="outerHTML">
-    <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
-    <span class="skeleton skeleton--line" aria-hidden="true"></span>
-    <span class="skeleton skeleton--block" aria-hidden="true"></span>
-  </section>
-
-  <div class="detail-config">
-    {% if server.scaffolded_at %}
-      {% include "_variables_card.html" %}
-    {% else %}
-      <section id="migrate-card"
-               class="hx-slot hx-slot--migrate"
-               hx-get="/servers/{{ server.name }}/migrate"
-               hx-trigger="load"
-               hx-swap="outerHTML">
-        <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
-        <span class="skeleton skeleton--line" aria-hidden="true"></span>
-        <span class="skeleton skeleton--block" aria-hidden="true"></span>
-      </section>
-    {% endif %}
-
-    {% include "_bindings_card.html" %}
-  </div>
-
-  <section class="files-pane" data-server-name="{{ server.name }}">
-    <header class="files-pane__head">
-      <p class="t-eyebrow files-pane__eyebrow">
-        Files
-        <details class="file-tree__menu">
-          <summary class="file-tree__menu-trigger" title="Actions for server root" aria-label="Actions for server root">⋯</summary>
-          <div class="file-tree__menu-panel">
-            <button class="file-tree__menu-item"
-                    type="button"
-                    data-upload-trigger
-                    data-upload-path="">Upload to root</button>
-            <button class="file-tree__menu-item"
-                    type="button"
-                    data-action-mkdir
-                    data-action-path="">New folder in root</button>
-          </div>
-        </details>
-      </p>
-    </header>
-    <div class="file-search">
+    <div class="dashboard__col" data-col>
+      {% call panel('files', 'Files') %}
+        <section class="files-pane" data-server-name="{{ server.name }}">
+          <header class="files-pane__head">
+            <p class="files-pane__eyebrow">
+              <details class="file-tree__menu">
+                <summary class="file-tree__menu-trigger" title="Actions for server root" aria-label="Actions for server root">⋯</summary>
+                <div class="file-tree__menu-panel">
+                  <button class="file-tree__menu-item"
+                          type="button"
+                          data-upload-trigger
+                          data-upload-path="">Upload to root</button>
+                  <button class="file-tree__menu-item"
+                          type="button"
+                          data-action-mkdir
+                          data-action-path="">New folder in root</button>
+                </div>
+              </details>
+            </p>
+          </header>
+          <div class="file-search">
       <input type="search"
              id="file-search-input"
              class="file-search-input"
@@ -207,14 +257,40 @@
           data-upload-path=""
           hx-get="/servers/{{ server.name }}/files/tree?path="
           hx-trigger="load"
-          hx-swap="innerHTML"></ul>
+          hx-swap="innerHTML">
+        {# Replaced by the tree on load; file_tree_nav.js swaps in an error
+           state (with retry) if the fetch fails, so this never sticks. #}
+        <li class="file-tree__status" data-tree-status>Loading files…</li>
+      </ul>
       <div class="file-view" id="file-view">
         <p class="t-muted">Select a file to view its contents.</p>
       </div>
     </div>
-    <input type="file" id="file-upload-input" class="file-upload-input" multiple hidden>
-  </section>
+          <input type="file" id="file-upload-input" class="file-upload-input" multiple hidden>
+        </section>
+      {% endcall %}
 
-  {% include "_delete_confirm.html" %}
+      {% if not server.scaffolded_at %}
+        {% call panel('migrate', 'Legacy server') %}
+          <section id="migrate-card"
+                   class="hx-slot hx-slot--migrate"
+                   hx-get="/servers/{{ server.name }}/migrate"
+                   hx-trigger="load"
+                   hx-swap="outerHTML">
+            <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
+            <span class="skeleton skeleton--line" aria-hidden="true"></span>
+            <span class="skeleton skeleton--block" aria-hidden="true"></span>
+          </section>
+        {% endcall %}
+      {% endif %}
+
+      {% call panel('bindings', 'Bindings') %}
+        {% include "_bindings_card.html" %}
+      {% endcall %}
+    </div>
+  </div>
+
+  {# Delete confirmation renders here on demand (header ⋯ menu → Delete). #}
+  <div id="server-modal"></div>
 </section>
 {% endblock %}
