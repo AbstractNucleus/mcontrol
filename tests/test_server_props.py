@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from mcontrol.domain import server_props
@@ -90,7 +91,11 @@ def test_read_properties_cache_miss_on_mtime_change(tmp_path):
     path.write_text("port=25565\n")
 
     server_props.read_properties(path)  # populate cache
+    orig_mtime_ns = path.stat().st_mtime_ns
 
+    # Force a distinct mtime so the cache invalidates deterministically; on
+    # Windows two writes within one filesystem tick can share an st_mtime_ns.
     path.write_text("port=25577\n")
+    os.utime(path, ns=(orig_mtime_ns + 2_000_000_000, orig_mtime_ns + 2_000_000_000))
 
     assert server_props.read_properties(path) == {"port": "25577"}

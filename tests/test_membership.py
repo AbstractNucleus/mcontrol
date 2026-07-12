@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -161,7 +162,11 @@ def test_write_whitelist_raises_stale_when_file_changed_between_read_and_write(t
     _, mtime_ns = membership.read_whitelist(server_dir)
 
     # Simulate a concurrent edit (slice 5 file editor) bumping the mtime.
+    # Force a distinct mtime via os.utime: on Windows two writes within one
+    # filesystem tick can share an st_mtime_ns, which would make the guard
+    # spuriously pass. The 2s offset clears even coarse (FAT) mtime granularity.
     path.write_text(json.dumps([{"uuid": _HEROBRINE_UUID, "name": "Herobrine"}]))
+    os.utime(path, ns=(mtime_ns + 2_000_000_000, mtime_ns + 2_000_000_000))
 
     with pytest.raises(membership.StaleWriteError):
         membership.write_whitelist(
@@ -379,9 +384,12 @@ def test_read_whitelist_cache_miss_on_mtime_change(tmp_path):
     path = membership.whitelist_path(server_dir)
     path.write_text(json.dumps([{"uuid": _NOTCH_UUID, "name": "Notch"}]))
 
-    membership.read_whitelist(server_dir)  # populate cache
+    _, mtime_ns = membership.read_whitelist(server_dir)  # populate cache
 
+    # Force a distinct mtime so the cache invalidates deterministically; on
+    # Windows two writes within one filesystem tick can share an st_mtime_ns.
     path.write_text(json.dumps([{"uuid": _HEROBRINE_UUID, "name": "Herobrine"}]))
+    os.utime(path, ns=(mtime_ns + 2_000_000_000, mtime_ns + 2_000_000_000))
 
     entries, _ = membership.read_whitelist(server_dir)
     assert entries == [{"uuid": _HEROBRINE_UUID, "name": "Herobrine"}]
