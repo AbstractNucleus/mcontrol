@@ -197,15 +197,7 @@
   text-overflow: ellipsis;
 }
 
-.sidebar__brand-version {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  font-weight: 400;
-  color: var(--fg-muted);
-}
-
-[data-sidebar="collapsed"] .sidebar__brand-name,
-[data-sidebar="collapsed"] .sidebar__brand-version {
+[data-sidebar="collapsed"] .sidebar__brand-name {
   display: none;
 }
 
@@ -500,7 +492,6 @@
     --sidebar-width: var(--sidebar-width-collapsed);
   }
   :root:not([data-sidebar="expanded"]) .sidebar__brand-name,
-  :root:not([data-sidebar="expanded"]) .sidebar__brand-version,
   :root:not([data-sidebar="expanded"]) .sidebar__nav-label,
   :root:not([data-sidebar="expanded"]) .sidebar__nav-count,
   :root:not([data-sidebar="expanded"]) .sidebar__servers,
