@@ -41,14 +41,16 @@ async def test_server_detail_renders_panel_board_scaffolding(client, fake_get_se
     # a rename/typo here silently breaks drag/collapse/hide/persistence (the JS
     # degrades quietly), so pin the hooks server-side.
     assert "data-dashboard" in body
-    # Two columns; applyState maps saved state.columns to them positionally.
-    assert body.count('class="dashboard__col"') == 2
+    # One flowing board (no fixed columns): panes tile responsively 1<->2 wide
+    # and dashboard.js persists their order under state.order.
+    assert 'class="dashboard"' in body
+    assert "dashboard__col" not in body
     # data-pane values are the localStorage persistence keys.
     for pane in ("console", "players", "files", "bindings"):
         assert f'data-pane="{pane}"' in body
     # atm10 is legacy (not scaffolded), so the migrate pane renders too.
     assert 'data-pane="migrate"' in body
-    for hook in ("panel__grip", "panel__collapse", "panel__hide"):
+    for hook in ("panel__grip", "panel__collapse", "panel__hide", "panel__fullwidth"):
         assert hook in body
     for hook in ("data-panels-menu", "data-panels-list", "data-panels-reset"):
         assert hook in body

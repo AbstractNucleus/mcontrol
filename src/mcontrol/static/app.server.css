@@ -393,10 +393,11 @@
 
 
 /* ---- Panel board (draggable / collapsible / hideable panes) ------------ */
-/* Two independent columns are the drop containers; each .panel is a
-   draggable item. Server-render order is the default layout; dashboard.js
-   restores any saved arrangement from localStorage and moves nodes between
-   columns. */
+/* One flowing grid: panels tile into 1 or 2 columns responsively — two when
+   there's room, one when narrow. Each .panel is a draggable grid item;
+   server-render order is the default layout and dashboard.js restores any
+   saved order from localStorage. align-items:start keeps each panel at its
+   natural height, so a shorter pane doesn't stretch to match its row-mate. */
 .dashboard {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -404,20 +405,22 @@
   align-items: start;
 }
 
-.dashboard__col {
-  display: grid;
-  gap: var(--space-5);
-  align-content: start;
-  min-width: 0;
-  /* Stay a drop target after its last panel is dragged away. */
-  min-height: 4rem;
-}
-
-/* Below the 2-col breakpoint the columns stack; panels flow single-file. */
+/* Below the 2-col breakpoint the grid collapses to a single column. */
 @media (max-width: 900px) {
   .dashboard {
     grid-template-columns: 1fr;
   }
+  /* Full width is meaningless with a single column — hide its toggle. */
+  .panel__fullwidth {
+    display: none;
+  }
+}
+
+/* A pane toggled to full width claims its own row (spans both columns); panes
+   after it flow below. Above the breakpoint it spans the sole column, so the
+   toggle is a no-op there (and its button is hidden). */
+.panel[data-fullwidth="true"] {
+  grid-column: 1 / -1;
 }
 
 /* Panel is the card frame; inner panes shed their own chrome (below). No
@@ -432,12 +435,6 @@
   opacity: 0.55;
   border-color: var(--border-strong);
   box-shadow: var(--shadow-md);
-}
-
-.dashboard__col--drop {
-  outline: 2px dashed var(--border-medium);
-  outline-offset: 4px;
-  border-radius: var(--radius-md);
 }
 
 .panel__bar {
@@ -501,6 +498,12 @@
 .panel__btn:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 1px;
+}
+
+/* Active (pressed) full-width toggle reads as "on". */
+.panel__fullwidth[aria-pressed="true"] {
+  color: var(--accent-text);
+  background: var(--bg-sunken);
 }
 
 .panel__chevron {

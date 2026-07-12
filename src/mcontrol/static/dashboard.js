@@ -1,7 +1,8 @@
 // Panel board for the server detail page.
-// Each .panel wrapper can be collapsed, hidden, and dragged (by its grip)
-// to reorder within or between the two columns. The arrangement is saved to
-// localStorage under one global key, so it applies to every server.
+// Panes tile into 1 or 2 columns responsively (CSS grid); each .panel wrapper
+// can be collapsed, hidden, and dragged (by its grip) to reorder within the
+// single flow. The order is saved to localStorage under one global key, so it
+// applies to every server.
 //
 // The bar lives in the wrapper, not the inner slot, so htmx outerHTML swaps
 // of #server-players / #bindings / #migrate-card leave the chrome intact.
@@ -9,18 +10,17 @@
 (function () {
   "use strict";
 
-  var KEY = "mcontrol:dashboard:v1";
+  var KEY = "mcontrol:dashboard:v2";
   var board = document.querySelector("[data-dashboard]");
   if (!board) return;
 
-  var cols = Array.prototype.slice.call(board.querySelectorAll(".dashboard__col"));
   var menu = document.querySelector("[data-panels-menu]");
   var menuList = document.querySelector("[data-panels-list]");
   var resetBtn = document.querySelector("[data-panels-reset]");
   var draggingPanel = null;
 
   function panels() {
-    return Array.prototype.slice.call(board.querySelectorAll(".panel"));
+    return Array.prototype.slice.call(board.querySelectorAll(":scope > .panel"));
   }
 
   function readState() {
@@ -33,16 +33,15 @@
 
   function readLayout() {
     return {
-      columns: cols.map(function (col) {
-        return Array.prototype.slice
-          .call(col.querySelectorAll(":scope > .panel"))
-          .map(function (p) { return p.dataset.pane; });
-      }),
+      order: panels().map(function (p) { return p.dataset.pane; }),
       collapsed: panels()
         .filter(function (p) { return p.getAttribute("data-collapsed") === "true"; })
         .map(function (p) { return p.dataset.pane; }),
       hidden: panels()
         .filter(function (p) { return p.hidden; })
+        .map(function (p) { return p.dataset.pane; }),
+      full: panels()
+        .filter(function (p) { return p.getAttribute("data-fullwidth") === "true"; })
         .map(function (p) { return p.dataset.pane; })
     };
   }
@@ -53,9 +52,9 @@
     } catch (_) {}
   }
 
-  // Restore a saved layout. Panes missing from the saved state (e.g. the
-  // legacy Migrate pane on a scaffolded server) keep their server-rendered
-  // slot; unknown saved ids are ignored.
+  // Restore a saved layout. Panes missing from the saved order (e.g. a newly
+  // added pane, or the legacy Migrate pane on a scaffolded server) trail the
+  // saved ones in their server-rendered order; unknown saved ids are ignored.
   function applyState() {
     var state = readState();
     if (!state) return;
@@ -63,14 +62,17 @@
     var byId = {};
     panels().forEach(function (p) { byId[p.dataset.pane] = p; });
 
-    if (Array.isArray(state.columns)) {
-      state.columns.forEach(function (ids, i) {
-        var col = cols[i];
-        if (!col || !Array.isArray(ids)) return;
-        ids.forEach(function (id) {
-          if (byId[id]) col.appendChild(byId[id]);
-        });
+    if (Array.isArray(state.order)) {
+      var seen = {};
+      var seq = state.order.filter(function (id) {
+        if (!byId[id] || seen[id]) return false;
+        seen[id] = true;
+        return true;
       });
+      panels().forEach(function (p) {
+        if (!seen[p.dataset.pane]) seq.push(p.dataset.pane);
+      });
+      seq.forEach(function (id) { board.appendChild(byId[id]); });
     }
     (state.collapsed || []).forEach(function (id) {
       var p = byId[id];
@@ -82,10 +84,26 @@
     (state.hidden || []).forEach(function (id) {
       if (byId[id]) byId[id].hidden = true;
     });
+    (state.full || []).forEach(function (id) {
+      var p = byId[id];
+      if (!p) return;
+      p.setAttribute("data-fullwidth", "true");
+      var btn = p.querySelector(".panel__fullwidth");
+      if (btn) btn.setAttribute("aria-pressed", "true");
+    });
   }
 
   // ---- Collapse / hide (delegated click) ---------------------------------
   board.addEventListener("click", function (e) {
+    var fullBtn = e.target.closest(".panel__fullwidth");
+    if (fullBtn) {
+      var fp = fullBtn.closest(".panel");
+      var full = fp.getAttribute("data-fullwidth") === "true";
+      fp.setAttribute("data-fullwidth", full ? "false" : "true");
+      fullBtn.setAttribute("aria-pressed", full ? "false" : "true");
+      persist();
+      return;
+    }
     var collapseBtn = e.target.closest(".panel__collapse");
     if (collapseBtn) {
       var cp = collapseBtn.closest(".panel");
@@ -147,47 +165,53 @@
     draggingPanel.classList.remove("panel--dragging");
     draggingPanel.removeAttribute("draggable");
     draggingPanel = null;
-    cols.forEach(function (c) { c.classList.remove("dashboard__col--drop"); });
     persist();
   });
 
-  function dragAfter(col, y) {
-    var items = Array.prototype.slice.call(
-      col.querySelectorAll(":scope > .panel:not(.panel--dragging)")
-    );
-    var closest = null;
-    var closestOffset = -Infinity;
-    items.forEach(function (child) {
-      var box = child.getBoundingClientRect();
-      var offset = y - box.top - box.height / 2;
-      if (offset < 0 && offset > closestOffset) {
-        closestOffset = offset;
-        closest = child;
+  // Nearest visible panel to the pointer, plus whether to drop before or after
+  // it. The board is a 1-or-2 column grid whose row tops align, so a plain
+  // nearest-center test with an above/left bias lands the panel where the
+  // cursor reads.
+  function dropTarget(x, y) {
+    var best = null;
+    var bestDist = Infinity;
+    var before = true;
+    panels().forEach(function (el) {
+      if (el === draggingPanel || el.hidden) return;
+      var b = el.getBoundingClientRect();
+      var cx = b.left + b.width / 2;
+      var cy = b.top + b.height / 2;
+      var dx = x - cx;
+      var dy = y - cy;
+      var dist = dx * dx + dy * dy;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = el;
+        before = dy < 0 || (Math.abs(dy) <= b.height / 2 && dx < 0);
       }
     });
-    return closest;
+    return best ? { el: best, before: before } : null;
   }
 
-  cols.forEach(function (col) {
-    col.addEventListener("dragover", function (e) {
-      if (!draggingPanel) return;
-      e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-      col.classList.add("dashboard__col--drop");
-      var after = dragAfter(col, e.clientY);
-      if (after == null) col.appendChild(draggingPanel);
-      else col.insertBefore(draggingPanel, after);
-    });
-    col.addEventListener("dragleave", function (e) {
-      if (e.relatedTarget && col.contains(e.relatedTarget)) return;
-      col.classList.remove("dashboard__col--drop");
-    });
-    col.addEventListener("drop", function (e) {
-      // Reorder already happened during dragover; cancel the browser's default
-      // drop so the dragged pane id isn't inserted into an input / the editor
-      // when the drag is released over an editable descendant.
-      if (draggingPanel) e.preventDefault();
-    });
+  board.addEventListener("dragover", function (e) {
+    if (!draggingPanel) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    var t = dropTarget(e.clientX, e.clientY);
+    if (!t) {
+      if (board.lastElementChild !== draggingPanel) board.appendChild(draggingPanel);
+      return;
+    }
+    var ref = t.before ? t.el : t.el.nextSibling;
+    if (ref === draggingPanel) return; // already in place
+    board.insertBefore(draggingPanel, ref);
+  });
+
+  board.addEventListener("drop", function (e) {
+    // Reorder already happened during dragover; cancel the browser's default
+    // drop so the dragged pane id isn't inserted into an input / the editor
+    // when the drag is released over an editable descendant.
+    if (draggingPanel) e.preventDefault();
   });
 
   // ---- Panels menu (restore hidden + reset) ------------------------------

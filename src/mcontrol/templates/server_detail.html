@@ -52,7 +52,7 @@
   dashboard.js reads data-pane for layout persistence.
 #}
 {% macro panel(pane_id, title) %}
-<section class="panel" data-pane="{{ pane_id }}" data-collapsed="false">
+<section class="panel" data-pane="{{ pane_id }}" data-collapsed="false" data-fullwidth="false">
   <header class="panel__bar">
     <span class="panel__grip" title="Drag to rearrange" aria-hidden="true">
       <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
@@ -62,6 +62,15 @@
       </svg>
     </span>
     <span class="panel__title t-eyebrow">{{ title }}</span>
+    <button type="button" class="panel__btn panel__fullwidth" aria-pressed="false"
+            title="Toggle full width" aria-label="Toggle full width for {{ title }} panel">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="8 7 4 12 8 17"/>
+        <polyline points="16 7 20 12 16 17"/>
+        <line x1="4" y1="12" x2="20" y2="12"/>
+      </svg>
+    </button>
     <button type="button" class="panel__btn panel__collapse" aria-expanded="true"
             title="Collapse panel" aria-label="Collapse {{ title }} panel">
       <svg class="panel__chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"
@@ -178,32 +187,19 @@
   {% endif %}
 
   {#
-    Two-column panel board. Panels are draggable/collapsible/hideable and
-    their arrangement persists via dashboard.js (localStorage). Server-render
-    order is the default layout; the JS restores any saved layout on load.
-    Source order (console after #server-resources) is load-bearing for
-    tests — keep console the first panel.
+    Panel board: one flowing grid that tiles panes into 1 or 2 columns
+    responsively (2 when there's room, 1 when narrow). Panels are
+    draggable/collapsible/hideable and their order persists via dashboard.js
+    (localStorage). Server-render order is the default layout — the two tall
+    panes (console, files) lead so they pair in the top row — and the JS
+    restores any saved order on load. Source order (console after
+    #server-resources) is load-bearing for tests — keep console first.
   #}
   <div class="dashboard" data-dashboard data-server="{{ server.name }}">
-    <div class="dashboard__col" data-col>
       {% call panel('console', 'Console') %}
         {% include "_console_pane.html" %}
       {% endcall %}
 
-      {% call panel('players', 'Players') %}
-        <section id="server-players"
-                 class="hx-slot hx-slot--players"
-                 hx-get="/servers/{{ server.name }}/players"
-                 hx-trigger="load"
-                 hx-swap="outerHTML">
-          <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
-          <span class="skeleton skeleton--line" aria-hidden="true"></span>
-          <span class="skeleton skeleton--block" aria-hidden="true"></span>
-        </section>
-      {% endcall %}
-    </div>
-
-    <div class="dashboard__col" data-col>
       {% call panel('files', 'Files') %}
         <section class="files-pane" data-server-name="{{ server.name }}">
           <header class="files-pane__head">
@@ -270,6 +266,18 @@
         </section>
       {% endcall %}
 
+      {% call panel('players', 'Players') %}
+        <section id="server-players"
+                 class="hx-slot hx-slot--players"
+                 hx-get="/servers/{{ server.name }}/players"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+          <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
+          <span class="skeleton skeleton--line" aria-hidden="true"></span>
+          <span class="skeleton skeleton--block" aria-hidden="true"></span>
+        </section>
+      {% endcall %}
+
       {% if not server.scaffolded_at %}
         {% call panel('migrate', 'Legacy server') %}
           <section id="migrate-card"
@@ -287,7 +295,6 @@
       {% call panel('bindings', 'Bindings') %}
         {% include "_bindings_card.html" %}
       {% endcall %}
-    </div>
   </div>
 
   {# Delete confirmation renders here on demand (header ⋯ menu → Delete). #}
