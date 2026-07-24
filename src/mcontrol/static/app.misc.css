@@ -1,7 +1,7 @@
 /* ---- Health banner ---------------------------------------------------- */
 .health-banner {
   background: var(--danger-bg);
-  border: 1px solid var(--danger-border);
+  border: var(--bw) solid var(--danger-border);
   border-radius: var(--radius-md);
   padding: var(--space-4) var(--space-5);
   display: grid;
@@ -81,7 +81,7 @@
 .players-card__flash {
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   font-size: var(--fs-sm);
   margin: 0;
 }
@@ -103,7 +103,7 @@
   padding: var(--space-3) var(--space-4);
   background: var(--info-bg);
   color: var(--info-fg);
-  border: 1px solid var(--info-border);
+  border: var(--bw) solid var(--info-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   font: inherit;
@@ -122,7 +122,7 @@
   gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-md);
 }
 
@@ -162,7 +162,7 @@
   border-collapse: separate;
   border-spacing: 0;
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
@@ -250,7 +250,7 @@
 /* ---- Per-server players card ------------------------------------------ */
 .players-card {
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-md);
   padding: var(--space-5);
   display: grid;
@@ -333,7 +333,7 @@
 .trash-modal__panel,
 .confirm-modal__panel {
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
   padding: var(--space-6);
@@ -432,7 +432,7 @@
   gap: var(--space-4);
   padding: var(--space-3) var(--space-5);
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-md);
 }
 

@@ -3,7 +3,7 @@
   display: grid;
   gap: var(--space-3);
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-md);
   padding: var(--space-5);
 }
@@ -22,7 +22,7 @@
 
 .console-pane__stream {
   background: var(--bg-terminal);
-  border: 1px solid var(--border-terminal);
+  border: var(--bw) solid var(--border-terminal);
   border-radius: var(--radius-sm);
   color: var(--fg-terminal);
   /* Dark scrollbars/controls even in light theme: the terminal surface
@@ -81,7 +81,7 @@
   bottom: var(--space-3);
   padding: 4px 12px;
   border-radius: var(--radius-full);
-  border: 1px solid var(--border-terminal);
+  border: var(--bw) solid var(--border-terminal);
   background: var(--bg-terminal);
   color: var(--fg-terminal);
   font-family: var(--font-mono);
@@ -113,7 +113,7 @@
   display: grid;
   gap: var(--space-3);
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-md);
   padding: var(--space-5);
 }
@@ -147,7 +147,7 @@
   margin: 0;
   padding: var(--space-3);
   background: var(--bg-sunken);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-sm);
   height: 26rem;
   overflow: auto;
@@ -249,7 +249,7 @@
 .file-tree__menu-trigger {
   list-style: none;
   cursor: pointer;
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-xs);
   color: var(--fg-muted);
   font-size: var(--fs-xs);
@@ -288,7 +288,7 @@
   margin-top: var(--space-1);
   padding: var(--space-1);
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
   display: grid;
@@ -350,7 +350,7 @@
 .file-upload-conflict,
 .file-conflict {
   background: var(--bg-sunken);
-  border: 1px solid var(--border-medium);
+  border: var(--bw) solid var(--border-medium);
   border-radius: var(--radius-sm);
   padding: var(--space-3) var(--space-4);
   display: grid;
@@ -389,7 +389,7 @@
 
 .file-upload-error {
   background: var(--danger-bg);
-  border: 1px solid var(--danger-border);
+  border: var(--bw) solid var(--danger-border);
   color: var(--danger-fg);
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-sm);
@@ -398,7 +398,7 @@
 
 .file-upload-progress {
   background: var(--bg-sunken);
-  border: 1px solid var(--border-medium);
+  border: var(--bw) solid var(--border-medium);
   border-radius: var(--radius-sm);
   padding: var(--space-3) var(--space-4);
   display: grid;
@@ -411,7 +411,7 @@
 
 .file-upload-progress__bar {
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-xs);
   height: var(--space-2);
   overflow: hidden;
@@ -430,7 +430,7 @@
 
 .file-move-modal {
   background: var(--bg-sunken);
-  border: 1px solid var(--border-medium);
+  border: var(--bw) solid var(--border-medium);
   border-radius: var(--radius-sm);
   padding: var(--space-3) var(--space-4);
   display: grid;
@@ -450,7 +450,7 @@
 
 .file-picker {
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-sm);
   padding: var(--space-2);
   max-height: 18rem;
@@ -545,7 +545,7 @@
   max-height: 14rem;
   overflow: auto;
   background: var(--bg-sunken);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-sm);
 }
 
@@ -588,7 +588,7 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   background: var(--accent-soft);
-  border: 1px solid var(--accent);
+  border: var(--bw) solid var(--accent);
   border-radius: var(--radius-sm);
 }
 
@@ -599,7 +599,7 @@
 
 .file-view {
   background: var(--bg-sunken);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-sm);
   padding: var(--space-4);
   height: 26rem;
@@ -671,7 +671,7 @@
 }
 
 .file-view__info-card {
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-sm);
   padding: var(--space-4);
   display: grid;
@@ -696,7 +696,7 @@
 }
 
 .file-editor__cm {
-  border: 1px solid var(--border-medium);
+  border: var(--bw) solid var(--border-medium);
   border-radius: var(--radius-sm);
   height: 18rem;
   font-size: var(--fs-sm);

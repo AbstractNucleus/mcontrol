@@ -1,18 +1,18 @@
 /* ---- Card -------------------------------------------------------------- */
 .card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  padding: var(--space-6);
+  background: var(--elevated);
+  border: var(--bw) solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: var(--space-4);
 }
 
 
 /* ---- Empty state ------------------------------------------------------- */
 .empty-state {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  padding: var(--space-12) var(--space-8);
+  background: var(--elevated);
+  border: var(--bw) solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: var(--space-10) var(--space-6);
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -102,15 +102,17 @@
   display: grid;
   grid-template-columns: subgrid;
   align-items: center;
-  padding: var(--space-3) var(--space-4);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  transition: border-color var(--motion-fast) var(--ease);
+  padding: var(--space-2) var(--space-3);
+  background: var(--elevated);
+  border: var(--bw) solid var(--border-soft);
+  border-radius: var(--radius);
+  transition: border-color var(--motion-fast) var(--ease),
+              background var(--motion-fast) var(--ease);
 }
 
 .server-card:hover {
-  border-color: var(--border-medium);
+  border-color: var(--border-strong);
+  background: var(--hover);
 }
 
 .server-card__id {
@@ -183,7 +185,7 @@
   letter-spacing: 0.02em;
   background: var(--bg-sunken);
   color: var(--fg-secondary);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   white-space: nowrap;
   transition: background var(--motion-base) var(--ease),
               color var(--motion-base) var(--ease),
@@ -276,7 +278,7 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--fg-muted);
@@ -308,7 +310,7 @@
   min-width: 11rem;
   padding: var(--space-1);
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
   display: grid;
@@ -401,7 +403,7 @@
 .dashboard {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-5);
+  gap: var(--gap);
   align-items: start;
 }
 
@@ -426,9 +428,9 @@
 /* Panel is the card frame; inner panes shed their own chrome (below). No
    overflow:hidden here — it would clip the files ⋯ popover. */
 .panel {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  background: var(--elevated);
+  border: var(--bw) solid var(--border-soft);
+  border-radius: var(--radius);
 }
 
 .panel--dragging {
@@ -442,7 +444,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
-  border-bottom: 1px solid var(--border-soft);
+  border-bottom: var(--bw) solid var(--border-soft);
   user-select: none;
 }
 
@@ -515,7 +517,7 @@
 }
 
 .panel__body {
-  padding: var(--space-5);
+  padding: var(--space-4);
 }
 
 .panel[data-collapsed="true"] .panel__body {
@@ -573,7 +575,7 @@
   gap: var(--space-4);
   padding: var(--space-4) var(--space-5);
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-md);
   flex-wrap: wrap;
 }
@@ -614,7 +616,7 @@
 .hx-slot {
   min-height: var(--slot-h, 160px);
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-md);
   padding: var(--space-5);
   display: grid;
@@ -755,7 +757,7 @@
 .variables-card,
 .migrate-card {
   background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-md);
   padding: var(--space-5);
   display: grid;
@@ -899,7 +901,7 @@
 
 .regenerate-diff__file {
   background: var(--bg-sunken);
-  border: 1px solid var(--border-soft);
+  border: var(--bw) solid var(--border-soft);
   border-radius: var(--radius-sm);
   padding: var(--space-3) var(--space-4);
 }

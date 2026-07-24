@@ -1,24 +1,20 @@
 /* =========================================================================
    mcontrol: design tokens
-   Claude-flavoured theme. Two-layer system:
-   primitives (raw hex) and semantic tokens (consumed by components).
-   Components MUST consume the semantic layer only.
+   Panel UI system (see DESIGN.md). Two-layer: primitives (raw hex) and
+   semantic tokens (consumed by components). Components MUST consume the
+   semantic layer only.
 
-   Light is the default. Dark applies via [data-theme="dark"] on <html>.
-   Without an explicit data-theme, prefers-color-scheme drives the JS-off
-   fallback so first paint is correct even if theme.js fails to load.
+   Dark is the primary surface (Cursor Dark Anysphere). Light applies via
+   [data-theme="light"] on <html>. Without an explicit data-theme,
+   prefers-color-scheme drives the JS-off fallback so first paint is correct
+   even if theme.js fails to load.
 
-   Source palette: claude.com/docs/connectors/building/mcp-apps/design-guidelines
-   Brand orange: #D97757 (anthropics/skills/brand-guidelines).
+   Layout tokens (--gap, --radius, --bw) are shared; one radius, one gap.
+   Sharp corners (--radius: 0). Shadows only on the shell and true overlays.
    ========================================================================= */
 
 
-/* ---- Fonts (Inter Tight, variable weight 100-900, latin + latin-ext) ---- */
-/* Self-hosted under /static/fonts/. Without these declarations the
-   --font-sans stack falls all the way through to system sans; the
-   "Inter Tight" name only resolves if a user happens to have it installed
-   locally. Mirrors D:\code\design\tokens.css. OFL 1.1; see fonts/OFL.txt. */
-
+/* ---- Fonts (IBM Plex — panel system) ----------------------------------- */
 @font-face {
   font-family: 'Inter Tight';
   font-style: normal;
@@ -58,75 +54,166 @@
 
 /* ---- Primitives (do not consume directly from components) -------------- */
 :root {
-  /* Anthropic brand core */
-  --hex-cream:        #FAF9F5;
-  --hex-paper:        #FFFFFF;
-  --hex-stone:        #F5F4ED;
-  --hex-clay:         #E8E6DC;
-  --hex-gravel:       #B0AEA5;
-  --hex-ink:          #141413;
-  --hex-ink-soft:     #3D3D3A;
-  --hex-ink-mute:     #73726C;
+  /* Cursor Dark Anysphere */
+  --hex-bg:           #141414;
+  --hex-surface:      #181818;
+  --hex-elevated:     #1f1f1f;
+  --hex-hover:        #262626;
+  --hex-text:         #F0F0F0;
+  --hex-muted:        #F0F0F0BD;
+  --hex-faint:        #F0F0F05C;
+  --hex-border:       #F0F0F013;
+  --hex-border-strong:#F0F0F026;
 
-  --hex-near-black:   #141413;
-  --hex-coal:         #30302E;
-  --hex-coal-deep:    #262624;
-  --hex-coal-pit:     #1F1E1C;
+  /* Light panel counterpart */
+  --hex-bg-l:           #E8E8E8;
+  --hex-surface-l:      #F4F4F4;
+  --hex-elevated-l:     #FFFFFF;
+  --hex-hover-l:        #EBEBEB;
+  --hex-text-l:         #141414;
+  --hex-muted-l:        #141414A6;
+  --hex-faint-l:        #14141452;
+  --hex-border-l:       #14141414;
+  --hex-border-strong-l:#14141426;
 
-  --hex-bone:         #FAF9F5;
-  --hex-bone-soft:    #C2C0B6;
-  --hex-bone-mute:    #9C9A92;
-
-  --hex-orange:       #D97757;
-  --hex-orange-deep:  #C5613F;
-  --hex-orange-soft:  #F4DDD1;
-  --hex-orange-light: #E08B6F;
-  --hex-orange-pit:   #3A241B;
-  /* Darker terracottas for accent-as-TEXT on light surfaces; the brand
-     orange itself only reaches ~2.8-3.1:1 there (WCAG AA fail). */
-  --hex-orange-text:  #B0502D;
-  --hex-orange-ember: #9C4322;
+  --hex-accent:       #E8823A;
+  --hex-accent-hover: #F0934A;
+  --hex-accent-dim:   #E8823A22;
+  --hex-accent-fg:    #1a1208;
+  --hex-accent-deep:  #C96A28;
+  --hex-accent-soft-l:#F3DFD0;
+  --hex-accent-text-l:#A85A22;
 
   --hex-info-bg-l:     #D6E4F6;  --hex-info-fg-l:     #2C5C9E;  --hex-info-br-l:     #4682D5;
-  --hex-info-bg-d:     #253E5F;  --hex-info-fg-d:     #80AADD;
+  --hex-info-bg-d:     #1A2A3D;  --hex-info-fg-d:     #80AADD;  --hex-info-br-d:     #4682D5;
   --hex-success-bg-l:  #E9F1DC;  --hex-success-fg-l:  #265B19;  --hex-success-br-l:  #437426;
-  --hex-success-bg-d:  #1B4614;  --hex-success-fg-d:  #7AB948;  --hex-success-br-d:  #599130;
+  --hex-success-bg-d:  #15351A;  --hex-success-fg-d:  #7AB948;  --hex-success-br-d:  #599130;
   --hex-warning-bg-l:  #F6EEDF;  --hex-warning-fg-l:  #5A4815;  --hex-warning-br-l:  #805C1F;
-  --hex-warning-bg-d:  #483A0F;  --hex-warning-fg-d:  #D1A041;  --hex-warning-br-d:  #A87829;
+  --hex-warning-bg-d:  #3A2E0C;  --hex-warning-fg-d:  #D1A041;  --hex-warning-br-d:  #A87829;
   --hex-danger-bg-l:   #F7ECEC;  --hex-danger-fg-l:   #7F2C28;  --hex-danger-br-l:   #A73D39;
-  --hex-danger-bg-d:   #602A28;  --hex-danger-fg-d:   #EE8884;  --hex-danger-br-d:   #CD5C58;
+  --hex-danger-bg-d:   #3D1C1B;  --hex-danger-fg-d:   #EE8884;  --hex-danger-br-d:   #CD5C58;
+
+  --hex-terminal:      #0F0F0F;
+  --hex-near-black:    #141414;
 }
 
 
-/* ---- Semantic tokens: light (default) --------------------------------- */
+/* ---- Panel layout tokens (DESIGN.md) ----------------------------------- */
 :root {
-  /* Surface */
-  --bg-page:        var(--hex-cream);
-  --bg-surface:     var(--hex-paper);
-  --bg-sunken:      var(--hex-stone);
+  --gap:    4px;
+  --radius: 0px;
+  --bw:     1.5px;
+}
 
-  /* Text */
-  --fg-primary:     var(--hex-ink);
-  --fg-secondary:   var(--hex-ink-soft);
-  --fg-muted:       var(--hex-ink-mute);
-  --fg-inverse:     var(--hex-paper);
 
-  /* Borders: translucent so they pick up surface tint */
-  --border-soft:    rgba(31, 30, 29, 0.15);
-  --border-medium:  rgba(31, 30, 29, 0.30);
-  --border-strong:  rgba(31, 30, 29, 0.40);
+/* ---- Semantic tokens: dark (default) ----------------------------------- */
+:root {
+  --bg:             var(--hex-bg);
+  --surface:        var(--hex-surface);
+  --elevated:       var(--hex-elevated);
+  --hover:          var(--hex-hover);
+  --text:           var(--hex-text);
+  --muted:          var(--hex-muted);
+  --faint:          var(--hex-faint);
 
-  /* Brand accent */
-  --accent:         var(--hex-orange);
-  --accent-hover:   var(--hex-orange-deep);
-  --accent-soft:    var(--hex-orange-soft);
-  --accent-fg:      var(--hex-ink);
-  /* Accent when used as text on page/surface backgrounds (AA-safe) */
-  --accent-text:    var(--hex-orange-text);
-  /* Accent when used as text on --accent-soft chips (AA-safe) */
-  --accent-on-soft: var(--hex-orange-ember);
+  --bg-page:        var(--bg);
+  --bg-surface:     var(--surface);
+  --bg-sunken:      var(--elevated);
 
-  /* Semantic: info, success, warning, danger */
+  --fg-primary:     var(--text);
+  --fg-secondary:   var(--muted);
+  --fg-muted:       var(--faint);
+  --fg-inverse:     var(--hex-near-black);
+
+  --border-soft:    var(--hex-border);
+  --border-medium:  var(--hex-border-strong);
+  --border-strong:  var(--hex-border-strong);
+
+  --accent:         var(--hex-accent);
+  --accent-hover:   var(--hex-accent-hover);
+  --accent-soft:    var(--hex-accent-dim);
+  --accent-fg:      var(--hex-accent-fg);
+  --accent-text:    var(--hex-accent);
+  --accent-on-soft: var(--hex-accent);
+
+  --info-bg:        var(--hex-info-bg-d);
+  --info-fg:        var(--hex-info-fg-d);
+  --info-border:    var(--hex-info-br-d);
+
+  --success-bg:     var(--hex-success-bg-d);
+  --success-fg:     var(--hex-success-fg-d);
+  --success-border: var(--hex-success-br-d);
+
+  --warning-bg:     var(--hex-warning-bg-d);
+  --warning-fg:     var(--hex-warning-fg-d);
+  --warning-border: var(--hex-warning-br-d);
+
+  --danger-bg:      var(--hex-danger-bg-d);
+  --danger-fg:      var(--hex-danger-fg-d);
+  --danger-border:  var(--hex-danger-br-d);
+
+  --bg-terminal:     var(--hex-terminal);
+  --fg-terminal:     var(--hex-text);
+  --fg-terminal-dim: var(--hex-faint);
+  --border-terminal: var(--hex-border);
+  --log-warn:        var(--hex-warning-fg-d);
+  --log-error:       var(--hex-danger-fg-d);
+  --log-cmd:         var(--hex-accent-hover);
+
+  --code-string:      var(--hex-success-fg-d);
+  --code-number:      var(--hex-info-fg-d);
+  --code-keyword:     var(--hex-warning-fg-d);
+  --code-property:    var(--hex-accent);
+  --code-comment:     var(--hex-faint);
+  --code-punctuation: var(--hex-muted);
+  --code-active-line: rgba(240, 240, 240, 0.06);
+
+  --skeleton-sheen: rgba(240, 240, 240, 0.06);
+
+  --ring:           rgba(240, 240, 240, 0.70);
+
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.35), 0 1px 2px -1px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.40);
+  --shadow-shell: 0 8px 32px rgba(0, 0, 0, 0.40);
+
+  --overlay-scrim:        rgba(0, 0, 0, 0.50);
+  --overlay-scrim-strong: rgba(0, 0, 0, 0.70);
+
+  color-scheme: dark;
+}
+
+
+/* ---- Semantic tokens: light (explicit) --------------------------------- */
+[data-theme="light"] {
+  --bg:             var(--hex-bg-l);
+  --surface:        var(--hex-surface-l);
+  --elevated:       var(--hex-elevated-l);
+  --hover:          var(--hex-hover-l);
+  --text:           var(--hex-text-l);
+  --muted:          var(--hex-muted-l);
+  --faint:          var(--hex-faint-l);
+
+  --bg-page:        var(--bg);
+  --bg-surface:     var(--surface);
+  --bg-sunken:      var(--elevated);
+
+  --fg-primary:     var(--text);
+  --fg-secondary:   var(--muted);
+  --fg-muted:       var(--faint);
+  --fg-inverse:     var(--hex-elevated-l);
+
+  --border-soft:    var(--hex-border-l);
+  --border-medium:  var(--hex-border-strong-l);
+  --border-strong:  var(--hex-border-strong-l);
+
+  --accent:         var(--hex-accent);
+  --accent-hover:   var(--hex-accent-deep);
+  --accent-soft:    var(--hex-accent-soft-l);
+  --accent-fg:      var(--hex-accent-fg);
+  --accent-text:    var(--hex-accent-text-l);
+  --accent-on-soft: var(--hex-accent-text-l);
+
   --info-bg:        var(--hex-info-bg-l);
   --info-fg:        var(--hex-info-fg-l);
   --info-border:    var(--hex-info-br-l);
@@ -143,188 +230,126 @@
   --danger-fg:      var(--hex-danger-fg-l);
   --danger-border:  var(--hex-danger-br-l);
 
-  /* Terminal surfaces (log + console panes): a deliberate dark island in
-     BOTH themes, mirroring an embedded terminal. Defined once here; the
-     dark blocks don't override them, so the values hold everywhere. */
-  --bg-terminal:     var(--hex-coal-pit);
-  --fg-terminal:     var(--hex-bone);
-  --fg-terminal-dim: var(--hex-bone-mute);
-  --border-terminal: rgba(222, 220, 209, 0.14);
-  --log-warn:        var(--hex-warning-fg-d);
-  --log-error:       var(--hex-danger-fg-d);
-  --log-cmd:         var(--hex-orange-light);
-
-  /* Syntax highlighting (file editor) */
   --code-string:      var(--hex-success-fg-l);
   --code-number:      var(--hex-info-fg-l);
   --code-keyword:     var(--hex-warning-fg-l);
-  --code-property:    var(--hex-orange-text);
-  --code-comment:     var(--hex-ink-mute);
-  --code-punctuation: var(--hex-ink-soft);
-  /* Active-line tint: translucent so the selection layer beneath stays
-     visible (mirrors the border-alpha idiom). */
-  --code-active-line: rgba(31, 30, 29, 0.06);
+  --code-property:    var(--hex-accent-text-l);
+  --code-comment:     var(--hex-faint-l);
+  --code-punctuation: var(--hex-muted-l);
+  --code-active-line: rgba(20, 20, 20, 0.05);
 
-  /* Skeleton shimmer highlight (loading placeholders) */
-  --skeleton-sheen: rgba(31, 30, 29, 0.05);
+  --skeleton-sheen: rgba(20, 20, 20, 0.05);
 
-  /* Focus ring: neutral, never orange */
   --ring:           rgba(20, 20, 19, 0.70);
 
-  /* Shadows: reserved for popovers / dialogs only */
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.10), 0 1px 2px -1px rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 10px 20px -4px rgba(0, 0, 0, 0.15), 0 4px 8px -4px rgba(0, 0, 0, 0.10);
+  --shadow-lg: 0 10px 20px -4px rgba(0, 0, 0, 0.12), 0 4px 8px -4px rgba(0, 0, 0, 0.08);
+  --shadow-shell: 0 8px 24px rgba(0, 0, 0, 0.12);
 
-  /* Modal / dialog backdrop scrim (theme-independent. dark over any page) */
-  --overlay-scrim:        rgba(20, 20, 19, 0.40);
-  --overlay-scrim-strong: rgba(20, 20, 19, 0.65);
+  --overlay-scrim:        rgba(20, 20, 19, 0.35);
+  --overlay-scrim-strong: rgba(20, 20, 19, 0.55);
 
-  /* Tells the UA that form controls / scrollbars should match */
   color-scheme: light;
 }
 
 
-/* ---- Semantic tokens: dark (explicit) --------------------------------- */
-/* Mirrors the Claude Code desktop app: flat coal-pit page, narrowly-lifted
-   surfaces (~7-unit step from page), neutral bone-alpha hairline borders,
-   terracotta accent used scarcely. No glow, no texture, no glass. */
-[data-theme="dark"] {
-  --bg-page:        var(--hex-coal-pit);
-  --bg-surface:     var(--hex-coal);
-  --bg-sunken:      var(--hex-coal-deep);
-
-  --fg-primary:     var(--hex-bone);
-  --fg-secondary:   var(--hex-bone-soft);
-  --fg-muted:       var(--hex-bone-mute);
-  --fg-inverse:     var(--hex-near-black);
-
-  --border-soft:    rgba(222, 220, 209, 0.10);
-  --border-medium:  rgba(222, 220, 209, 0.22);
-  --border-strong:  rgba(222, 220, 209, 0.35);
-
-  --accent:         var(--hex-orange);
-  --accent-hover:   var(--hex-orange-light);
-  --accent-soft:    var(--hex-orange-pit);
-  --accent-fg:      var(--hex-near-black);
-  --accent-text:    var(--hex-orange);
-  --accent-on-soft: var(--hex-orange);
-
-  --info-bg:        var(--hex-info-bg-d);
-  --info-fg:        var(--hex-info-fg-d);
-  --info-border:    var(--hex-info-br-l);
-
-  --success-bg:     var(--hex-success-bg-d);
-  --success-fg:     var(--hex-success-fg-d);
-  --success-border: var(--hex-success-br-d);
-
-  --warning-bg:     var(--hex-warning-bg-d);
-  --warning-fg:     var(--hex-warning-fg-d);
-  --warning-border: var(--hex-warning-br-d);
-
-  --danger-bg:      var(--hex-danger-bg-d);
-  --danger-fg:      var(--hex-danger-fg-d);
-  --danger-border:  var(--hex-danger-br-d);
-
-  --code-string:      var(--hex-success-fg-d);
-  --code-number:      var(--hex-info-fg-d);
-  --code-keyword:     var(--hex-warning-fg-d);
-  --code-property:    var(--hex-orange);
-  --code-comment:     var(--hex-bone-mute);
-  --code-punctuation: var(--hex-bone-soft);
-  --code-active-line: rgba(222, 220, 209, 0.07);
-
-  --skeleton-sheen: rgba(222, 220, 209, 0.06);
-
-  --ring:           rgba(250, 249, 245, 0.70);
-
-  color-scheme: dark;
-}
-
-
-/* ---- JS-off fallback: prefers-color-scheme dark ------------------------ */
-/* Applies the dark token set when no explicit data-theme has been set
-   (e.g. JS disabled, localStorage blocked, first paint racing the
-   inline bootstrap). The :not([data-theme]) selector is load-bearing;
-   without it, an explicit data-theme="light" would be overridden by an
-   OS-level dark preference. */
-@media (prefers-color-scheme: dark) {
+/* ---- JS-off fallback: prefers-color-scheme light ----------------------- */
+/* Default tokens are dark. When no explicit data-theme is set and the OS
+   prefers light, flip to the light set. */
+@media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
-    --bg-page:        var(--hex-coal-pit);
-    --bg-surface:     var(--hex-coal);
-    --bg-sunken:      var(--hex-coal-deep);
+    --bg:             var(--hex-bg-l);
+    --surface:        var(--hex-surface-l);
+    --elevated:       var(--hex-elevated-l);
+    --hover:          var(--hex-hover-l);
+    --text:           var(--hex-text-l);
+    --muted:          var(--hex-muted-l);
+    --faint:          var(--hex-faint-l);
 
-    --fg-primary:     var(--hex-bone);
-    --fg-secondary:   var(--hex-bone-soft);
-    --fg-muted:       var(--hex-bone-mute);
-    --fg-inverse:     var(--hex-near-black);
+    --bg-page:        var(--bg);
+    --bg-surface:     var(--surface);
+    --bg-sunken:      var(--elevated);
 
-    --border-soft:    rgba(222, 220, 209, 0.10);
-    --border-medium:  rgba(222, 220, 209, 0.22);
-    --border-strong:  rgba(222, 220, 209, 0.35);
+    --fg-primary:     var(--text);
+    --fg-secondary:   var(--muted);
+    --fg-muted:       var(--faint);
+    --fg-inverse:     var(--hex-elevated-l);
 
-    --accent-hover:   var(--hex-orange-light);
-    --accent-soft:    var(--hex-orange-pit);
-    --accent-fg:      var(--hex-near-black);
-    --accent-text:    var(--hex-orange);
-    --accent-on-soft: var(--hex-orange);
+    --border-soft:    var(--hex-border-l);
+    --border-medium:  var(--hex-border-strong-l);
+    --border-strong:  var(--hex-border-strong-l);
 
-    --info-bg:        var(--hex-info-bg-d);
-    --info-fg:        var(--hex-info-fg-d);
+    --accent-hover:   var(--hex-accent-deep);
+    --accent-soft:    var(--hex-accent-soft-l);
+    --accent-fg:      var(--hex-accent-fg);
+    --accent-text:    var(--hex-accent-text-l);
+    --accent-on-soft: var(--hex-accent-text-l);
 
-    --success-bg:     var(--hex-success-bg-d);
-    --success-fg:     var(--hex-success-fg-d);
-    --success-border: var(--hex-success-br-d);
+    --info-bg:        var(--hex-info-bg-l);
+    --info-fg:        var(--hex-info-fg-l);
+    --info-border:    var(--hex-info-br-l);
 
-    --warning-bg:     var(--hex-warning-bg-d);
-    --warning-fg:     var(--hex-warning-fg-d);
-    --warning-border: var(--hex-warning-br-d);
+    --success-bg:     var(--hex-success-bg-l);
+    --success-fg:     var(--hex-success-fg-l);
+    --success-border: var(--hex-success-br-l);
 
-    --danger-bg:      var(--hex-danger-bg-d);
-    --danger-fg:      var(--hex-danger-fg-d);
-    --danger-border:  var(--hex-danger-br-d);
+    --warning-bg:     var(--hex-warning-bg-l);
+    --warning-fg:     var(--hex-warning-fg-l);
+    --warning-border: var(--hex-warning-br-l);
 
-    --code-string:      var(--hex-success-fg-d);
-    --code-number:      var(--hex-info-fg-d);
-    --code-keyword:     var(--hex-warning-fg-d);
-    --code-property:    var(--hex-orange);
-    --code-comment:     var(--hex-bone-mute);
-    --code-punctuation: var(--hex-bone-soft);
-    --code-active-line: rgba(222, 220, 209, 0.07);
+    --danger-bg:      var(--hex-danger-bg-l);
+    --danger-fg:      var(--hex-danger-fg-l);
+    --danger-border:  var(--hex-danger-br-l);
 
-    --skeleton-sheen: rgba(222, 220, 209, 0.06);
+    --code-string:      var(--hex-success-fg-l);
+    --code-number:      var(--hex-info-fg-l);
+    --code-keyword:     var(--hex-warning-fg-l);
+    --code-property:    var(--hex-accent-text-l);
+    --code-comment:     var(--hex-faint-l);
+    --code-punctuation: var(--hex-muted-l);
+    --code-active-line: rgba(20, 20, 20, 0.05);
 
-    --ring:           rgba(250, 249, 245, 0.70);
+    --skeleton-sheen: rgba(20, 20, 20, 0.05);
 
-    color-scheme: dark;
+    --ring:           rgba(20, 20, 19, 0.70);
+
+    --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 10px 20px -4px rgba(0, 0, 0, 0.12), 0 4px 8px -4px rgba(0, 0, 0, 0.08);
+    --shadow-shell: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+    --overlay-scrim:        rgba(20, 20, 19, 0.35);
+    --overlay-scrim-strong: rgba(20, 20, 19, 0.55);
+
+    color-scheme: light;
   }
 }
 
 
 /* ---- Type, radii, spacing, motion -------------------------------------- */
 :root {
-  --font-sans: "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
-               system-ui, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "JetBrains Mono", "Fira Code", SFMono-Regular,
-               Menlo, Consolas, "Liberation Mono", monospace;
+  --font-sans: "IBM Plex Sans", "Inter Tight", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   --fs-xs:  12px;
-  --fs-sm:  14px;
-  --fs-md:  16px;
-  --fs-lg:  20px;
-  --fs-xl:  24px;
-  --fs-2xl: 28px;
-  --fs-3xl: 36px;
+  --fs-sm:  13px;
+  --fs-md:  14px;
+  --fs-lg:  16px;
+  --fs-xl:  18px;
+  --fs-2xl: 22px;
+  --fs-3xl: 28px;
 
   --lh-tight: 1.1;
   --lh-snug:  1.25;
   --lh-base:  1.4;
 
-  --radius-xs:   4px;
-  --radius-sm:   6px;
-  --radius-md:   8px;
-  --radius-lg:   10px;
-  --radius-xl:   12px;
+  /* One radius everywhere (sharp). --radius-full kept for status dots. */
+  --radius-xs:   var(--radius);
+  --radius-sm:   var(--radius);
+  --radius-md:   var(--radius);
+  --radius-lg:   var(--radius);
+  --radius-xl:   var(--radius);
   --radius-full: 9999px;
 
   --space-1:  4px;
@@ -349,10 +374,6 @@
 /* ---- Base elements ----------------------------------------------------- */
 *, *::before, *::after { box-sizing: border-box; }
 
-/* The `hidden` attribute must win over component display rules. A bare
-   `.thing { display: flex }` out-specifies the UA `[hidden]` default, so
-   toggling `hidden` from JS would otherwise leave the element visible
-   (e.g. the file bulk-actions toolbar and the search clear button). */
 [hidden] { display: none !important; }
 
 html, body {
@@ -365,6 +386,16 @@ html, body {
   line-height: var(--lh-base);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  height: 100%;
+  overflow: hidden;
+  padding: 8px;
 }
 
 
@@ -406,7 +437,7 @@ pre code {
 
 hr {
   border: none;
-  border-top: 1px solid var(--border-soft);
+  border-top: var(--bw) solid var(--border-soft);
   margin: var(--space-6) 0;
 }
 
@@ -488,7 +519,7 @@ button, input, textarea, select {
   font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--fg-muted);
   margin: 0;
 }
@@ -516,9 +547,6 @@ button, input, textarea, select {
     scroll-behavior: auto !important;
   }
 
-  /* htmx `transition:true` swaps call startViewTransition regardless of
-     motion preference; the universal clamp above can't match these
-     UA-generated pseudos, so silence them explicitly. */
   ::view-transition-group(*),
   ::view-transition-image-pair(*),
   ::view-transition-old(*),
