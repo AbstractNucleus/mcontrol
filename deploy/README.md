@@ -25,8 +25,14 @@ package is the one failure that stops the pilot dead:
 TOK=$(curl -s "https://ghcr.io/token?scope=repository:abstractnucleus/mcontrol:pull&service=ghcr.io" \
   | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
 curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOK" \
+  -H "Accept: application/vnd.oci.image.index.v1+json" \
   https://ghcr.io/v2/abstractnucleus/mcontrol/manifests/latest
 ```
+
+The `Accept` header is not optional. buildx publishes an OCI image index, and
+without a header advertising that type the registry answers `404` for a tag
+that is live and public — a false negative that sends you to the settings
+page for no reason.
 
 `200` means bserver can pull. If you ever see `403`, the package is private:
 
