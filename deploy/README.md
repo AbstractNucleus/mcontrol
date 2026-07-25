@@ -16,21 +16,28 @@ exists, and the package does not exist until the workflow has run once.
 
 **2. Wait for the run to go green.** `gh run watch`
 
-**3. Make the package public — once.** GitHub creates container packages
-*private* even when the source repo is public; visibility is not inherited.
-Until you do this, bserver cannot pull at all.
+**3. Check the package is publicly pullable.** bserver holds no registry
+credentials, so it can only pull anonymously. On the first publish this came
+out public on its own — but check rather than assume, because a private
+package is the one failure that stops the pilot dead:
+
+```
+TOK=$(curl -s "https://ghcr.io/token?scope=repository:abstractnucleus/mcontrol:pull&service=ghcr.io" \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOK" \
+  https://ghcr.io/v2/abstractnucleus/mcontrol/manifests/latest
+```
+
+`200` means bserver can pull. If you ever see `403`, the package is private:
 
 <https://github.com/users/AbstractNucleus/packages/container/mcontrol/settings>
 → Danger Zone → Change visibility → Public.
 
-There is no API shortcut with the current `gh` token — it has `repo` and
-`workflow` but not `write:packages`. Run `gh auth refresh -s write:packages`
-first if you would rather not use the web UI.
-
-Prefer this over `docker login ghcr.io` on bserver. The repo is already
+Prefer that over `docker login ghcr.io` on bserver. The repo is already
 public so a private image hides nothing, while a PAT would sit in plaintext
 at `/home/abstract/.docker/config.json` on a host that today stores no
-credentials and has no credential helper.
+credentials and has no credential helper. There is no `gh api` shortcut
+unless you first run `gh auth refresh -s write:packages`.
 
 **4. Stage the deploy directory.** Copy the existing `.env` across rather
 than retyping it — the live values are already correct and retyping them is
