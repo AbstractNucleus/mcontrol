@@ -1,0 +1,23 @@
+# The Dockerfile only COPYs pyproject.toml, uv.lock and src/. Everything else
+# is context the daemon uploads and then throws away. .venv alone is ~100 MB.
+.venv/
+.git/
+.github/
+.claude/
+.pytest_cache/
+.ruff_cache/
+# ** is required: bare __pycache__/ matches only the context root, and this
+# repo's bytecode all lives under src/mcontrol/.
+**/__pycache__/
+**/*.pyc
+
+# Never let a local secret into the build context.
+.env
+.env.*
+!.env.example
+
+tests/
+dev_mock.py
+*.md
+LICENSE
+deploy/

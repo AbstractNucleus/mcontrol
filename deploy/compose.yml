@@ -1,0 +1,27 @@
+# Server-side stack for mcontrol. Lives at /home/abstract/deploy/mcontrol/ on
+# bserver, next to a .env. There is deliberately no `build:` key here: the
+# server has no source tree and must never try to compile anything.
+#
+# The repo-root docker-compose.yml still builds, and is what you use locally.
+#
+# Deploy:  docker compose pull && docker compose up -d
+# Rollback: set TAG to an older sha-xxxxxxx in .env, then the same two commands.
+
+# Matches the old `-p mcontrol`, so this replaces the existing containers in
+# place instead of standing up a second copy on the same port.
+name: mcontrol
+
+services:
+  app:
+    image: ghcr.io/abstractnucleus/mcontrol:${TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${HOST_BIND_IP:-127.0.0.1}:8003:8000"
+    volumes:
+      # rw so the panel can `docker start/stop/exec` and attach container
+      # networks for the RCON console.
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      # rw so the panel can scaffold compose + start_server.sh and let
+      # operators edit files via the in-app file browser.
+      - ${SERVER_BASE_PATH}:${SERVER_BASE_PATH}:rw

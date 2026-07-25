@@ -1,3 +1,10 @@
+# Local dev only — this builds from source.
+#
+# Production on bserver runs deploy/compose.yml, which pulls the published
+# image. Both claim the compose project name `mcontrol`, so running this file
+# against the server would replace the pulled image with a local build in
+# place, and report success. Don't.
+
 services:
   app:
     build: .
