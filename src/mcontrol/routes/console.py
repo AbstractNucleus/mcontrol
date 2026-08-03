@@ -143,6 +143,29 @@ async def _stream(
         lock.release()
 
 
+async def run_on_active(server_name: str, command: str) -> str | None:
+    """Run ``command`` on the live console RCON connection, if any.
+
+    Minecraft RCON typically allows only one client. Whitelist/ops flips
+    and the online chip must reuse this connection when the detail page
+    already holds it, otherwise a second connect races the SSE and can
+    EOF mid-command. Returns ``None`` when no console is open.
+    """
+    if server_name not in _active_connections:
+        return None
+    async with _submit_locks[server_name]:
+        if server_name not in _active_connections:
+            return None
+        conn = _active_connections[server_name]
+        queue = _output_queues.get(server_name)
+        response = await conn.run(command)
+        if queue is not None:
+            await queue.put(f"> {command}")
+            for line in (response or "").splitlines():
+                await queue.put(line)
+        return response
+
+
 @router.get("/servers/{name}/rcon")
 async def stream(
     request: Request,
@@ -164,22 +187,16 @@ async def stream(
 
 @router.post("/servers/{name}/rcon", response_class=HTMLResponse)
 async def submit(name: str, command: str = Form(...)) -> HTMLResponse:
-    if name not in _active_connections:
+    try:
+        response = await run_on_active(name, command)
+    except TimeoutError:
+        raise HTTPException(
+            status_code=504, detail="RCON command timed out"
+        ) from None
+    except rcon.RconClosedError:
+        raise HTTPException(
+            status_code=409, detail="RCON connection closed; reopen the console"
+        ) from None
+    if response is None:
         raise HTTPException(status_code=409, detail="open the console first")
-    async with _submit_locks[name]:
-        if name not in _active_connections:
-            raise HTTPException(status_code=409, detail="open the console first")
-        conn = _active_connections[name]
-        queue = _output_queues[name]
-        try:
-            response = await conn.run(command)
-        except TimeoutError:
-            raise HTTPException(
-                status_code=504, detail="RCON command timed out"
-            ) from None
-        # Echo the command + response into the SSE stream. Responses may be
-        # multi-line; queue per line so SSE framing stays intact.
-        await queue.put(f"> {command}")
-        for line in (response or "").splitlines():
-            await queue.put(line)
     return HTMLResponse("", status_code=204)

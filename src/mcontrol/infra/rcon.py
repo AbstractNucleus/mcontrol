@@ -102,9 +102,15 @@ class _RconConnection:
         await self._writer.drain()
 
     async def _read(self) -> tuple[int, int, bytes]:
-        length_bytes = await self._reader.readexactly(4)
-        length = struct.unpack("<i", length_bytes)[0]
-        payload = await self._reader.readexactly(length)
+        try:
+            length_bytes = await self._reader.readexactly(4)
+            length = struct.unpack("<i", length_bytes)[0]
+            payload = await self._reader.readexactly(length)
+        except asyncio.IncompleteReadError as exc:
+            # Peer closed mid-frame — common when a second RCON client
+            # connects and Minecraft drops this one.
+            await self.close()
+            raise RconClosedError("connection closed by peer") from exc
         packet_id, packet_type = struct.unpack("<ii", payload[:8])
         body = payload[8:-2]
         return packet_id, packet_type, body

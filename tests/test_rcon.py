@@ -166,3 +166,28 @@ async def test_run_times_out_and_closes_when_exec_hangs(monkeypatch):
         # be closed rather than reused.
         with pytest.raises(rcon.RconClosedError):
             await client.run("list")
+
+
+async def test_run_maps_peer_disconnect_to_rcon_closed():
+    """If the peer closes mid-frame, IncompleteReadError becomes RconClosedError
+    instead of leaking as an uncaught asyncio error (500 on whitelist add)."""
+
+    async def _close_after_auth(reader, writer):
+        length_bytes = await reader.readexactly(4)
+        length = struct.unpack("<i", length_bytes)[0]
+        payload = await reader.readexactly(length)
+        packet_id, _packet_type = struct.unpack("<ii", payload[:8])
+        writer.write(_pack(packet_id, 2, b""))  # AUTH_RESPONSE ok
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_server(_close_after_auth, host="127.0.0.1", port=0)
+    port = server.sockets[0].getsockname()[1]
+    try:
+        client = await rcon.connect("127.0.0.1", port, "hunter2")
+        with pytest.raises(rcon.RconClosedError, match="closed by peer"):
+            await client.run("whitelist add Notch")
+    finally:
+        server.close()
+        await server.wait_closed()

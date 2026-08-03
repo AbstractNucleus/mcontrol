@@ -122,6 +122,78 @@ async def test_run_command_maps_command_timeout_to_unavailable(
         await server_rcon.run_command(object(), server, "whitelist add Notch")
 
 
+async def test_run_command_maps_peer_disconnect_to_unavailable(
+    tmp_path, monkeypatch, rcon_network_ok
+):
+    server = _server_with_props(
+        tmp_path, "enable-rcon=true\nrcon.password=secret\n"
+    )
+
+    from mcontrol.infra import rcon
+
+    class _Conn:
+        async def run(self, _command):
+            raise rcon.RconClosedError("connection closed by peer")
+
+        async def close(self):
+            return None
+
+    async def fake_connect(_host, _port, _password):
+        return _Conn()
+
+    monkeypatch.setattr(rcon, "connect", fake_connect)
+
+    with pytest.raises(server_rcon.RconUnavailable, match="closed"):
+        await server_rcon.run_command(object(), server, "whitelist add Notch")
+
+
+async def test_run_command_reuses_active_console_connection(
+    tmp_path, monkeypatch
+):
+    """When the detail-page console already holds RCON, reuse it instead of
+    opening a second client that Minecraft will drop."""
+    import asyncio
+
+    server = _server_with_props(
+        tmp_path, "enable-rcon=true\nrcon.password=secret\n"
+    )
+    server["name"] = "atm10"
+
+    from mcontrol.routes import console
+
+    class _Conn:
+        def __init__(self):
+            self.commands: list[str] = []
+
+        async def run(self, command: str) -> str:
+            self.commands.append(command)
+            return f"Added {command.split()[-1]} to the whitelist"
+
+    conn = _Conn()
+    console._active_connections["atm10"] = conn
+    console._output_queues["atm10"] = asyncio.Queue()
+    connects: list[tuple] = []
+
+    async def fake_connect(*args, **kwargs):
+        connects.append((args, kwargs))
+        raise AssertionError("must not open a second RCON client")
+
+    from mcontrol.infra import rcon
+
+    monkeypatch.setattr(rcon, "connect", fake_connect)
+    try:
+        response = await server_rcon.run_command(
+            object(), server, "whitelist add Notch"
+        )
+    finally:
+        console._active_connections.pop("atm10", None)
+        console._output_queues.pop("atm10", None)
+
+    assert response == "Added Notch to the whitelist"
+    assert conn.commands == ["whitelist add Notch"]
+    assert connects == []
+
+
 # ---------------------------------------------------------------------------
 # Stale-password detection (issue 119)
 # ---------------------------------------------------------------------------

@@ -1,14 +1,14 @@
 """One-shot RCON command runner for slice-7 whitelist/ops mutations.
 
 The slice-4 console (``routes/console.py``) keeps a long-lived RCON
-connection open per active SSE stream. Slice 7's add/remove flips are
-infrequent and don't need a persistent connection. each call opens a
-connection, runs one command, and closes.
+connection open per active SSE stream. When that connection exists,
+``run_command`` reuses it — Minecraft RCON typically allows only one
+client, so a second connect races the console and can EOF mid-command.
 
-The docker-network attach/detach dance mirrors what the SSE handler
-does: the mcontrol container has to be on the MC container's network
-to reach ``<container>:25575``. We attach for the duration of the
-command and detach afterwards.
+When no console is open, this module opens a short-lived connection,
+runs one command, and closes. The docker-network attach/detach dance
+mirrors what the SSE handler does: the mcontrol container has to be on
+the MC container's network to reach ``<container>:25575``.
 
 Failure surface, surfaced as :class:`RconUnavailable` so the route
 layer can map to a flash message:
@@ -18,6 +18,7 @@ layer can map to a flash message:
   - The container has no docker network attached.
   - Auth failure (wrong password).
   - TCP/network error reaching the container.
+  - Peer closed the connection mid-command.
 
 Stale-password detection (issue 119): every successful RCON auth records
 the password that worked into ``_last_authed_password`` (keyed by server
@@ -88,10 +89,12 @@ class RconUnavailable(Exception):
 
 
 async def run_command(docker: aiodocker.Docker, server: dict, command: str) -> str:
-    """Open RCON, run ``command``, return the server's literal response.
+    """Run ``command`` over RCON, return the server's literal response.
 
-    ``server`` is the DB row (we pull ``dir`` for server.properties and
-    ``container_name`` / ``name`` for the network resolve)."""
+    Prefers the live console connection when the detail page holds one.
+    Otherwise opens a short-lived connection. ``server`` is the DB row
+    (we pull ``dir`` for server.properties and ``container_name`` /
+    ``name`` for the network resolve)."""
     server_dir = Path(server["dir"])
     props = server_props.read_properties(server_dir / "server" / "server.properties")
     if props.get("enable-rcon", "").lower() != "true":
@@ -99,6 +102,20 @@ async def run_command(docker: aiodocker.Docker, server: dict, command: str) -> s
     password = props.get("rcon.password", "")
     if not password:
         raise RconUnavailable("rcon.password is empty in server.properties.")
+
+    # Lazy import: console imports server_rcon for record_authed_password.
+    from mcontrol.routes import console
+
+    try:
+        reused = await console.run_on_active(server["name"], command)
+    except TimeoutError as exc:
+        raise RconUnavailable("RCON command timed out.") from exc
+    except rcon.RconClosedError as exc:
+        raise RconUnavailable(
+            "RCON connection closed while running the command."
+        ) from exc
+    if reused is not None:
+        return reused
 
     container_name = server.get("container_name") or server["name"]
 
@@ -118,11 +135,19 @@ async def run_command(docker: aiodocker.Docker, server: dict, command: str) -> s
             raise RconUnavailable(f"RCON connect to {container_name} timed out.") from exc
         except OSError as exc:
             raise RconUnavailable(f"Could not reach {container_name}: {exc}") from exc
+        except rcon.RconClosedError as exc:
+            raise RconUnavailable(
+                f"RCON connection to {container_name} closed during auth."
+            ) from exc
         record_authed_password(server["name"], password)
         try:
             return await conn.run(command)
         except TimeoutError as exc:
             raise RconUnavailable("RCON command timed out.") from exc
+        except rcon.RconClosedError as exc:
+            raise RconUnavailable(
+                "RCON connection closed while running the command."
+            ) from exc
         finally:
             await conn.close()
     finally:
