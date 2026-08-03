@@ -194,6 +194,55 @@ async def test_run_command_reuses_active_console_connection(
     assert connects == []
 
 
+async def test_run_command_waits_for_console_instead_of_competing(
+    tmp_path, monkeypatch
+):
+    """While the console SSE owns the RCON slot but has not registered the
+    socket yet, wait — do not open a second Minecraft client."""
+    import asyncio
+
+    server = _server_with_props(
+        tmp_path, "enable-rcon=true\nrcon.password=secret\n"
+    )
+    server["name"] = "atm10"
+
+    from mcontrol.routes import console
+
+    class _Conn:
+        async def run(self, command: str) -> str:
+            return f"ok:{command}"
+
+    lock = console._connection_locks["atm10"]
+    await lock.acquire()
+    connects: list = []
+
+    async def fake_connect(*args, **kwargs):
+        connects.append(1)
+        raise AssertionError("must not open a second RCON client")
+
+    from mcontrol.infra import rcon
+
+    monkeypatch.setattr(rcon, "connect", fake_connect)
+
+    async def register_later():
+        await asyncio.sleep(0.05)
+        console._active_connections["atm10"] = _Conn()
+        console._output_queues["atm10"] = asyncio.Queue()
+
+    try:
+        asyncio.create_task(register_later())
+        response = await server_rcon.run_command(
+            object(), server, "whitelist add Notch"
+        )
+    finally:
+        console._active_connections.pop("atm10", None)
+        console._output_queues.pop("atm10", None)
+        lock.release()
+
+    assert response == "ok:whitelist add Notch"
+    assert connects == []
+
+
 # ---------------------------------------------------------------------------
 # Stale-password detection (issue 119)
 # ---------------------------------------------------------------------------

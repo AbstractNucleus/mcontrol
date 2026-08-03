@@ -416,7 +416,7 @@ async def test_toggle_op_running_uses_rcon_op_and_deop(
 async def test_online_chip_renders_count_and_names(
     client, fake_db, tmp_path, monkeypatch
 ):
-    from mcontrol.infra import server_rcon
+    from mcontrol.routes import console
 
     server_dir = tmp_path / "atm10"
     (server_dir / "server").mkdir(parents=True)
@@ -425,11 +425,12 @@ async def test_online_chip_renders_count_and_names(
         "dir": str(server_dir), "state": "running",
     }
 
-    async def fake_run(_docker, _server, command):
+    async def fake_run(server_name, command):
+        assert server_name == "atm10"
         assert command == "list"
         return "There are 2 of a max of 20 players online: Steve, Alex"
 
-    monkeypatch.setattr(server_rcon, "run_command", fake_run)
+    monkeypatch.setattr(console, "run_on_active", fake_run)
 
     response = await client.get("/servers/atm10/players/online")
 
@@ -443,7 +444,7 @@ async def test_online_chip_renders_count_and_names(
 async def test_online_chip_degrades_to_live_pill_when_rcon_down(
     client, fake_db, tmp_path, monkeypatch
 ):
-    from mcontrol.infra import server_rcon
+    from mcontrol.routes import console
 
     server_dir = tmp_path / "atm10"
     (server_dir / "server").mkdir(parents=True)
@@ -452,10 +453,10 @@ async def test_online_chip_degrades_to_live_pill_when_rcon_down(
         "dir": str(server_dir), "state": "running",
     }
 
-    async def fake_run(_docker, _server, command):
-        raise server_rcon.RconUnavailable("rcon disabled")
+    async def fake_run(_server_name, _command):
+        return None  # console not connected yet — do not open a competitor
 
-    monkeypatch.setattr(server_rcon, "run_command", fake_run)
+    monkeypatch.setattr(console, "run_on_active", fake_run)
 
     response = await client.get("/servers/atm10/players/online")
 

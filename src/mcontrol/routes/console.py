@@ -154,16 +154,29 @@ async def run_on_active(server_name: str, command: str) -> str | None:
     if server_name not in _active_connections:
         return None
     async with _submit_locks[server_name]:
-        if server_name not in _active_connections:
+        conn = _active_connections.get(server_name)
+        if conn is None:
             return None
-        conn = _active_connections[server_name]
         queue = _output_queues.get(server_name)
-        response = await conn.run(command)
+        try:
+            response = await conn.run(command)
+        except rcon.RconClosedError:
+            # Drop the dead socket so callers stop reusing it. The SSE
+            # handler still holds the per-server lock until the browser
+            # disconnects; refresh reconnects cleanly.
+            if _active_connections.get(server_name) is conn:
+                _active_connections.pop(server_name, None)
+            raise
         if queue is not None:
             await queue.put(f"> {command}")
             for line in (response or "").splitlines():
                 await queue.put(line)
         return response
+
+
+def console_owns_rcon(server_name: str) -> bool:
+    """True while the detail-page SSE is acquiring or holding the RCON slot."""
+    return _connection_locks[server_name].locked()
 
 
 @router.get("/servers/{name}/rcon")

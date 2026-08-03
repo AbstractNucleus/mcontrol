@@ -1,9 +1,10 @@
 """One-shot RCON command runner for slice-7 whitelist/ops mutations.
 
 The slice-4 console (``routes/console.py``) keeps a long-lived RCON
-connection open per active SSE stream. When that connection exists,
-``run_command`` reuses it — Minecraft RCON typically allows only one
-client, so a second connect races the console and can EOF mid-command.
+connection open per active SSE stream. When that connection exists —
+or is still being acquired — ``run_command`` reuses it and never opens
+a second TCP client. Minecraft RCON typically allows only one client;
+a competing connect races the console and can EOF mid-command.
 
 When no console is open, this module opens a short-lived connection,
 runs one command, and closes. The docker-network attach/detach dance
@@ -19,6 +20,7 @@ layer can map to a flash message:
   - Auth failure (wrong password).
   - TCP/network error reaching the container.
   - Peer closed the connection mid-command.
+  - Console still connecting / dead socket needing a page refresh.
 
 Stale-password detection (issue 119): every successful RCON auth records
 the password that worked into ``_last_authed_password`` (keyed by server
@@ -29,6 +31,7 @@ of the mcontrol process, which is the same lifetime as the running JVMs
 we care about.
 """
 
+import asyncio
 from pathlib import Path
 
 import aiodocker
@@ -37,6 +40,7 @@ from mcontrol.domain import lifecycle_state, server_props
 from mcontrol.infra import docker_client, rcon
 
 _RCON_PORT = 25575
+_CONSOLE_CONNECT_WAIT_S = 5.0
 
 # Server name → password that most recently authenticated successfully.
 # Populated by run_command (here) and routes/console._stream after a
@@ -88,6 +92,51 @@ class RconUnavailable(Exception):
     error string. those flow back to the caller verbatim."""
 
 
+def _map_console_errors(exc: BaseException) -> RconUnavailable:
+    if isinstance(exc, TimeoutError):
+        return RconUnavailable("RCON command timed out.")
+    if isinstance(exc, rcon.RconClosedError):
+        return RconUnavailable(
+            "RCON connection closed; refresh the page to reconnect."
+        )
+    return RconUnavailable(str(exc))
+
+
+async def _run_via_console(server_name: str, command: str) -> str | None:
+    """Use the detail-page RCON socket when the console owns the slot.
+
+    Returns the command response, or ``None`` when the console is not
+    involved and the caller may open a one-shot client. Never opens a
+    second Minecraft RCON TCP connection while the console lock is held.
+    """
+    # Lazy import: console imports server_rcon for record_authed_password.
+    from mcontrol.routes import console
+
+    owns = console.console_owns_rcon(server_name)
+    if not owns:
+        try:
+            return await console.run_on_active(server_name, command)
+        except (TimeoutError, rcon.RconClosedError) as exc:
+            raise _map_console_errors(exc) from exc
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _CONSOLE_CONNECT_WAIT_S
+    while True:
+        try:
+            reused = await console.run_on_active(server_name, command)
+        except (TimeoutError, rcon.RconClosedError) as exc:
+            raise _map_console_errors(exc) from exc
+        if reused is not None:
+            return reused
+        if not console.console_owns_rcon(server_name):
+            return None
+        if loop.time() >= deadline:
+            raise RconUnavailable(
+                "RCON console is still connecting; try again in a moment."
+            )
+        await asyncio.sleep(0.05)
+
+
 async def run_command(docker: aiodocker.Docker, server: dict, command: str) -> str:
     """Run ``command`` over RCON, return the server's literal response.
 
@@ -103,17 +152,7 @@ async def run_command(docker: aiodocker.Docker, server: dict, command: str) -> s
     if not password:
         raise RconUnavailable("rcon.password is empty in server.properties.")
 
-    # Lazy import: console imports server_rcon for record_authed_password.
-    from mcontrol.routes import console
-
-    try:
-        reused = await console.run_on_active(server["name"], command)
-    except TimeoutError as exc:
-        raise RconUnavailable("RCON command timed out.") from exc
-    except rcon.RconClosedError as exc:
-        raise RconUnavailable(
-            "RCON connection closed while running the command."
-        ) from exc
+    reused = await _run_via_console(server["name"], command)
     if reused is not None:
         return reused
 

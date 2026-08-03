@@ -113,17 +113,22 @@ async def get_card(
 async def online_chip(
     request: Request,
     server: dict = Depends(get_server_or_404),
-    docker: aiodocker.Docker = Depends(get_docker),
 ) -> HTMLResponse:
-    """Head-count chip: one-shot RCON `list`. Any failure degrades to the
-    plain live pill; the chip must never break the players card."""
+    """Head-count chip: RCON `list` via the live console socket only.
+
+    Never opens a competing one-shot RCON client — Minecraft allows one
+    connection, and a second connect on page load kills the console.
+    Any miss/failure degrades to the plain live pill.
+    """
     running = lifecycle_state.is_running(server)
     context: dict = {"server": server, "running": running, "ok": False}
     if running:
+        from mcontrol.routes import console
+
         try:
-            response = await server_rcon.run_command(docker, server, "list")
-        except server_rcon.RconUnavailable:
-            response = ""
+            response = await console.run_on_active(server["name"], "list")
+        except (TimeoutError, Exception):
+            response = None
         match = _ONLINE_RE.search(response or "")
         if match:
             names = [n.strip() for n in match.group(3).split(",") if n.strip()]
