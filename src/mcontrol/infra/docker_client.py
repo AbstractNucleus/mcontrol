@@ -116,18 +116,31 @@ _network_refcounts: dict[str, int] = {}
 _network_refcounts_lock = asyncio.Lock()
 
 
+def _is_already_connected_error(exc: aiodocker.DockerError) -> bool:
+    """Return whether Docker says this endpoint already exists in the network."""
+    message = str(exc.message).lower()
+    return (
+        exc.status == 403
+        and "endpoint with name " in message
+        and " already exists in network " in message
+    )
+
+
 async def attach_self_to_network(
     docker: aiodocker.Docker, network_name: str
 ) -> None:
     """Connect the mcontrol container to the given docker network. Refcounted:
-    only the 0→1 attach actually connects. Idempotent in practice: if already
-    connected, the API returns 403 which we suppress."""
+    only the 0→1 attach actually connects. An already-connected Docker response
+    is treated as success."""
     async with _network_refcounts_lock:
         count = _network_refcounts.get(network_name, 0)
         if count == 0:
             network = await docker.networks.get(network_name)
-            with suppress(Exception):
-                await network.connect(container=self_container_id())
+            try:
+                await network.connect({"Container": self_container_id()})
+            except aiodocker.DockerError as exc:
+                if not _is_already_connected_error(exc):
+                    raise
         _network_refcounts[network_name] = count + 1
 
 
@@ -145,4 +158,4 @@ async def detach_self_from_network(
         if count == 1:
             network = await docker.networks.get(network_name)
             with suppress(Exception):
-                await network.disconnect(container=self_container_id())
+                await network.disconnect({"Container": self_container_id()})

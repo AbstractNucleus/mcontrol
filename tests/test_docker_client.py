@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock
 
+import aiodocker
 import pytest
 
 from mcontrol.infra import docker_client
@@ -208,14 +209,14 @@ def test_self_container_id_reads_hostname_env(monkeypatch):
 
 
 async def test_attach_self_to_network_calls_connect(env, monkeypatch):
-    connected: list[tuple[str, str]] = []
+    connected: list[tuple[str, dict[str, str]]] = []
 
     class _Network:
         def __init__(self, name):
             self.name = name
 
-        async def connect(self, *, container):
-            connected.append((self.name, container))
+        async def connect(self, config):
+            connected.append((self.name, config))
 
     docker = MagicMock()
     docker.networks = MagicMock()
@@ -224,21 +225,58 @@ async def test_attach_self_to_network_calls_connect(env, monkeypatch):
 
     await docker_client.attach_self_to_network(docker, "atm10_default")
 
-    assert connected == [("atm10_default", "selfid")]
+    assert connected == [("atm10_default", {"Container": "selfid"})]
+
+
+async def test_attach_already_connected_is_refcounted(env, monkeypatch):
+    network = MagicMock()
+    network.connect = AsyncMock(
+        side_effect=aiodocker.DockerError(
+            403,
+            "endpoint with name mcontrol already exists in network atm10_default",
+        )
+    )
+    docker = MagicMock()
+    docker.networks = MagicMock()
+    docker.networks.get = AsyncMock(return_value=network)
+    monkeypatch.setenv("HOSTNAME", "selfid")
+
+    await docker_client.attach_self_to_network(docker, "atm10_default")
+
+    assert docker_client._network_refcounts["atm10_default"] == 1
+
+
+async def test_attach_unexpected_failure_propagates_without_refcount(
+    env, monkeypatch
+):
+    network = MagicMock()
+    network.connect = AsyncMock(
+        side_effect=aiodocker.DockerError(500, "unexpected network failure")
+    )
+    docker = MagicMock()
+    docker.networks = MagicMock()
+    docker.networks.get = AsyncMock(return_value=network)
+    monkeypatch.setenv("HOSTNAME", "selfid")
+
+    with pytest.raises(aiodocker.DockerError, match="unexpected network failure"):
+        await docker_client.attach_self_to_network(docker, "atm10_default")
+
+    network.connect.assert_awaited_once_with({"Container": "selfid"})
+    assert "atm10_default" not in docker_client._network_refcounts
 
 
 async def test_detach_self_from_network_calls_disconnect(env, monkeypatch):
-    disconnected: list[tuple[str, str]] = []
+    disconnected: list[tuple[str, dict[str, str]]] = []
 
     class _Network:
         def __init__(self, name):
             self.name = name
 
-        async def connect(self, *, container):
+        async def connect(self, config):
             pass
 
-        async def disconnect(self, *, container):
-            disconnected.append((self.name, container))
+        async def disconnect(self, config):
+            disconnected.append((self.name, config))
 
     docker = MagicMock()
     docker.networks = MagicMock()
@@ -248,7 +286,7 @@ async def test_detach_self_from_network_calls_disconnect(env, monkeypatch):
     await docker_client.attach_self_to_network(docker, "atm10_default")
     await docker_client.detach_self_from_network(docker, "atm10_default")
 
-    assert disconnected == [("atm10_default", "selfid")]
+    assert disconnected == [("atm10_default", {"Container": "selfid"})]
 
 
 class _CountingNetwork:
@@ -257,11 +295,11 @@ class _CountingNetwork:
         self._connects = connects
         self._disconnects = disconnects
 
-    async def connect(self, *, container):
-        self._connects.append((self.name, container))
+    async def connect(self, config):
+        self._connects.append((self.name, config))
 
-    async def disconnect(self, *, container):
-        self._disconnects.append((self.name, container))
+    async def disconnect(self, config):
+        self._disconnects.append((self.name, config))
 
 
 def _refcount_docker(connects: list, disconnects: list) -> MagicMock:
@@ -284,13 +322,13 @@ async def test_attach_detach_are_refcounted(env, monkeypatch):
 
     await docker_client.attach_self_to_network(docker, "atm10_default")
     await docker_client.attach_self_to_network(docker, "atm10_default")
-    assert connects == [("atm10_default", "selfid")]
+    assert connects == [("atm10_default", {"Container": "selfid"})]
 
     await docker_client.detach_self_from_network(docker, "atm10_default")
     assert disconnects == []
 
     await docker_client.detach_self_from_network(docker, "atm10_default")
-    assert disconnects == [("atm10_default", "selfid")]
+    assert disconnects == [("atm10_default", {"Container": "selfid"})]
 
 
 async def test_detach_without_attach_is_a_noop(env, monkeypatch):
@@ -313,5 +351,8 @@ async def test_refcounts_are_per_network(env, monkeypatch):
     await docker_client.attach_self_to_network(docker, "moni_default")
     await docker_client.detach_self_from_network(docker, "atm10_default")
 
-    assert connects == [("atm10_default", "selfid"), ("moni_default", "selfid")]
-    assert disconnects == [("atm10_default", "selfid")]
+    assert connects == [
+        ("atm10_default", {"Container": "selfid"}),
+        ("moni_default", {"Container": "selfid"}),
+    ]
+    assert disconnects == [("atm10_default", {"Container": "selfid"})]
