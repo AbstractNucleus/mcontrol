@@ -1,10 +1,17 @@
 <section class="health-banner" role="alert">
-  <p class="t-eyebrow health-banner__title">Health</p>
+  <p class="t-eyebrow health-banner__title">Needs attention</p>
   <ul class="health-banner__list">
     {% for issue in health_issues %}
       <li class="health-banner__item">
         <code class="health-banner__code">{{ issue.code }}</code>
         <span>{{ issue.message }}</span>
+        {% if issue.code in ['whitelist-malformed', 'ops-malformed'] %}
+        <button type="button" class="btn btn--sm" data-focus-files>Open files</button>
+        {% elif issue.code in ['variables-incomplete', 'missing-scaffold-file'] %}
+        <button type="button" class="btn btn--sm" data-settings-open="settings-variables">Runtime settings</button>
+        {% else %}
+        <button type="button" class="btn btn--sm" data-settings-open="settings-bindings">Container settings</button>
+        {% endif %}
       </li>
     {% endfor %}
   </ul>

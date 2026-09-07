@@ -22,7 +22,9 @@ from typing import Any
 # --- Settings: satisfy pydantic-settings and point the base path at our seed
 # dir. Env vars take precedence over .env, so this wins even if .env exists.
 # Must run before anything imports mcontrol.settings.
-_BASE = (Path(__file__).parent / ".localdev" / "minecraft").resolve()
+_BASE = Path(
+    os.environ.get("MCONTROL_MOCK_BASE", Path(__file__).parent / ".localdev" / "minecraft")
+).resolve()
 os.environ["SUPABASE_URL"] = "http://mock.invalid"
 os.environ["SUPABASE_SERVICE_ROLE_KEY"] = "dev-mock"
 os.environ["SERVER_BASE_PATH"] = str(_BASE)
@@ -46,7 +48,13 @@ _PLAYERS: list[dict[str, str]] = [
 
 _SEED: list[dict[str, Any]] = [
     {"name": "atm10", "state": "running", "port": 25565, "loader": "forge", "memory": "10G"},
-    {"name": "create-astral", "state": "running", "port": 25566, "loader": "fabric", "memory": "8G"},  # noqa: E501
+    {
+        "name": "create-astral",
+        "state": "running",
+        "port": 25566,
+        "loader": "fabric",
+        "memory": "8G",
+    },  # noqa: E501
     {"name": "vault-hunters", "state": "exited", "port": 25567, "loader": "forge", "memory": "8G"},
     {"name": "cobblemon", "state": "exited", "port": 25568, "loader": "fabric", "memory": "6G"},
     {"name": "vanilla-smp", "state": "running", "port": 25569, "loader": "vanilla", "memory": "4G"},
@@ -76,7 +84,7 @@ def _scaffold_disk() -> None:
 
         (_BASE / name / "docker-compose.yml").write_text(
             f"services:\n  {name}:\n    image: itzg/minecraft-server\n"
-            f"    ports:\n      - \"{port}:25565\"\n",
+            f'    ports:\n      - "{port}:25565"\n',
             encoding="utf-8",
         )
         (sdir / "server.properties").write_text(
@@ -97,7 +105,7 @@ def _scaffold_disk() -> None:
         )
         (sdir / "logs" / "latest.log").write_text(
             "[12:00:00] [Server thread/INFO]: Starting minecraft server\n"
-            "[12:00:04] [Server thread/INFO]: Done! For help, type \"help\"\n",
+            '[12:00:04] [Server thread/INFO]: Done! For help, type "help"\n',
             encoding="utf-8",
         )
 
@@ -124,8 +132,12 @@ def _install_fake_db() -> None:
 
     def insert_server(*, name: str, dir: str, state: str) -> None:
         _servers[name] = {
-            "name": name, "dir": dir, "state": state,
-            "container_name": None, "variables": {}, "scaffolded_at": None,
+            "name": name,
+            "dir": dir,
+            "state": state,
+            "container_name": None,
+            "variables": {},
+            "scaffolded_at": None,
         }
 
     def update_server_state(*, name: str, state: str) -> None:
@@ -144,15 +156,18 @@ def _install_fake_db() -> None:
         *, name: str, dir: str, variables: dict[str, Any], loader: str
     ) -> None:
         _servers[name] = {
-            "name": name, "dir": dir, "state": "scaffolding", "container_name": None,
-            "variables": variables, "loader": loader, "scaffolded_at": None,
+            "name": name,
+            "dir": dir,
+            "state": "scaffolding",
+            "container_name": None,
+            "variables": variables,
+            "loader": loader,
+            "scaffolded_at": None,
         }
 
     def mark_scaffolded(*, name: str) -> None:
         if name in _servers:
-            _servers[name].update(
-                state="created", scaffolded_at=datetime.now(UTC).isoformat()
-            )
+            _servers[name].update(state="created", scaffolded_at=datetime.now(UTC).isoformat())
 
     def delete_server(name: str) -> None:
         _servers.pop(name, None)
@@ -183,10 +198,22 @@ def _install_fake_db() -> None:
         return {"created": False, "previous_name": previous}
 
     for fn in (
-        list_servers, ping, get_server, insert_server, update_server_state,
-        update_variables, update_bindings, insert_scaffolding_server,
-        mark_scaffolded, delete_server, list_players, get_player, insert_player,
-        insert_players_bulk, delete_player, upsert_player_from_mojang,
+        list_servers,
+        ping,
+        get_server,
+        insert_server,
+        update_server_state,
+        update_variables,
+        update_bindings,
+        insert_scaffolding_server,
+        mark_scaffolded,
+        delete_server,
+        list_players,
+        get_player,
+        insert_player,
+        insert_players_bulk,
+        delete_player,
+        upsert_player_from_mojang,
     ):
         setattr(db, fn.__name__, fn)
 
@@ -204,8 +231,8 @@ _META: dict[str, dict[str, Any]] = {
 _LOG_LINES = [
     "[12:00:00] [Server thread/INFO]: Starting minecraft server version 1.21",
     "[12:00:01] [Server thread/INFO]: Loading properties",
-    "[12:00:02] [Server thread/INFO]: Preparing level \"world\"",
-    "[12:00:04] [Server thread/INFO]: Done (3.812s)! For help, type \"help\"",
+    '[12:00:02] [Server thread/INFO]: Preparing level "world"',
+    '[12:00:04] [Server thread/INFO]: Done (3.812s)! For help, type "help"',
     "[12:01:10] [Server thread/INFO]: Notch joined the game",
     "[12:02:33] [Server thread/WARN]: Can't keep up! Running 2100ms behind",
 ]
@@ -285,6 +312,8 @@ class _FakeContainer:
         for line in _LOG_LINES:
             yield line
             await asyncio.sleep(0)
+        while os.environ.get("MCONTROL_MOCK_STREAMS") == "1":
+            await asyncio.sleep(1)
 
 
 class _FakeContainers:
@@ -344,3 +373,18 @@ aiodocker.Docker = FakeDocker  # lifespan constructs this → gets the fake
 from mcontrol.main import create_app  # noqa: E402
 
 app = create_app()
+
+if os.environ.get("MCONTROL_MOCK_STREAMS") == "1":
+    from fastapi.responses import StreamingResponse
+
+    @app.middleware("http")
+    async def browser_console_fixture(request, call_next):
+        if request.method == "GET" and request.url.path.endswith("/rcon"):
+            async def events():
+                yield "event: ready\ndata: \n\n"
+                while not await request.is_disconnected():
+                    await asyncio.sleep(1)
+                    yield ": keepalive\n\n"
+
+            return StreamingResponse(events(), media_type="text/event-stream")
+        return await call_next(request)

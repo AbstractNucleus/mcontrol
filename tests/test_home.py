@@ -66,7 +66,7 @@ async def test_home_lists_servers_when_present(client, fake_servers, fake_stats)
     assert "atm10" in body
     assert "monifactory" in body
     assert "running" in body
-    assert "exited" in body
+    assert "Unavailable" in body
     assert "No servers yet" not in body
 
 
@@ -81,7 +81,7 @@ async def test_sidebar_lists_servers(client, fake_servers, fake_stats):
 
     assert response.status_code == 200
     body = response.text
-    aside = body[body.index('<aside class="sidebar"') : body.index("</aside>")]
+    aside = body[body.index('<aside id="primary-sidebar"') : body.index("</aside>")]
     assert 'sidebar__server-name">atm10' in aside
 
 
@@ -150,7 +150,7 @@ async def test_home_renders_dash_when_container_not_running(
 
     assert response.status_code == 200
     block = _row_block(response.text, "atm10")
-    assert ">-<" in block
+    assert "Not running" in block
     assert "GiB" not in block
 
 
@@ -175,7 +175,7 @@ async def test_home_tolerates_stats_failure_on_one_row(
     assert response.status_code == 200
     atm10_block = _row_block(response.text, "atm10")
     moni_block = _row_block(response.text, "monifactory")
-    assert ">-<" in atm10_block
+    assert "Unavailable" in atm10_block
     assert "GiB" not in atm10_block
     assert "4.0 GiB / 8.0 GiB" in moni_block
     assert "(50 %)" in moni_block
@@ -207,6 +207,7 @@ async def test_home_fleet_row_targets_closest_li(
 ):
     """Names with dots would break `#fleet-row-foo.bar` as a CSS selector."""
     fake_servers.append({"name": "foo.bar", "state": "running"})
+    fake_stats["foo.bar"] = {"status": "not-running", "container_state": "exited"}
 
     response = await client.get("/")
 

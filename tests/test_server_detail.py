@@ -46,14 +46,15 @@ async def test_server_detail_renders_panel_board_scaffolding(client, fake_get_se
     assert 'class="dashboard"' in body
     assert "dashboard__col" not in body
     # data-pane values are the localStorage persistence keys.
-    for pane in ("console", "players", "files", "bindings"):
+    for pane in ("console", "players", "files"):
         assert f'data-pane="{pane}"' in body
     # atm10 is legacy (not scaffolded), so the migrate pane renders too.
-    assert 'data-pane="migrate"' in body
+    assert 'id="settings-migrate"' in body
+    assert 'id="server-settings"' in body
     assert 'data-pane="variables"' not in body
-    for hook in ("panel__grip", "panel__collapse", "panel__hide", "panel__fullwidth"):
+    for hook in ("panel__grip", "panel__collapse", "data-panel-hide", "data-panel-width"):
         assert hook in body
-    for hook in ("data-panels-menu", "data-panels-list", "data-panels-reset"):
+    for hook in ("data-customize", "data-layout-save", "data-layout-cancel", "data-layout-reset"):
         assert hook in body
 
 
@@ -122,7 +123,8 @@ async def test_server_detail_running_state_accents_stop_disables_start(
     assert 'btn--primary' not in start
 
     stop = _button_chunk(body, "stop")
-    assert 'btn--primary' in stop
+    assert 'btn--danger' in stop
+    assert 'btn--primary' not in stop
     assert not _is_disabled(stop)
 
     restart = _button_chunk(body, "restart")
@@ -222,7 +224,7 @@ async def test_server_detail_renders_console_pane(client, fake_get_server):
     fake_get_server["atm10"] = _row("atm10")
     response = await client.get("/servers/atm10")
     body = response.text
-    assert 'sse-connect="/servers/atm10/logs"' in body
+    assert 'data-log-src="/servers/atm10/logs"' in body
 
     # One output element fed by both sources; screen readers need role="log".
     output = _element_chunk(body, "console-output")
@@ -277,7 +279,7 @@ async def test_server_detail_renders_bindings_card(client, fake_get_server):
     fake_get_server["atm10"] = _row("atm10")
     response = await client.get("/servers/atm10")
     body = response.text
-    assert "Bindings" in body
+    assert "Container settings" in body
     assert 'hx-get="/servers/atm10/bindings?edit=1"' in body
 
 
@@ -325,7 +327,7 @@ async def test_server_detail_scaffolded_row_lazy_loads_variables_panel(
     response = await client.get("/servers/newshire")
     body = response.text
     assert response.status_code == 200
-    assert 'data-pane="variables"' in body
+    assert 'id="settings-variables"' in body
     assert 'id="variables"' in body
     assert 'hx-get="/servers/newshire/variables"' in body
     assert 'hx-trigger="load"' in body

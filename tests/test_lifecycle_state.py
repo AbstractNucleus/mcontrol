@@ -43,12 +43,12 @@ def test_starting_state_keeps_stop_and_restart_reachable():
     assert view["accent"] is None
 
 
-@pytest.mark.parametrize("state", ["unknown", "bogus", "", None])
-def test_unrecognised_state_enables_all_no_accent(state):
+@pytest.mark.parametrize("state", ["unknown", "unreachable", "bogus", "", None])
+def test_unrecognised_state_waits_for_observation(state):
     view = lifecycle_state.view(state)
-    assert view["start_disabled"] is False
-    assert view["stop_disabled"] is False
-    assert view["restart_disabled"] is False
+    assert view["start_disabled"] is True
+    assert view["stop_disabled"] is True
+    assert view["restart_disabled"] is True
     assert view["accent"] is None
 
 

@@ -433,7 +433,8 @@ async def test_start_response_carries_oob_buttons_for_running_state(
     assert 'btn--primary' not in start
 
     stop = _button_chunk(body, "stop")
-    assert 'btn--primary' in stop
+    assert 'btn--danger' in stop
+    assert 'btn--primary' not in stop
     assert not _is_disabled(stop)
 
     restart = _button_chunk(body, "restart")
@@ -645,7 +646,7 @@ async def test_recreate_compose_error_returns_flash(
     assert stub_db_writes == []
 
 
-async def test_stop_response_includes_apply_compose_button(
+async def test_stop_response_keeps_recreation_in_settings(
     client, fake_server_row, stub_db_writes, stub_docker
 ):
     fake_server_row["atm10"] = {
@@ -654,9 +655,7 @@ async def test_stop_response_includes_apply_compose_button(
     }
 
     body = (await client.post("/servers/atm10/lifecycle/stop")).text
-    recreate = _button_chunk(body, "recreate")
-    assert "Apply compose" in recreate
-    assert not _is_disabled(recreate)
+    assert "/lifecycle/recreate" not in body
 
 
 async def test_start_docker_error_is_logged(

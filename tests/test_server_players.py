@@ -136,11 +136,11 @@ async def test_get_shows_rcon_indicator_when_running_else_offline(
 ):
     fake_db["servers"]["atm10"] = _server_row(tmp_path, state="running")
     body = (await client.get("/servers/atm10/players")).text
-    assert "live (RCON)" in body
+    assert "Checking online players…" in body
 
     fake_db["servers"]["atm10"] = _server_row(tmp_path, state="exited")
     body = (await client.get("/servers/atm10/players")).text
-    assert "offline (file edit)" in body
+    assert "Saved on disk · applies at next start" in body
 
 
 # ---------------------------------------------------------------------------
@@ -441,7 +441,7 @@ async def test_online_chip_renders_count_and_names(
     assert response.status_code == 200
     assert "2/20 online" in body
     assert 'title="Steve, Alex"' in body
-    assert 'hx-trigger="every 60s"' in body
+    assert 'hx-trigger="every 60s, mc:refresh"' in body
 
 
 async def test_online_chip_degrades_to_live_pill_when_rcon_down(
@@ -464,7 +464,7 @@ async def test_online_chip_degrades_to_live_pill_when_rcon_down(
     response = await client.get("/servers/atm10/players/online")
 
     assert response.status_code == 200
-    assert "live (RCON)" in response.text
+    assert "Online count unavailable" in response.text
     assert "online-chip__dot" not in response.text
 
 
@@ -481,4 +481,4 @@ async def test_online_chip_offline_server_shows_offline_pill(
     response = await client.get("/servers/atm10/players/online")
 
     assert response.status_code == 200
-    assert "offline (file edit)" in response.text
+    assert "Saved on disk · applies at next start" in response.text

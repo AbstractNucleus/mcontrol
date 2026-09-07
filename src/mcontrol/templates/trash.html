@@ -5,15 +5,15 @@
 {% block main %}
 <section class="trash-page">
   <div class="trash-page__title">
-    <p class="t-eyebrow">Tombstones</p>
-    <h2 class="t-h1">Trash</h2>
+    <p class="t-eyebrow">Deleted servers</p>
+    <h1 class="t-h1">Trash</h1>
   </div>
 
   {% if tombstones %}
     <p class="trash-page__hint">
       Deleted server directories renamed to
       <code>.deleted-&lt;name&gt;-&lt;unix-ts&gt;/</code>. Recover by renaming
-      one back from a shell, or purge here.
+      one back to its original name from a shell, then use Rescan on Servers. Nothing is deleted automatically. Use the actions below to permanently delete files.
     </p>
 
     <form class="trash-page__empty"
@@ -22,7 +22,7 @@
           hx-swap="innerHTML">
       {% if sweep_count > 0 %}
         <button type="submit" class="btn btn--danger">
-          Empty trash: {{ sweep_count }} tombstone{% if sweep_count != 1 %}s{% endif %}
+          Empty trash: {{ sweep_count }} deleted server{% if sweep_count != 1 %}s{% endif %}
           older than {{ purge_age_days }} days, {{ sweep_bytes_human }}
         </button>
       {% else %}
@@ -55,8 +55,8 @@
       </svg>
       <h3 class="empty-state__title">Trash is empty</h3>
       <p class="empty-state__body">
-        Deleted servers land here automatically. Tombstones older than
-        {{ purge_age_days }} days can be swept with Empty&nbsp;trash.
+        Deleted servers land here automatically. Deleted servers older than
+        {{ purge_age_days }} days are eligible for manual cleanup with Empty&nbsp;trash.
       </p>
     </div>
   {% endif %}

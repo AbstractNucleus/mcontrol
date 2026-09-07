@@ -1,0 +1,38 @@
+<div id="fleet" hx-get="/fleet/status" hx-trigger="every 5s, mc:refresh" hx-swap="outerHTML" data-poll data-async-label="Fleet status">
+  {% if servers %}
+    <p class="fleet-summary t-caption">
+      {{ summary.total }} server{{ "s" if summary.total != 1 }}
+      · {{ summary.running }} running
+      {%- if summary.memory %} · {{ summary.memory }} · running-server memory / container limits{% endif %}
+    </p>
+    <div class="fleet-columns" aria-hidden="true"><span>Status</span><span>Server</span><span>Port</span><span>CPU</span><span>Memory</span><span>Uptime</span><span>Actions</span></div>
+    <ul class="server-list">
+      {% for server in servers %}
+        {% include "_fleet_row.html" %}
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty-state">
+      <svg class="empty-state__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="6" rx="1.5"></rect>
+        <rect x="3" y="14" width="18" height="6" rx="1.5"></rect>
+        <path d="M7 7h.01M7 17h.01"></path>
+      </svg>
+      <h3 class="empty-state__title">No servers yet</h3>
+      <p class="empty-state__body">
+        Drop a directory into <code>{{ "{SERVER_BASE_PATH}" }}</code> and click Rescan,
+        or create a fresh one.
+      </p>
+      <div class="empty-state__actions">
+        <button class="btn btn--ghost"
+                type="button"
+                hx-post="/rescan"
+                hx-swap="none"
+                hx-disabled-elt="this">Rescan{% include "_spinner.html" %}</button>
+        <a class="btn btn--primary" href="/servers/new">Create a server</a>
+      </div>
+    </div>
+  {% endif %}
+<p class="freshness">Checked <time data-observed-at="{{ observed_at }}">just now</time></p>
+<p data-fleet-empty hidden>No servers match these filters.</p>
+</div>

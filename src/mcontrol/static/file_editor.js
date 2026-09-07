@@ -61,6 +61,7 @@ let dirty = false;
 let currentView = null;
 let hintCounter = 0;
 let savedClearTimer = null;
+const pendingSaves = new WeakMap();
 
 function clearSavedIndicator() {
   if (savedClearTimer) {
@@ -133,6 +134,8 @@ function mountEditor(textarea) {
         textarea.value = update.state.doc.toString();
         dirty = true;
         clearSavedIndicator();
+        const status = document.querySelector("[data-editor-status]");
+        if (status) status.textContent = "Unsaved changes";
       }
     }),
   ];
@@ -154,6 +157,8 @@ function mountEditor(textarea) {
   textarea.parentNode.insertBefore(hint, textarea);
   textarea.style.display = "none";
   currentView = view;
+  const status = document.querySelector("[data-editor-status]");
+  if (status) status.textContent = dirty ? "Unsaved changes" : "No unsaved changes";
 }
 
 function mountAll(root) {
@@ -191,8 +196,23 @@ document.body.addEventListener("htmx:afterSwap", () => {
 document.body.addEventListener("htmx:afterRequest", (evt) => {
   const path = evt.detail.pathInfo && evt.detail.pathInfo.requestPath;
   const status = evt.detail.xhr && evt.detail.xhr.status;
-  if (path && path.includes("/files/save") && status < 300) {
-    dirty = false;
+  if (path && path.includes("/files/save") && status >= 200 && status < 300) {
+    const submitted = pendingSaves.get(evt.detail.xhr);
+    dirty = submitted !== currentView?.state.doc.toString();
+    if (dirty) clearSavedIndicator();
+    const indicator = document.querySelector("[data-editor-status]");
+    if (indicator) indicator.textContent = dirty ? "Unsaved changes" : "Saved";
+  } else if (path && path.includes("/files/save")) {
+    const indicator = document.querySelector("[data-editor-status]");
+    if (indicator) indicator.textContent = "Save failed · changes kept";
+  }
+});
+
+document.body.addEventListener("htmx:beforeRequest", evt => {
+  if (evt.detail.pathInfo?.requestPath?.includes("/files/save")) {
+    pendingSaves.set(evt.detail.xhr, currentView?.state.doc.toString());
+    const indicator = document.querySelector("[data-editor-status]");
+    if (indicator) indicator.textContent = "Saving…";
   }
 });
 

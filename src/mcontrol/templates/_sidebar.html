@@ -16,7 +16,7 @@
 {% set _path = request.url.path if request is defined else "" %}
 {% set _tomb_n = tombstone_count(request) if request is defined else 0 %}
 {% set _sidebar_rows = sidebar_servers(request) if request is defined else [] %}
-<aside class="sidebar" aria-label="Primary">
+<aside id="primary-sidebar" class="sidebar" aria-label="Primary">
   <a class="sidebar__brand" href="/" title="mcontrol">
     <span class="sidebar__logo-mark" aria-hidden="true"></span>
     <span class="sidebar__brand-name">mcontrol</span>
@@ -43,7 +43,7 @@
           <li>
             <a class="sidebar__server"
                href="/servers/{{ row.name }}"
-               title="{{ row.name }} ({{ row.state }})"
+               title="{{ row.name }} ({{ status_label(row.state) }})"
                {% if _is_current %}aria-current="page"{% endif %}>
               <span class="sidebar__server-dot sidebar__server-dot--{{ row.state }}" aria-hidden="true"></span>
               <span class="sidebar__server-name">{{ row.name }}</span>
@@ -76,7 +76,7 @@
       </svg>
       <span class="sidebar__nav-label">Trash</span>
       {% if _tomb_n %}
-        <span class="topnav__badge" aria-label="{{ _tomb_n }} tombstone{{ 's' if _tomb_n != 1 else '' }}">{{ _tomb_n }}</span>
+        <span class="topnav__badge" aria-label="{{ _tomb_n }} deleted server{{ 's' if _tomb_n != 1 else '' }}">{{ _tomb_n }}</span>
       {% endif %}
     </a>
   </nav>

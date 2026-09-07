@@ -7,17 +7,17 @@ mcontrol sits a thin Minecraft-aware UI over plain `docker compose`. No daemon a
 ## What it does
 
 - **Server lifecycle**: start / stop / restart with state-aware buttons and Docker-backed health, including a "starting" state that probes the listener port before reporting healthy. Start creates the container from the server's compose file when it does not exist yet.
-- **Live RCON console**: SSE-backed terminal that auto-connects on page load and reads the RCON password from `server.properties`.
-- **Live log stream**: tail container logs via SSE without polling.
+- **Shared workspace**: configurable Console, Players, and Files panels with adjustable widths and heights, Save/Cancel, and temporary focus mode. Layouts are shared across servers in this browser and migrate from dashboard v2. Configuration lives in Settings.
+- **Console**: independent log and command connections, search, severity filters, wrapping, pause-follow, and Jump to latest. Commands wait for a connection; rejected text stays in the input.
 - **File browser**: read-only tree + CodeMirror editor (JSON / YAML / TOML / XML syntax highlighting), multi-file upload with drag-drop, rename/move with destination picker, single-file download, bulk delete and move, full-text search across `server/` with Ctrl/Cmd+P.
 - **New-server scaffolding**: generate a working `docker-compose.yml` + `start_server.sh` for a fresh server in one form submit; no per-server Dockerfile. The form picks a Java version (17 / 21 / 25) and turns RCON on in `server.properties`.
 - **Player roster**: DB-backed player list with Mojang UUID lookup, per-server whitelist / ops membership, and an Import button to ingest existing `whitelist.json` / `ops.json`.
-- **Resource visibility**: CPU %, memory, and disk usage per server, plus per-row memory on the home page.
+- **Resource visibility**: observed status, CPU, memory, uptime, and freshness every five seconds while visible. Disk refreshes independently every minute. Failed requests retain prior content with stale feedback and Retry after a 12-second deadline. The fleet supports name search and status filters.
 - **Discovery**: operator-triggered fleet rescan that picks up new server directories without restarting the panel.
-- **Trash & tombstones**: delete-server flow renames to a `.deleted-<name>-<unix-ts>/` prefix so the row is recoverable; trash page lists tombstones with per-row Delete-now and bulk Empty-trash (7-day default).
+- **Deleted servers**: deletion renames the directory to `.deleted-<name>-<unix-ts>/`. Recover manually by renaming it back, then rescanning. Empty trash selects directories older than seven days; cleanup only runs when requested and confirmed.
 - **Legacy-server migration**: one-way migrate card for servers that were running before mcontrol existed (itzg-image shape to mcontrol scaffold shape).
 - **Health probe**: `GET /healthz` returns a deep per-subsystem JSON (Supabase + Docker socket + bind-mount); 503 on any subsystem degraded.
-- **Theme**: dark / light / system toggle persisted to `localStorage`.
+- **Theme and phones**: graphite and blue in light / dark / saved System mode, with a mobile menu drawer, stacked fleet cards, and a single-view file browser/editor on narrow screens.
 
 ## Who it's for
 
@@ -62,7 +62,18 @@ uv run ruff check .
 
 Tests mock out Supabase and the Docker socket; you do not need either available to run the suite.
 
+Browser regression checks start an isolated `dev_mock` process with temporary server files:
+
+```bash
+uv run playwright install chromium
+MCONTROL_BROWSER_TESTS=1 uv run pytest tests/browser -v
+```
+
+PowerShell: set `$env:MCONTROL_BROWSER_TESTS='1'` before the pytest command. Screenshots are saved to `.localdev/ui-review/`. Tests cover both themes at 390, 768, 1280, and 1920 pixels, layout migration/cancellation, dirty editors, failed saves, retry recovery, connection state, and keyboard access.
+
 ## Deployment
+
+The hosted instance pulls a GHCR image using `deploy/compose.yml`; follow [deploy/README.md](deploy/README.md) and the [redesign release checks](deploy/UI_REDESIGN_RELEASE.md). The root compose file below is for builds from source.
 
 The tracked `docker-compose.yml` runs only the `app` service. The container exposes `:8000` internally and binds to `${HOST_BIND_IP:-127.0.0.1}:8003` on the host. Terminate TLS at an upstream reverse proxy (nginx, Caddy, Traefik, etc.) and `proxy_pass` to that host:port.
 

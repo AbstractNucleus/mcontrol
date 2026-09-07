@@ -34,7 +34,7 @@
           hx-swap="outerHTML transition:true"
           hx-disabled-elt="this"
           {% if lifecycle.start_disabled %}disabled{% endif %}>Start{% include "_spinner.html" %}</button>
-  <button class="btn btn--sm{% if lifecycle.accent == 'stop' %} btn--primary{% endif %}"
+  <button class="btn btn--sm btn--danger"
           type="button"
           data-lifecycle-button
           aria-label="Stop {{ server.name }}"
@@ -52,14 +52,4 @@
           hx-swap="outerHTML transition:true"
           hx-disabled-elt="this"
           {% if lifecycle.restart_disabled %}disabled{% endif %}>Restart{% include "_spinner.html" %}</button>
-  {% if lifecycle.compose_label %}
-  <button class="btn btn--sm"
-          type="button"
-          data-lifecycle-button
-          aria-label="{{ lifecycle.compose_label }} {{ server.name }}"
-          hx-post="/servers/{{ server.name }}/lifecycle/recreate"
-          hx-target="#state-pill"
-          hx-swap="outerHTML transition:true"
-          hx-disabled-elt="this">{{ lifecycle.compose_label }}{% include "_spinner.html" %}</button>
-  {% endif %}
 </div>

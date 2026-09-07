@@ -84,7 +84,7 @@ async def test_get_trash_button_enabled_when_sweepable_tombstones_exist(trash_cl
     response = await client.get("/trash")
 
     body = response.text
-    assert "Empty trash: 1 tombstone" in body
+    assert "Empty trash: 1 deleted server" in body
     assert "older than 7 days" in body
 
 

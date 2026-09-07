@@ -8,7 +8,7 @@
 <span id="online-chip"
       class="online-chip"
       hx-get="/servers/{{ server.name }}/players/online"
-      hx-trigger="every 60s"
+      hx-trigger="every 60s, mc:refresh" data-poll
       hx-swap="outerHTML"
       {% if names %}title="{{ names | join(', ') }}"{% endif %}>
   <span class="online-chip__dot" aria-hidden="true"></span>
@@ -16,10 +16,10 @@
 </span>
 {% elif running %}
 <span id="online-chip"
-      class="state-pill state-pill--running"
+      class="state-pill state-pill--unknown"
       hx-get="/servers/{{ server.name }}/players/online"
-      hx-trigger="every 60s"
-      hx-swap="outerHTML">live (RCON)</span>
+      hx-trigger="every 60s, mc:refresh" data-poll
+      hx-swap="outerHTML">Online count unavailable</span>
 {% else %}
-<span id="online-chip" class="state-pill state-pill--unknown">offline (file edit)</span>
+<span id="online-chip" class="state-pill state-pill--exited">Saved on disk · applies at next start</span>
 {% endif %}

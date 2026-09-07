@@ -38,9 +38,16 @@ import aiodocker
 _STATS_TIMEOUT_S = 10.0
 
 
-async def read_container_stats(
-    docker: aiodocker.Docker, container_name: str
-) -> dict[str, Any]:
+async def read_container_stats(docker: aiodocker.Docker, container_name: str) -> dict[str, Any]:
+    try:
+        return await asyncio.wait_for(
+            _read_container_stats(docker, container_name), _STATS_TIMEOUT_S
+        )
+    except TimeoutError:
+        return {"status": "unreachable"}
+
+
+async def _read_container_stats(docker, container_name: str) -> dict[str, Any]:
     try:
         container = await docker.containers.get(container_name)
     except aiodocker.DockerError as exc:
@@ -139,11 +146,7 @@ def read_disk_usage(server_dir: Path) -> int:
 
     if mtime is not None:
         cached = _disk_cache.get(root)
-        if (
-            cached is not None
-            and cached[0] == mtime
-            and (now - cached[1]) < _DISK_CACHE_TTL_S
-        ):
+        if cached is not None and cached[0] == mtime and (now - cached[1]) < _DISK_CACHE_TTL_S:
             return cached[2]
 
     total = 0

@@ -6,10 +6,11 @@
 <section class="new-server">
   <div>
     <p class="t-eyebrow">Servers</p>
-    <h2 class="t-h1">Create a server</h2>
+    <h1 class="t-h1">Create a server</h1>
   </div>
 
   <form class="new-server__form" method="post" action="/servers/new">
+    <fieldset><legend>Basics</legend>
     <label>
       <span class="t-eyebrow">Name</span>
       <input type="text"
@@ -28,7 +29,7 @@
              min="{{ memory_min_gb }}"
              value="{{ form.memory_budget_gb or '' }}"
              required>
-      <small class="new-server__hint">Drives <code>mem_limit</code> and <code>-Xmx</code> (= budget − 2 GB).</small>
+      <small class="new-server__hint">Total container memory. Reserves 2 GB outside the Java heap.</small>
       {% if errors.memory_budget_gb %}<small class="new-server__error">{{ errors.memory_budget_gb }}</small>{% endif %}
     </label>
 
@@ -44,6 +45,7 @@
       {% if errors.port %}<small class="new-server__error">{{ errors.port }}</small>{% endif %}
     </label>
 
+    </fieldset><fieldset><legend>Runtime</legend>
     <label>
       <span class="t-eyebrow">Server jar filename</span>
       <input type="text"
@@ -52,7 +54,7 @@
              placeholder="paper-1.21.4.jar"
              autocomplete="off"
              required>
-      <small class="new-server__hint">You'll upload the jar after scaffolding via the file browser.</small>
+      <small class="new-server__hint">Use the exact filename you will upload into the server/ folder after creation.</small>
       {% if errors.server_jar %}<small class="new-server__error">{{ errors.server_jar }}</small>{% endif %}
     </label>
 
@@ -74,10 +76,11 @@
           <option value="{{ opt }}"{% if (form.loader or 'vanilla') == opt %} selected{% endif %}>{{ opt }}</option>
         {% endfor %}
       </select>
-      <small class="new-server__hint">Mod/server loader. Drives loader-specific defaults in future UI.</small>
+      <small class="new-server__hint">Describes your server type. Upload its matching JAR and supporting files yourself.</small>
       {% if errors.loader %}<small class="new-server__error">{{ errors.loader }}</small>{% endif %}
     </label>
 
+    </fieldset><details class="advanced-form"{% if errors.jvm_extra_args %} open{% endif %}><summary>Advanced</summary>
     <label>
       <span class="t-eyebrow">JVM extra args (optional)</span>
       <input type="text"
@@ -88,6 +91,8 @@
       {% if errors.jvm_extra_args %}<small class="new-server__error">{{ errors.jvm_extra_args }}</small>{% endif %}
     </label>
 
+    </details>
+    <p class="t-caption">Next: upload your server JAR and supporting files, then start your server from its workspace.</p>
     <label class="new-server__eula">
       <input type="checkbox"
              name="accept_eula"

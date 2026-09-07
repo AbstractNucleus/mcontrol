@@ -58,6 +58,8 @@
   <link rel="stylesheet" href="/static/app.server.css?v={{ version }}">
   <link rel="stylesheet" href="/static/app.files.css?v={{ version }}">
   <link rel="stylesheet" href="/static/app.misc.css?v={{ version }}">
+  <link rel="stylesheet" href="/static/app.workspace.css?v={{ version }}">
+  <script src="/static/workspace.js?v={{ version }}" defer></script>
   <script src="/static/htmx.min.js?v={{ version }}" defer></script>
   <script src="/static/htmx-ext-sse.js?v={{ version }}" defer></script>
   <script src="/static/errors.js?v={{ version }}" defer></script>
@@ -73,6 +75,8 @@
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
+  <header class="mobile-header"><a href="/">mcontrol</a><button type="button" class="btn btn--sm" data-mobile-menu aria-controls="primary-sidebar" aria-expanded="false">Menu</button></header>
+  <button class="nav-backdrop" aria-label="Close navigation" data-close-nav hidden></button>
   <div class="app-shell">
     {% include "_sidebar.html" %}
     <main id="main" class="page-main" tabindex="-1">

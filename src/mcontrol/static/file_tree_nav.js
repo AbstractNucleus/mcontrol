@@ -467,13 +467,8 @@ document.body.addEventListener("htmx:afterSwap", (evt) => {
   }
 });
 
-// ---- Root tree load: failure state ----------------------------------
-//
-// The #file-tree <ul> lazy-loads on hx-trigger="load". htmx drops error
-// responses (errors.js only rescues 409/422), which would otherwise leave
-// the "Loading files…" placeholder stuck forever. Swap in an inline error
-// with a retry, and stop propagation so the generic error toast doesn't
-// also fire for the tree's own load.
+// Rearm a failed lazy folder toggle. errors.js owns the visible failure
+// notice and Retry for both the root listing and nested folders.
 document.body.addEventListener("htmx:responseError", (evt) => {
   const d = evt.detail || {};
   const tgt = d.target;
@@ -489,28 +484,5 @@ document.body.addEventListener("htmx:responseError", (evt) => {
         if (window.htmx && window.htmx.process) window.htmx.process(clone);
       }
     }
-    return;
   }
-  const root = treeRoot();
-  if (!root) return;
-  if (d.target !== root && d.elt !== root) return;
-  clearPreSwapFocus();
-  evt.stopPropagation();
-  root.innerHTML =
-    '<li class="file-tree__status file-tree__status--error">' +
-    "Couldn't load files. " +
-    '<button type="button" class="file-tree__retry" data-tree-retry>Retry</button>' +
-    "</li>";
-});
-
-document.addEventListener("click", (evt) => {
-  const btn = evt.target.closest && evt.target.closest("[data-tree-retry]");
-  if (!btn) return;
-  const root = treeRoot();
-  if (!root || !window.htmx) return;
-  const url = root.getAttribute("hx-get");
-  if (!url) return;
-  root.innerHTML =
-    '<li class="file-tree__status" data-tree-status>Loading files…</li>';
-  window.htmx.ajax("GET", url, { target: root, swap: "innerHTML" });
 });

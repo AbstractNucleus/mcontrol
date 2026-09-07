@@ -4,7 +4,7 @@
 
     {% if sweepable %}
       <p class="trash-modal__hint">
-        Permanently removes the following {{ sweepable|length }} tombstone{% if sweepable|length != 1 %}s{% endif %}
+        Permanently removes the following {{ sweepable|length }} deleted server{% if sweepable|length != 1 %}s{% endif %}
         (older than {{ purge_age_days }} days). Files are deleted from disk.
       </p>
       <ul class="trash-modal__list">
@@ -33,7 +33,7 @@
         </div>
       </form>
     {% else %}
-      <p class="t-body">Nothing to sweep: no tombstones older than {{ purge_age_days }} days.</p>
+      <p class="t-body">Nothing to sweep: no deleted servers older than {{ purge_age_days }} days.</p>
       <div class="trash-modal__actions">
         <button type="button" class="btn btn--ghost" data-modal-close>Close</button>
       </div>

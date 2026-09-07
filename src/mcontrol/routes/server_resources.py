@@ -1,41 +1,15 @@
-"""Per-server Resources card (slice 9 PR 1).
-
-Single endpoint:
-
-  GET /servers/{name}/resources  → renders _resources_card.html
-
-The card auto-polls every 5s via HTMX (`hx-trigger="every 5s"`),
-swapping itself in place. Polling stops automatically when the
-operator navigates away. the trigger lives on a DOM node that the
-detail page replaces on navigation.
-
-The poll doubles as the state reconciler: the DB state column only
-changes when a lifecycle button writes it, so a crash (or a "starting"
-that finished) would lie on the pill forever. When the live container
-state diverges, the route commits the live state and appends OOB
-re-renders of the pill + lifecycle buttons to the card response.
-Steady-state responses stay byte-identical (no OOB fragments, no
-flicker). "unreachable" never reconciles — daemon blips must not churn
-state.
-
-Container resolution goes through ``db.container_name_for(row)`` so a
-re-pointed row reads the right container. Disk usage
-roots at the row's ``dir``; the plan's path-safety
-contract relies on ``dir`` being DB-sourced, not URL-sourced.
-"""
-
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import aiodocker
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol.domain import lifecycle_state
 from mcontrol.infra import db, db_async, resources
 from mcontrol.routes._dependencies import get_docker, get_server_or_404
-from mcontrol.services import lifecycle_service
+from mcontrol.services import telemetry
 from mcontrol.templates import templates
 
 router = APIRouter()
@@ -47,29 +21,7 @@ _CAPTION_BY_STATUS = {
 }
 
 
-async def _reconcile_state(server: dict, stats: dict) -> str | None:
-    """Live state to commit, or None when the DB is already honest.
-
-    Promotion to "running" waits for the listener port to accept: Docker
-    reports "running" during the port-unbound window (the start handler
-    mid-probe — when the DB still holds the pre-start state — or an
-    out-of-band start), and committing early would stomp the start
-    handler's honest "starting".
-    """
-    live = stats.get("container_state")
-    if not live:
-        return None
-    db_state = server.get("state")
-    if live == db_state:
-        return None
-    if live == "running":
-        port = (server.get("variables") or {}).get("port")
-        if isinstance(port, int) and not await lifecycle_service.probe_listener_once(
-            port
-        ):
-            return None
-        return "running"
-    return live
+_reconcile_state = telemetry.observed_state
 
 
 @router.get("/servers/{name}/resources", response_class=HTMLResponse)
@@ -80,17 +32,10 @@ async def get_card(
 ) -> HTMLResponse:
     container_name = db.container_name_for(server)
     stats = await resources.read_container_stats(docker, container_name)
-    # Full-tree walk; keep it off the event loop.
-    disk_bytes = await asyncio.to_thread(
-        resources.read_disk_usage, Path(server["dir"])
-    )
-
     context: dict = {
         "request": request,
         "server": server,
-        "disk_bytes": disk_bytes,
-        "disk_human": resources.format_bytes(disk_bytes),
-        "updated_at": datetime.now().strftime("%H:%M:%S"),
+        "updated_at": datetime.now(UTC).isoformat(),
         "format_bytes": resources.format_bytes,
     }
     if stats["status"] == "ok":
@@ -117,14 +62,16 @@ async def get_card(
             }
         )
 
+    if stats["status"] == "unreachable":
+        raise HTTPException(
+            status_code=503, detail="Docker daemon unreachable. Last values may be stale."
+        )
     body = templates.get_template("_resources_card.html").render(context)
 
     new_state = await _reconcile_state(server, stats)
     if new_state:
         await db_async.update_server_state(name=server["name"], state=new_state)
-        body += templates.get_template("_state_pill.html").render(
-            {"state": new_state, "oob": True}
-        )
+        body += templates.get_template("_state_pill.html").render({"state": new_state, "oob": True})
         body += templates.get_template("_lifecycle_buttons.html").render(
             {
                 "server": server,
@@ -134,3 +81,31 @@ async def get_card(
             }
         )
     return HTMLResponse(body)
+
+
+@router.get("/servers/{name}/disk", response_class=HTMLResponse)
+async def get_disk(request: Request, server: dict = Depends(get_server_or_404)) -> HTMLResponse:
+    # Keep an in-flight walk shared after a request times out; retries must not
+    # create another worker for the same potentially large directory.
+    jobs = getattr(request.app.state, "disk_jobs", None)
+    if jobs is None:
+        jobs = request.app.state.disk_jobs = {}
+    path = Path(server["dir"])
+    task = jobs.get(path)
+    if task is None:
+        task = asyncio.create_task(asyncio.to_thread(resources.read_disk_usage, path))
+        jobs[path] = task
+    try:
+        disk_bytes = await asyncio.wait_for(asyncio.shield(task), 10)
+    except TimeoutError:
+        raise HTTPException(
+            status_code=503, detail="Disk measurement is taking longer than expected."
+        ) from None
+    finally:
+        if task.done():
+            jobs.pop(path, None)
+    return templates.TemplateResponse(
+        request=request,
+        name="_disk_status.html",
+        context={"server": server, "disk_human": resources.format_bytes(disk_bytes)},
+    )

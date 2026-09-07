@@ -110,7 +110,7 @@
     if (!el) return;
     const pill = el.querySelector(".state-pill");
     const nameEl = el.querySelector(".server-card__name");
-    const state = pill ? (pill.textContent || "").trim() : "";
+    const state = pill ? (pill.dataset.state || "").trim() : "";
     const name = nameEl ? nameEl.textContent.trim() : "";
     if (state) applyState(state, name);
   });

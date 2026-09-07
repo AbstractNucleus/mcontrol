@@ -1,7 +1,7 @@
 <section class="players-page" id="players-main">
   <div class="players-page__title">
     <p class="t-eyebrow">Roster</p>
-    <h2 class="t-h1">Players</h2>
+    <h1 class="t-h1">Players</h1><p class="t-caption">Your roster is an address book. Server access is managed separately.</p>
   </div>
 
   {% if flash %}
@@ -42,21 +42,26 @@
     {% endif %}
   </form>
 
+  <div class="filter-bar" data-roster-filters>
+    <label>Find a player<input type="search" data-roster-search placeholder="Search roster"></label>
+    <label>Server access<select data-roster-server><option value="">All servers</option></select></label>
+    <p data-roster-empty hidden>No players match these filters.</p>
+  </div>
   {% if roster %}
     <div class="players-page__table-wrap">
     <table class="players-page__table">
       <thead>
         <tr>
           <th>Name</th>
-          <th>Whitelisted on</th>
-          <th>Op on</th>
+          <th>Allowed to join</th>
+          <th>Operator on</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {% for p in roster %}
-          <tr>
-            <td><code>{{ p.name }}</code></td>
+          <tr data-roster-name="{{ p.name }}">
+            <td><strong>{{ p.name }}</strong></td>
             <td>
               {% if p.whitelist_servers %}
                 {% for s in p.whitelist_servers %}<a href="/servers/{{ s.name }}">{{ s.name }}</a>{% if s.whitelist_disabled %} <span class="t-muted players-page__wl-off">(whitelist disabled)</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}

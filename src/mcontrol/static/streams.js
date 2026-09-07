@@ -1,292 +1,128 @@
-// Live-stream pane behavior (log + RCON console on the detail page).
-//
-// Three responsibilities, all keyed off opt-in data attributes so the
-// module is a no-op on pages without stream panes:
-//
-//   1. Stick-to-bottom scroll pinning on [data-stream-scroll] panes.
-//      Pinned state is tracked in the scroll listener (a MutationObserver
-//      fires after the append, when scrollHeight has already grown, so
-//      "was I at the bottom?" cannot be computed there). While pinned,
-//      retained content is capped so day-long tails don't grow unbounded;
-//      trimming only happens while pinned so a user reading history never
-//      has content shift under them.
-//   2. A floating "N new lines" chip when output lands below the fold.
-//   3. Console form niceties: reset + refocus after an accepted command,
-//      ArrowUp/Down command history (sessionStorage, per server), and
-//      connection-state dots driven by the htmx SSE extension's events.
 (function () {
   "use strict";
-
-  var MAX_NODES = 4000;
-
-  function initPane(pane) {
-    var body = pane.parentElement;
-    var jump = body ? body.querySelector("[data-stream-jump]") : null;
-    var jumpCount = jump ? jump.querySelector("[data-stream-jump-count]") : null;
-    var pinned = true;
-    var pending = 0;
-
-    function jumpToBottom() {
-      pane.scrollTop = pane.scrollHeight;
-      pending = 0;
-      if (jump) jump.hidden = true;
-    }
-
-    pane.addEventListener("scroll", function () {
-      pinned = pane.scrollHeight - pane.scrollTop - pane.clientHeight <= 40;
-      if (pinned && jump && !jump.hidden) {
-        pending = 0;
-        jump.hidden = true;
-      }
+  const output = document.querySelector("#console-output");
+  if (!output) return;
+  const form = document.querySelector("[data-console-form]"), input = form.querySelector('[name="command"]');
+  const send = form.querySelector('[type="submit"]'), error = document.querySelector("[data-command-error]");
+  const rconStatus = document.querySelector("[data-stream-status-label]"), logStatus = document.querySelector("[data-log-status]");
+  const jump = document.querySelector("[data-stream-jump]"), pause = document.querySelector("[data-console-pause]");
+  const search = document.querySelector("[data-console-search]"), severity = document.querySelector("[data-console-level]");
+  const reconnectButton = document.querySelector("[data-stream-retry]");
+  let logTimer, logFailed = false;
+  let pinned = true, pending = 0, rcon = null, logs = null, ready = false, logEnded = false;
+  let retry = 0, readyTimer, retryTimer, histIndex = -1, draft = "", acceptedCommand = "", logCursor = "";
+  const historyKey = "console-history:" + form.dataset.consoleForm;
+  let state = document.querySelector("#lifecycle-buttons")?.dataset.state;
+  function running() { return ["running", "starting", "restarting"].includes(state); }
+  function setReady(value, label) {
+    ready = value; send.disabled = !value; rconStatus.textContent = label;
+    rconStatus.closest("[data-stream-status]").dataset.state = value ? "live" : "closed";
+    reconnectButton.hidden = !logFailed && (value || !running());
+  }
+  function matches(line) {
+    const text = line.textContent.toLowerCase(), level = severity.value;
+    return text.includes(search.value.toLowerCase()) && (!level || line.classList.contains("log-line--error") || line.classList.contains("console-line--error") || (level === "WARN" && line.classList.contains("log-line--warn")));
+  }
+  function filter() { Array.from(output.children).forEach(line => { line.hidden = !matches(line); }); }
+  function bottom() { pinned = true; pause.checked = false; output.scrollTop = output.scrollHeight; pending = 0; jump.hidden = true; }
+  function append(html) {
+    const template = document.createElement("template"); template.innerHTML = html;
+    // Endpoints escape log text and return classified spans. Keep only those
+    // spans so filtering does not leave blank newline text nodes behind.
+    Array.from(template.content.children).forEach(line => {
+      if (line.tagName !== "SPAN") return;
+      line.hidden = !matches(line); output.append(line);
+      if (!line.hidden) pending += 1;
     });
-
-    new MutationObserver(function () {
-      if (pinned) {
-        pane.scrollTop = pane.scrollHeight;
-        while (pane.childNodes.length > MAX_NODES) {
-          pane.removeChild(pane.firstChild);
-        }
-      } else if (jump) {
-        pending += 1;
-        if (jumpCount) jumpCount.textContent = String(pending);
-        jump.hidden = false;
-      }
-    }).observe(pane, { childList: true });
-
-    if (jump) jump.addEventListener("click", jumpToBottom);
-  }
-
-  document.querySelectorAll("[data-stream-scroll]").forEach(initPane);
-
-  // ---- Connection-state dots ------------------------------------------
-  function setStatus(el, state, label) {
-    var section = el.closest ? el.closest("section") : null;
-    var status = section ? section.querySelector("[data-stream-status]") : null;
-    if (!status) return;
-    status.setAttribute("data-state", state);
-    var text = status.querySelector("[data-stream-status-label]");
-    if (text) text.textContent = label;
-  }
-
-  // Logs and RCON share #console-output. The pane status is RCON (Send
-  // needs the socket); logs opening must not flip it to "live" early.
-  document.body.addEventListener("htmx:sseOpen", function (evt) {
-    if (evt.target && evt.target.getAttribute("data-rcon-src")) return;
-    setStatus(evt.target, "live", "live");
-  });
-  document.body.addEventListener("htmx:sseError", function (evt) {
-    if (evt.target && evt.target.getAttribute("data-rcon-src")) return;
-    setStatus(evt.target, "reconnecting", "reconnecting…");
-  });
-  document.body.addEventListener("htmx:sseClose", function (evt) {
-    if (evt.target && evt.target.getAttribute("data-rcon-src")) return;
-    setStatus(evt.target, "closed", "stream ended");
-  });
-
-  // ---- RCON output → shared console <pre> -----------------------------
-  // The merged console shows docker logs (htmx SSE, above) and RCON output
-  // in one scroll. Logs keep htmx's handling; RCON is piped in here via a
-  // raw EventSource so both land in the same <pre>. Opening this source is
-  // also what registers the server's RCON connection, so POSTed commands
-  // resolve against it. `closed` is the endpoint's terminal event (RCON
-  // disabled / gone) — shut the source instead of auto-reconnecting.
-  // `ready` fires after auth; EventSource.onopen is only response headers
-  // and is too early to POST.
-  // Default EventSource reconnect is ~3s with no backoff; each retry
-  // attach/detach/RCON-connects. Close + backoff, and if `ready` never
-  // arrives (keepalive-only hang) surface an error instead of
-  // "connecting…" forever.
-  var consoleOut = document.getElementById("console-output");
-  var rconSrc = consoleOut && consoleOut.getAttribute("data-rcon-src");
-  var rconReady = false;
-  var rconSource = null;
-  var rconTimer = null;
-  var rconRetry = 0;
-  var RCON_READY_MS = 12000;
-  var RCON_RETRY_MAX_MS = 15000;
-
-  function appendErrorLine(text) {
-    if (!consoleOut) return;
-    var span = document.createElement("span");
-    span.className = "console-line console-line--error";
-    span.textContent = "[error] " + text;
-    consoleOut.appendChild(span);
-    consoleOut.appendChild(document.createTextNode("\n"));
-  }
-
-  function markRconReady(ready) {
-    rconReady = !!ready;
-    if (ready) setStatus(consoleOut, "live", "live");
-  }
-
-  function clearRconTimer() {
-    if (rconTimer) {
-      window.clearTimeout(rconTimer);
-      rconTimer = null;
-    }
-  }
-
-  function scheduleRconReconnect() {
-    var wait = Math.min(RCON_RETRY_MAX_MS, 1000 * Math.pow(2, rconRetry));
-    rconRetry += 1;
-    window.setTimeout(openRcon, wait);
-  }
-
-  function openRcon() {
-    if (!consoleOut || !rconSrc || typeof EventSource === "undefined") return;
-    if (rconSource) {
-      rconSource.close();
-      rconSource = null;
-    }
-    clearRconTimer();
-    if (!rconReady) setStatus(consoleOut, "connecting", "connecting…");
-    var rcon = new EventSource(rconSrc);
-    rconSource = rcon;
-    rconTimer = window.setTimeout(function () {
-      if (rconReady || rconSource !== rcon) return;
-      appendErrorLine("RCON console still connecting; retrying");
-      setStatus(consoleOut, "reconnecting", "retrying…");
-      rconSource = null;
-      rcon.close();
-      markRconReady(false);
-      scheduleRconReconnect();
-    }, RCON_READY_MS);
-    rcon.onmessage = function (evt) {
-      consoleOut.insertAdjacentHTML("beforeend", evt.data);
-    };
-    rcon.addEventListener("ready", function () {
-      if (rconSource !== rcon) return;
-      clearRconTimer();
-      rconRetry = 0;
-      markRconReady(true);
-    });
-    rcon.addEventListener("closed", function () {
-      if (rconSource !== rcon) return;
-      clearRconTimer();
-      markRconReady(false);
-      rconSource = null;
-      rcon.close();
-      setStatus(consoleOut, "closed", "stream ended");
-    });
-    rcon.onerror = function () {
-      if (rconSource !== rcon) return;
-      clearRconTimer();
-      markRconReady(false);
-      rconSource = null;
-      rcon.close();
-      setStatus(consoleOut, "reconnecting", "reconnecting…");
-      scheduleRconReconnect();
-    };
-  }
-
-  if (consoleOut && rconSrc && typeof EventSource !== "undefined") {
-    openRcon();
-  }
-
-  function describeFailure(xhr) {
-    if (xhr && xhr.responseText) {
-      try {
-        var detail = JSON.parse(xhr.responseText).detail;
-        if (typeof detail === "string" && detail) return detail;
-      } catch (_) {}
-    }
-    return xhr && xhr.status ? "HTTP " + xhr.status : "request failed";
-  }
-
-  // ---- Console form: reset on accept + command history ----------------
-  var form = document.querySelector("[data-console-form]");
-  if (!form) return;
-  var input = form.querySelector('input[name="command"]');
-  var histKey = "console-history:" + (form.getAttribute("data-console-form") || "");
-  var histIndex = -1; // -1 = live (unsubmitted) entry
-  var draft = "";
-
-  function history() {
-    try {
-      return JSON.parse(sessionStorage.getItem(histKey)) || [];
-    } catch (_) {
-      return [];
-    }
-  }
-
-  function pushHistory(cmd) {
-    var h = history();
-    if (h[h.length - 1] !== cmd) h.push(cmd);
-    while (h.length > 100) h.shift();
-    try { sessionStorage.setItem(histKey, JSON.stringify(h)); } catch (_) {}
-  }
-
-  var holdTimer = null;
-  var forceSend = false;
-  var retried409 = false;
-
-  form.addEventListener("htmx:beforeRequest", function (evt) {
-    if (evt.detail.elt !== form) return;
-    if (rconReady || forceSend) {
-      forceSend = false;
-      return;
-    }
-    evt.preventDefault();
-    if (holdTimer) return;
-    var start = Date.now();
-    holdTimer = window.setInterval(function () {
-      if (rconReady || Date.now() - start > 5000) {
-        window.clearInterval(holdTimer);
-        holdTimer = null;
-        if (!rconReady) forceSend = true;
-        if (window.htmx) window.htmx.trigger(form, "submit");
-      }
-    }, 50);
-  });
-
-  form.addEventListener("htmx:afterRequest", function (evt) {
-    if (evt.detail.elt !== form) return;
-    if (evt.detail.xhr && evt.detail.xhr.status === 204) {
-      retried409 = false;
-      if (input && input.value) pushHistory(input.value);
-      form.reset();
-      histIndex = -1;
-      if (input) input.focus();
-      return;
-    }
-    var status = evt.detail.xhr && evt.detail.xhr.status;
-    var detail = describeFailure(evt.detail.xhr);
-    if (status === 409 && !retried409 && /not connected|still connecting/i.test(detail)) {
-      retried409 = true;
-      window.setTimeout(function () {
-        if (window.htmx) window.htmx.trigger(form, "submit");
-      }, 400);
-      return;
-    }
-    retried409 = false;
-    // Rejected commands (409 no console, 504 timeout, …) have hx-swap="none",
-    // so without this the pane would just sit there.
-    appendErrorLine(detail);
-  });
-
-  if (!input) return;
-  input.addEventListener("keydown", function (evt) {
-    if (evt.key !== "ArrowUp" && evt.key !== "ArrowDown") return;
-    var h = history();
-    if (!h.length) return;
-    if (evt.key === "ArrowUp") {
-      if (histIndex === -1) {
-        draft = input.value;
-        histIndex = h.length - 1;
-      } else if (histIndex > 0) {
-        histIndex -= 1;
-      }
-      input.value = h[histIndex];
+    if (pinned && !pause.checked) {
+      while (output.children.length > 4000) output.firstElementChild.remove();
+      bottom();
     } else {
-      if (histIndex === -1) return;
-      histIndex += 1;
-      if (histIndex >= h.length) {
-        histIndex = -1;
-        input.value = draft;
-      } else {
-        input.value = h[histIndex];
-      }
+      jump.querySelector("[data-stream-jump-count]").textContent = pending;
+      jump.hidden = pending === 0;
     }
-    evt.preventDefault();
+  }
+  output.addEventListener("scroll", () => { pinned = output.scrollHeight - output.scrollTop - output.clientHeight < 40; if (pinned && !pause.checked) { pending = 0; jump.hidden = true; } });
+  jump.addEventListener("click", bottom);
+  search.addEventListener("input", filter); severity.addEventListener("change", filter);
+  document.querySelector("[data-console-wrap]").addEventListener("change", e => { output.dataset.wrap = String(e.target.checked); });
+  pause.addEventListener("change", () => { if (!pause.checked) bottom(); });
+  function closeRcon() {
+    clearTimeout(readyTimer); clearTimeout(retryTimer); rcon?.close(); rcon = null;
+    setReady(false, running() ? "Commands paused" : "Commands offline");
+  }
+  function connectRcon() {
+    if (document.hidden || !running() || rcon) return;
+    setReady(false, "Commands connecting…");
+    const source = new EventSource(output.dataset.rconSrc); rcon = source;
+    function reconnect() {
+      if (rcon !== source) return;
+      closeRcon(); setReady(false, "Commands reconnecting…");
+      error.textContent = "Command connection unavailable. Retrying…";
+      retryTimer = setTimeout(connectRcon, Math.min(15000, 1000 * 2 ** retry++));
+    }
+    readyTimer = setTimeout(reconnect, 12000);
+    source.onmessage = event => append(event.data);
+    source.addEventListener("ready", () => {
+      if (rcon !== source) return;
+      clearTimeout(readyTimer); retry = 0; setReady(true, "Commands ready"); error.textContent = "";
+    });
+    source.addEventListener("closed", () => {
+      if (rcon !== source) return;
+      closeRcon(); setReady(false, "Commands unavailable");
+      error.textContent = "Command connection ended. Check the console output and RCON settings.";
+    });
+    source.onerror = reconnect;
+  }
+  function connectLogs() {
+    if (document.hidden || logs || logEnded) return;
+    const url = new URL(output.dataset.logSrc, location.href);
+    if (logCursor) url.searchParams.set("resume", "1");
+    logs = new EventSource(url);
+    logTimer = setTimeout(() => { logFailed = true; logStatus.textContent = "Logs unavailable after 12 seconds"; reconnectButton.hidden = false; }, 12000);
+    logs.onopen = () => { clearTimeout(logTimer); logFailed = false; reconnectButton.hidden = ready || !running(); logStatus.textContent = running() ? "Logs live" : "Saved logs"; };
+    logs.onmessage = event => { logCursor = event.lastEventId || logCursor; append(event.data); };
+    logs.onerror = () => { logFailed = true; reconnectButton.hidden = false; logStatus.textContent = "Logs reconnecting…"; };
+    logs.addEventListener("closed", () => { clearTimeout(logTimer); logs?.close(); logs = null; logEnded = true; logFailed = true; reconnectButton.hidden = false; logStatus.textContent = "Log stream ended"; });
+  }
+  reconnectButton.addEventListener("click", () => {
+    clearTimeout(logTimer); closeRcon(); logs?.close(); logs = null; logEnded = false; retry = 0;
+    connectLogs(); connectRcon();
   });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { clearTimeout(logTimer); closeRcon(); logs?.close(); logs = null; logStatus.textContent = logEnded ? "Log stream ended" : "Logs paused"; }
+    else { connectLogs(); connectRcon(); }
+  });
+  document.body.addEventListener("mc:state-changed", event => {
+    const next = event.detail.state, changed = next !== state; state = next;
+    if (!running()) closeRcon();
+    else if (changed) { logEnded = false; connectLogs(); connectRcon(); }
+  });
+  function history() { try { const h = JSON.parse(sessionStorage.getItem(historyKey)); return Array.isArray(h) ? h : []; } catch (_) { return []; } }
+  form.addEventListener("htmx:beforeRequest", event => {
+    if (!ready) { event.preventDefault(); error.textContent = "Wait for the command connection before sending."; return; }
+    acceptedCommand = input.value; error.textContent = "";
+  });
+  form.addEventListener("htmx:afterRequest", event => {
+    send.disabled = !ready;
+    if (event.detail.xhr?.status === 204) {
+      const h = history(); if (h[h.length - 1] !== acceptedCommand) h.push(acceptedCommand);
+      try { sessionStorage.setItem(historyKey, JSON.stringify(h.slice(-100))); } catch (_) {}
+      if (input.value === acceptedCommand) input.value = "";
+      histIndex = -1; input.focus();
+    } else {
+      let message = "Command failed. Your text has been kept.";
+      try { message = JSON.parse(event.detail.xhr.responseText).detail || message; } catch (_) {}
+      error.textContent = message;
+    }
+  });
+  input.addEventListener("keydown", event => {
+    if (!["ArrowUp", "ArrowDown"].includes(event.key)) return;
+    const h = history(); if (!h.length) return;
+    if (event.key === "ArrowUp") { if (histIndex === -1) { draft = input.value; histIndex = h.length - 1; } else histIndex = Math.max(0, histIndex - 1); input.value = h[histIndex]; }
+    else if (histIndex !== -1) { histIndex += 1; if (histIndex >= h.length) { histIndex = -1; input.value = draft; } else input.value = h[histIndex]; }
+    event.preventDefault();
+  });
+  window.addEventListener("pagehide", () => { closeRcon(); logs?.close(); logs = null; });
+  connectLogs(); connectRcon();
 })();

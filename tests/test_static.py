@@ -3,10 +3,10 @@ async def test_tokens_css_is_served(client):
 
     assert response.status_code == 200
     # Claude-flavoured tokens. The accent
-    # `#D97757` is the brand-orange anchor and gates the file having
+    # `#2469DD` is the brand-blue anchor and gates the file having
     # gone through the slice-12 swap.
     assert "--accent:" in response.text
-    assert "#D97757" in response.text
+    assert "#2469DD" in response.text
     assert response.headers["content-type"].startswith("text/css")
 
 
@@ -69,19 +69,8 @@ async def test_modals_js_is_served(client):
     assert 'evt.key !== "Escape"' in body
 
 
-async def test_streams_js_waits_for_rcon_ready_before_send(client):
-    """Send is gated on the RCON `ready` event, not EventSource.onopen, and
-    logs SSE must not mark the shared console pane live."""
-    response = await client.get("/static/streams.js")
-    assert response.status_code == 200
-    body = response.text
-    assert 'addEventListener("ready"' in body
-    assert "htmx:beforeRequest" in body
-    assert "rconReady" in body
-    assert "still connecting" in body
-    assert 'getAttribute("data-rcon-src")' in body
-    assert "EventSource.onopen is only response headers" in body
-    assert "RCON console still connecting; retrying" in body
-    assert "scheduleRconReconnect" in body
-    assert "retrying…" in body
-    assert "RCON_READY_MS" in body
+async def test_workspace_assets_are_served(client):
+    for name in ("workspace.js", "dashboard.js", "streams.js", "app.workspace.css"):
+        response = await client.get("/static/" + name)
+        assert response.status_code == 200
+        assert len(response.content) > 100

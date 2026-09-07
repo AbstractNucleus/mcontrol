@@ -45,14 +45,14 @@ at `/home/abstract/.docker/config.json` on a host that today stores no
 credentials and has no credential helper. There is no `gh api` shortcut
 unless you first run `gh auth refresh -s write:packages`.
 
-**4. Stage the deploy directory.** Copy the existing `.env` across rather
-than retyping it — the live values are already correct and retyping them is
-how they drift.
+**4. Stage the deploy directory (new hosts only).** The current host is
+already configured. Preserve its existing `.env`. When migrating another
+host, copy its configured `.env` from its actual deployment location.
 
 ```
 ssh bserver
 mkdir -p /home/abstract/deploy/mcontrol
-cp /home/abstract/repos/mcontrol/.env /home/abstract/deploy/mcontrol/.env
+# Copy the configured .env from the actual previous deployment location.
 echo 'TAG=latest' >> /home/abstract/deploy/mcontrol/.env
 ```
 
@@ -112,16 +112,15 @@ gh run view <run-id>
 `docker image ls` on bserver is not a reliable source: only tags that have
 actually been pulled to that host appear, which on day one is just `latest`.
 
-## The old checkout
+## Host location verified September 7, 2026
 
-`/home/abstract/repos/mcontrol` still exists and its `docker-compose.yml`
-claims the same compose project name (`mcontrol`). Running the old
-`git pull && docker compose -p mcontrol up -d --build` there will rebuild
-from source and silently replace the pulled image, in place, with no error —
-undoing the migration while looking perfectly healthy.
+The live compose directory is `/home/abstract/deploy/mcontrol` on bserver.
+The old `/home/abstract/repos/mcontrol` checkout is absent. Older `/deploy`
+skill host notes still refer to it; use this image workflow for releases.
+The existing Tailnet-facing URL is https://mcontrol.noelkleen.com.
 
-`HOSTS.md` and the `/deploy` skill must be updated to point here before that
-old path is retired.
+For the workspace redesign, use [UI_REDESIGN_RELEASE.md](UI_REDESIGN_RELEASE.md)
+for verification and rollback preparation.
 
 ## Keeping this file in step
 

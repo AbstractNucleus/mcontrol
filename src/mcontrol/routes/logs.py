@@ -1,6 +1,5 @@
 """Server-Sent Events endpoint streaming `docker logs --follow` for a
-given server. Consumed by the log pane on the detail page (HTMX SSE
-extension).
+given server. Consumed by streams.js through a dedicated EventSource.
 
 Payload contract: each event's data is an HTML-escaped, level-classified
 <span> (the client swaps it into the <pre> as HTML, so raw log text must
@@ -8,7 +7,7 @@ never pass through unescaped — player chat legitimately contains ``<``).
 Events carry ``id:`` so a reconnecting EventSource presents
 ``Last-Event-ID`` and the route can skip the backlog tail instead of
 replaying it. Terminal conditions emit ``event: closed`` which the pane's
-``sse-close`` attribute turns into a clean EventSource shutdown rather
+client turns into a clean EventSource shutdown rather
 than an infinite reconnect-and-replay loop.
 """
 
@@ -81,7 +80,10 @@ async def stream(
     docker: aiodocker.Docker = Depends(get_docker),
 ) -> StreamingResponse:
     container_name = db.container_name_for(server)
-    skip_tail = request.headers.get("last-event-id") is not None
+    skip_tail = (
+        request.headers.get("last-event-id") is not None
+        or request.query_params.get("resume") == "1"
+    )
     return StreamingResponse(
         _sse(docker, container_name, skip_tail=skip_tail),
         media_type="text/event-stream",

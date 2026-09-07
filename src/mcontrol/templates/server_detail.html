@@ -52,44 +52,21 @@
   dashboard.js reads data-pane for layout persistence.
 #}
 {% macro panel(pane_id, title) %}
-<section class="panel" data-pane="{{ pane_id }}" data-collapsed="false" data-fullwidth="false">
+<section class="panel" data-pane="{{ pane_id }}" data-collapsed="false" data-span="{{ 8 if pane_id == 'console' else (4 if pane_id == 'players' else 12) }}">
   <header class="panel__bar">
-    <span class="panel__grip" title="Drag to rearrange" aria-hidden="true">
-      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
-        <circle cx="5" cy="4" r="1.3"/><circle cx="11" cy="4" r="1.3"/>
-        <circle cx="5" cy="8" r="1.3"/><circle cx="11" cy="8" r="1.3"/>
-        <circle cx="5" cy="12" r="1.3"/><circle cx="11" cy="12" r="1.3"/>
-      </svg>
-    </span>
-    <span class="panel__title t-eyebrow">{{ title }}</span>
-    <button type="button" class="panel__btn panel__fullwidth" aria-pressed="false"
-            title="Toggle full width" aria-label="Toggle full width for {{ title }} panel">
-      <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
-           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="8 7 4 12 8 17"/>
-        <polyline points="16 7 20 12 16 17"/>
-        <line x1="4" y1="12" x2="20" y2="12"/>
-      </svg>
-    </button>
-    <button type="button" class="panel__btn panel__collapse" aria-expanded="true"
-            title="Collapse panel" aria-label="Collapse {{ title }} panel">
-      <svg class="panel__chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"
-           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M6 9l6 6 6-6"/>
-      </svg>
-    </button>
-    <button type="button" class="panel__btn panel__hide"
-            title="Hide panel" aria-label="Hide {{ title }} panel">
-      <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
-           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-        <line x1="1" y1="1" x2="23" y2="23"/>
-      </svg>
-    </button>
+    <button type="button" class="panel__grip layout-only" aria-label="Move {{ title }}" title="Drag to rearrange">⠿</button>
+    <h2 class="panel__title">{{ title }}</h2>
+    <button type="button" class="btn btn--sm btn--ghost" data-panel-focus aria-label="Focus {{ title }}">Focus</button>
+    <button type="button" class="panel__btn panel__collapse" aria-expanded="true" aria-label="Collapse {{ title }}">−</button>
   </header>
-  <div class="panel__body">
-    {{ caller() }}
+  <div class="panel__layout layout-only">
+    <button class="btn btn--sm" type="button" data-move="-1" aria-label="Move {{ title }} up">↑</button>
+    <button class="btn btn--sm" type="button" data-move="1" aria-label="Move {{ title }} down">↓</button>
+    <label>Width<select data-panel-width aria-label="{{ title }} width"><option value="4">One-third</option><option value="6">Half</option><option value="8">Two-thirds</option><option value="12">Full</option></select></label>
+    <label>Height<input type="range" min="280" max="900" step="20" data-panel-height aria-label="{{ title }} height"></label>
+    <button class="btn btn--sm btn--ghost" type="button" data-panel-hide>Hide</button>
   </div>
+  <div class="panel__body">{{ caller() }}</div>
 </section>
 {% endmacro %}
 
@@ -117,22 +94,7 @@
         <div class="lifecycle-row">
           {% include "_lifecycle_buttons.html" %}
         </div>
-        {# Layout menu: restore hidden panes + reset the saved arrangement.
-           dashboard.js fills [data-panels-list] with a toggle per panel. #}
-        <details class="detail-menu" data-panels-menu hidden>
-          <summary class="detail-menu__trigger" title="Panels" aria-label="Show or hide panels">
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="7" height="18" rx="1"/>
-              <rect x="14" y="3" width="7" height="18" rx="1"/>
-            </svg>
-          </summary>
-          <div class="detail-menu__panel">
-            <p class="detail-menu__heading t-caption">Panels</p>
-            <div data-panels-list></div>
-            <button type="button" class="detail-menu__item" data-panels-reset>Reset layout</button>
-          </div>
-        </details>
+        <button type="button" class="btn btn--sm" data-settings-open aria-controls="server-settings" aria-expanded="false">Settings</button>
         <details class="detail-menu">
           <summary class="detail-menu__trigger" title="More actions" aria-label="More actions">⋯</summary>
           <div class="detail-menu__panel">
@@ -155,16 +117,13 @@
       <section id="server-resources"
                class="resources-strip resources-strip--loading"
                hx-get="/servers/{{ server.name }}/resources"
-               hx-trigger="load, every 5s"
+               hx-trigger="load, every 5s, mc:refresh"
                hx-swap="outerHTML"
-               aria-label="Live resource usage">
+               aria-label="Live resource usage" data-poll data-async-label="Resource usage">
         <span class="resources-strip__item resources-strip__item--muted">loading…</span>
       </section>
-      {% if server.updated_at %}
-      <p class="detail-header__meta t-caption" title="{{ server.updated_at }}">
-        Last seen {{ server.updated_at | reltime or server.updated_at }}
-      </p>
-      {% endif %}
+      <section id="server-disk" class="disk-status" data-loading hx-get="/servers/{{ server.name }}/disk"
+               hx-trigger="load, every 60s, mc:refresh" hx-swap="outerHTML" data-poll data-async-label="Disk usage">Measuring disk…</section>
     </div>
     {#
       Visually-hidden aria-live region for lifecycle state announcements
@@ -193,36 +152,51 @@
     restores any saved order on load. Source order (console after
     #server-resources) is load-bearing for tests — keep console first.
   #}
+  <div class="workspace-toolbar">
+    <p class="t-caption">Workspace <span class="t-muted">/ Shared across your servers</span></p>
+    <button type="button" class="btn btn--sm" data-customize>Customize layout</button>
+    <div class="layout-actions" hidden>
+      <fieldset data-panel-visibility><legend>Visible panels</legend></fieldset>
+      <button type="button" class="btn btn--primary btn--sm" data-layout-save>Save layout</button>
+      <button type="button" class="btn btn--sm" data-layout-cancel>Cancel</button>
+      <button type="button" class="btn btn--sm btn--ghost" data-layout-reset>Reset</button>
+    </div>
+    <p class="visually-hidden" data-layout-status role="status"></p>
+  </div>
+  {% if server.scaffolded_at and server.state in ['created', 'missing'] %}
+    <aside class="setup-next"><strong>Finish setting up {{ server.name }}</strong><p>Upload your server JAR and supporting files into <code>server/</code> in Files, then start the server and check Console.</p><button class="btn btn--sm" type="button" data-focus-files>Open files</button></aside>
+  {% endif %}
   <div class="dashboard" data-dashboard data-server="{{ server.name }}">
       {% call panel('console', 'Console') %}
         {% include "_console_pane.html" %}
       {% endcall %}
 
+      {% call panel('players', 'Players') %}
+        <section id="server-players"
+                 class="hx-slot hx-slot--players"
+                 hx-get="/servers/{{ server.name }}/players"
+                 hx-trigger="load, mc:state-changed from:body"
+                 hx-swap="outerHTML">
+          <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
+          <span class="skeleton skeleton--line" aria-hidden="true"></span>
+          <span class="skeleton skeleton--block" aria-hidden="true"></span>
+        </section>
+      {% endcall %}
+
       {% call panel('files', 'Files') %}
         <section class="files-pane" data-server-name="{{ server.name }}">
           <header class="files-pane__head">
-            <p class="files-pane__eyebrow">
-              <details class="file-tree__menu">
-                <summary class="file-tree__menu-trigger" title="Actions for server root" aria-label="Actions for server root">⋯</summary>
-                <div class="file-tree__menu-panel">
-                  <button class="file-tree__menu-item"
-                          type="button"
-                          data-upload-trigger
-                          data-upload-path="">Upload to root</button>
-                  <button class="file-tree__menu-item"
-                          type="button"
-                          data-action-mkdir
-                          data-action-path="">New folder in root</button>
-                </div>
-              </details>
-            </p>
+            <button type="button" class="btn btn--sm" data-files-back hidden>← Back to files</button>
+            <label class="file-nav-size">Navigation<select data-file-nav-size aria-label="File navigation width"><option value="160">Compact</option><option value="240" selected>Standard</option><option value="360">Wide</option></select></label>
+            <button type="button" class="btn btn--sm" data-upload-trigger data-upload-path="">Upload</button>
+            <button type="button" class="btn btn--sm" data-action-mkdir data-action-path="">New folder</button>
           </header>
           <div class="file-search">
       <input type="search"
              id="file-search-input"
              class="file-search-input"
              name="q"
-             placeholder="search filename (≥ 2 chars)…"
+             placeholder="Find a filename…"
              aria-label="Search files"
              autocomplete="off"
              hx-get="/servers/{{ server.name }}/files/search"
@@ -257,6 +231,7 @@
            state (with retry) if the fetch fails, so this never sticks. #}
         <li class="file-tree__status" data-tree-status>Loading files…</li>
       </ul>
+      <button class="file-divider" role="separator" aria-label="Resize file navigation" aria-orientation="vertical" aria-valuemin="160" aria-valuemax="360" aria-valuenow="240" type="button"></button>
       <div class="file-view" id="file-view">
         <p class="t-muted">Select a file to view its contents.</p>
       </div>
@@ -265,20 +240,14 @@
         </section>
       {% endcall %}
 
-      {% call panel('players', 'Players') %}
-        <section id="server-players"
-                 class="hx-slot hx-slot--players"
-                 hx-get="/servers/{{ server.name }}/players"
-                 hx-trigger="load, mc:state-changed from:body"
-                 hx-swap="outerHTML">
-          <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
-          <span class="skeleton skeleton--line" aria-hidden="true"></span>
-          <span class="skeleton skeleton--block" aria-hidden="true"></span>
-        </section>
-      {% endcall %}
 
+
+  </div>
+
+  <section id="server-settings" class="server-settings" hidden tabindex="-1" aria-labelledby="settings-title">
+    <header><div><p class="t-eyebrow">Settings</p><h2 id="settings-title">Server configuration</h2></div><button class="btn btn--sm" type="button" data-settings-close>Back to workspace</button></header>
       {% if not server.scaffolded_at %}
-        {% call panel('migrate', 'Legacy server') %}
+        <section class="settings-section" id="settings-migrate"><h2>Legacy setup</h2>
           <section id="migrate-card"
                    class="hx-slot hx-slot--migrate"
                    hx-get="/servers/{{ server.name }}/migrate"
@@ -288,11 +257,11 @@
             <span class="skeleton skeleton--line" aria-hidden="true"></span>
             <span class="skeleton skeleton--block" aria-hidden="true"></span>
           </section>
-        {% endcall %}
+        </section>
       {% endif %}
 
       {% if server.scaffolded_at %}
-        {% call panel('variables', 'Variables') %}
+        <section class="settings-section" id="settings-variables"><h2>Runtime configuration</h2>
           <section id="variables"
                    class="hx-slot hx-slot--variables"
                    hx-get="/servers/{{ server.name }}/variables"
@@ -302,13 +271,20 @@
             <span class="skeleton skeleton--line" aria-hidden="true"></span>
             <span class="skeleton skeleton--block" aria-hidden="true"></span>
           </section>
-        {% endcall %}
+        </section>
       {% endif %}
 
-      {% call panel('bindings', 'Bindings') %}
+      <section class="settings-section" id="settings-bindings"><h2>Container settings</h2>
         {% include "_bindings_card.html" %}
-      {% endcall %}
-  </div>
+        {% if not server.scaffolded_at %}
+        <p class="t-caption">Apply changes from docker-compose.yml by recreating the container. A running server will restart.</p>
+        <button type="button" class="btn btn--sm" data-lifecycle-button
+                hx-post="/servers/{{ server.name }}/lifecycle/recreate" hx-target="#state-pill"
+                hx-swap="outerHTML" hx-disabled-elt="this">Recreate container</button>
+        {% endif %}
+      </section>
+
+  </section>
 
   {# Delete confirmation renders here on demand (header ⋯ menu → Delete). #}
   <div id="server-modal"></div>

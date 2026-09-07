@@ -27,9 +27,9 @@
     <dt>JVM extra args</dt>
     <dd>{% if vars.jvm_extra_args %}{{ vars.jvm_extra_args }}{% else %}<span class="t-muted">-</span>{% endif %}</dd>
   </dl>
-  {% if scripts_stale %}
+  {% if scripts_stale or (scripts_stale is none and not variables_error) %}
     <p class="variables-card__stale">
-      Scripts on disk differ from current variables.
+      Scripts on disk are missing or differ from current variables.
     </p>
     <a class="btn btn--sm btn--ghost"
        hx-get="/servers/{{ server.name }}/regenerate"
@@ -37,9 +37,10 @@
        hx-swap="outerHTML"
        href="#">Regenerate</a>
   {% endif %}
-  <p class="t-caption">Changes to memory, port, Java, or the start script apply only after the container is recreated.</p>
+  <p class="t-caption">Changes to memory, port, Java, or the start script apply after recreating the container. A running server will restart.</p>
   <button type="button"
           class="btn btn--sm"
+          data-lifecycle-button hx-disabled-elt="this"
           hx-post="/servers/{{ server.name }}/lifecycle/recreate"
           hx-target="#state-pill"
           hx-swap="outerHTML">Recreate container</button>

@@ -47,10 +47,8 @@ def is_running(server: dict) -> bool:
 def view(state: str | None) -> LifecycleView:
     """Map a server state string to the three buttons' view state.
 
-    Unrecognised / `None` falls into a recovery posture: all buttons
-    enabled, no accent. Discovery sometimes returns `"unknown"` when
-    the Docker daemon is unreachable; the operator deserves the chance
-    to attempt the action and let the route surface the real error.
+    Unrecognised / `None` means availability has not been observed.
+    Disable lifecycle controls until the next successful status refresh.
     """
     if state in _STOPPED_LIKE:
         result: LifecycleView = {
@@ -89,9 +87,9 @@ def view(state: str | None) -> LifecycleView:
         }
     else:
         result = {
-            "start_disabled": False,
-            "stop_disabled": False,
-            "restart_disabled": False,
+            "start_disabled": True,
+            "stop_disabled": True,
+            "restart_disabled": True,
             "accent": None,
             "compose_label": None,
         }

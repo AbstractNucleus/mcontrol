@@ -1,16 +1,20 @@
-{# Unified console: the container's stdout (docker logs, via htmx SSE) and
-   RCON command output share one scroll, with the command bar pinned below —
-   the shape of a real server console. Logs keep htmx's SSE handling;
-   streams.js pipes the RCON stream (data-rcon-src) into the same <pre> via a
-   raw EventSource, which also registers the RCON connection that POSTed
-   commands resolve against. #}
+{# Separate EventSource connections share one scroll. streams.js manages
+   connection state, visibility suspension, filtering, and command history. #}
 <section class="console-pane">
   <header class="console-pane__head">
-    <span class="pane-status" data-stream-status data-state="connecting">
+    <span class="pane-status" data-stream-status data-state="connecting" role="status">
       <span class="pane-status__dot" aria-hidden="true"></span>
-      <span class="pane-status__label" data-stream-status-label>connecting…</span>
+      <span class="pane-status__label" data-stream-status-label>Commands connecting…</span>
     </span>
+    <span class="pane-status" data-log-status role="status">Logs connecting…</span>
+    <button type="button" class="btn btn--sm" data-stream-retry hidden>Retry connections</button>
   </header>
+  <div class="console-tools">
+    <input type="search" data-console-search aria-label="Search console" placeholder="Search output…">
+    <select data-console-level aria-label="Log severity"><option value="">All levels</option><option value="WARN">Warnings + errors</option><option value="ERROR">Errors</option></select>
+    <label><input type="checkbox" data-console-wrap> Wrap</label>
+    <label><input type="checkbox" data-console-pause> Pause follow</label>
+  </div>
   <div class="console-pane__body">
     <pre id="console-output"
          class="console-pane__stream"
@@ -18,15 +22,11 @@
          aria-live="polite"
          aria-atomic="false"
          aria-label="Server console output"
-         hx-ext="sse"
-         sse-connect="/servers/{{ server.name }}/logs"
-         sse-swap="message"
-         sse-close="closed"
-         hx-swap="beforeend"
+         data-log-src="/servers/{{ server.name }}/logs"
          data-stream-scroll
          data-rcon-src="/servers/{{ server.name }}/rcon"></pre>
     <button type="button" class="pane-jump" data-stream-jump hidden>
-      <span data-stream-jump-count>0</span> new lines ↓
+      <span data-stream-jump-count>0</span> new lines · Jump to latest ↓
     </button>
   </div>
   <form class="console-pane__input"
@@ -35,6 +35,7 @@
         hx-swap="none"
         hx-disabled-elt="find button[type='submit']">
     <input type="text" name="command" aria-label="RCON command" placeholder="type a command, e.g. say hello" autocomplete="off" required>
-    <button type="submit" class="btn btn--primary">Send{% include "_spinner.html" %}</button>
+    <button type="submit" class="btn btn--primary" disabled>Send{% include "_spinner.html" %}</button>
   </form>
+  <p class="command-error" data-command-error role="status"></p>
 </section>

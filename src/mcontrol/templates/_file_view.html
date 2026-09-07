@@ -41,6 +41,7 @@
               spellcheck="false">{{ content }}</textarea>
     <div class="file-editor__actions">
       <button type="submit" class="btn btn--primary btn--sm">Save</button>
+      <span class="t-caption" data-editor-status role="status">No unsaved changes</span>
     </div>
   </form>
 {% elif mode == 'binary' or mode == 'too_large' or mode == 'not_utf8' %}

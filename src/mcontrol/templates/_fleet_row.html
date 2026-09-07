@@ -11,17 +11,17 @@
   the memory cell's exact `-` / `x.x GiB / y.y GiB (NN %)` strings.
 #}
 {% set lc = lifecycle_view(server.state) %}
-<li class="server-card" id="fleet-row-{{ server.name }}">
+<li data-name="{{ server.name }}" data-state="{{ server.state }}" class="server-card" id="fleet-row-{{ server.name }}">
   <span class="server-card__state">
-    <span class="state-pill state-pill--{{ server.state }}">{{ server.state }}</span>
+    <span data-state="{{ server.state }}" class="state-pill state-pill--{{ server.state }}">{{ status_label(server.state) }}</span>
   </span>
   <span class="server-card__id">
     <a class="server-card__name" href="/servers/{{ server.name }}">{{ server.name }}</a>
   </span>
-  <span class="server-card__port t-num">{% if server.port %}:{{ server.port }}{% endif %}</span>
-  <span class="server-card__cpu t-num">{{ server.cpu or "" }}</span>
-  <span class="server-card__memory">{{ server.memory or "-" }}</span>
-  <span class="server-card__uptime t-num">{{ server.started_at | uptime if server.started_at else "" }}</span>
+  <span data-label="Port" class="server-card__port t-num">{% if server.port %}:{{ server.port }}{% endif %}</span>
+  <span data-label="CPU" class="server-card__cpu t-num">{{ server.cpu or "" }}</span>
+  <span data-label="Memory" class="server-card__memory">{{ server.memory or ("Unavailable" if server.state in ["unknown", "unreachable"] else "Not running") }}</span>
+  <span data-label="Uptime" class="server-card__uptime t-num">{{ server.started_at | uptime if server.started_at else "" }}</span>
   <span class="server-card__actions">
     {# Only the applicable action(s) render; transient states get none. #}
     {% if not lc.start_disabled %}

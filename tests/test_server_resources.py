@@ -94,8 +94,10 @@ async def test_ok_render_shows_cpu_memory_disk(client, fake_db, fake_stats, tmp_
     assert "8.1 GiB / 12.0 GiB" in body         # memory used / limit
     assert "(67 %)" in body                     # memory percent. 8.097/12 ≈ 67.48 → 67
     assert 'style="--fill: 67.5%"' in body
-    assert "4.0 KiB" in body                    # disk
-    assert "every 5 s" in body                  # ok caption
+    assert "4.0 KiB" not in body  # Disk walks never block fast telemetry.
+    assert 'data-observed-at=' in body
+    disk = await client.get("/servers/atm10/disk")
+    assert "4.0 KiB" in disk.text
 
 
 async def test_ok_render_includes_polling_attributes_for_continued_swap(
@@ -107,7 +109,7 @@ async def test_ok_render_includes_polling_attributes_for_continued_swap(
 
     assert 'id="server-resources"' in body
     assert 'hx-get="/servers/atm10/resources"' in body
-    assert 'hx-trigger="every 5s"' in body
+    assert 'hx-trigger="every 5s, mc:refresh"' in body
     assert "load" not in body.split("hx-trigger")[1].split(">")[0]
     assert 'hx-swap="outerHTML"' in body
 
@@ -131,9 +133,9 @@ async def test_not_running_dashes_container_numbers_but_keeps_disk(
     assert response.status_code == 200
     # CPU and memory show em-dashes; disk still renders the real number.
     assert "container not running" in body
-    assert "1.0 KiB" in body
+    assert "1.0 KiB" in (await client.get("/servers/atm10/disk")).text
     # No CPU / memory percent figures. the OK template branch is not used.
-    assert "%" not in body.split("Disk")[0]
+    assert "resources-strip__pct" not in body
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +163,8 @@ async def test_unreachable_still_renders_disk(client, fake_db, fake_stats, tmp_p
 
     body = (await client.get("/servers/atm10/resources")).text
 
-    assert "2.0 KiB" in body
+    assert "unreachable" in body
+    assert "2.0 KiB" in (await client.get("/servers/atm10/disk")).text
 
 
 # ---------------------------------------------------------------------------
@@ -345,7 +348,7 @@ async def test_unreachable_daemon_never_reconciles(
 
     response = await client.get("/servers/atm10/resources")
 
-    assert response.status_code == 200
+    assert response.status_code == 503
     assert "hx-swap-oob" not in response.text
     assert capture_state_writes == []
 
@@ -372,5 +375,5 @@ async def test_missing_container_heals_pill_to_missing(
     response = await client.get("/servers/atm10/resources")
 
     assert "state-pill--created" in response.text
-    assert ">missing<" in response.text
+    assert ">Missing<" in response.text
     assert capture_state_writes == [{"name": "atm10", "state": "missing"}]

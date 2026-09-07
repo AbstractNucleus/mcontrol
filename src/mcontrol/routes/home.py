@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 import aiodocker
@@ -9,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from mcontrol.domain import discovery
 from mcontrol.infra import db, db_async, resources
 from mcontrol.routes._dependencies import get_docker
+from mcontrol.services import telemetry
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
@@ -21,9 +23,8 @@ def _format_memory(stats: object) -> str | None:
     """Render the home cell from a read_container_stats result.
 
     Returns a string when the container is running, None otherwise.
-    Slice 9 resolution #12: derive caption from live stats, not the
-    DB state column. both not-running and daemon-unreachable collapse
-    to a single dash on the home surface.
+    Derive measurements from the live stats, with unavailable and stopped
+    captions supplied separately by the fleet template.
     """
     if not isinstance(stats, dict) or stats.get("status") != "ok":
         return None
@@ -50,12 +51,13 @@ def _row_view(row: dict, stats: object) -> dict:
     }
 
 
+@router.get("/fleet/status", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
 async def home(
     request: Request,
     docker: aiodocker.Docker = Depends(get_docker),
 ) -> HTMLResponse:
-    servers = await db_async.list_servers()
+    servers = [dict(row) for row in await db_async.list_servers()]
 
     container_names = [db.container_name_for(row) for row in servers]
     stats_results = await asyncio.gather(
@@ -66,6 +68,26 @@ async def home(
         return_exceptions=True,
     )
 
+    if servers and request.url.path == "/fleet/status" and all(
+        not isinstance(stats, dict) or stats.get("status") == "unreachable"
+        for stats in stats_results
+    ):
+        raise HTTPException(
+            status_code=503, detail="Docker daemon unreachable. Last fleet values may be stale."
+        )
+
+    observed_states = await asyncio.gather(*(
+        telemetry.observed_state(row, stats) if isinstance(stats, dict)
+        else asyncio.sleep(0, result=None)
+        for row, stats in zip(servers, stats_results, strict=True)
+    ))
+
+    for row, stats, observed in zip(servers, stats_results, observed_states, strict=True):
+        if not isinstance(stats, dict) or stats.get("status") == "unreachable":
+            row["state"] = "unreachable"
+            continue
+        if observed:
+            row["state"] = observed
     rows = [
         _row_view(row, stats)
         for row, stats in zip(servers, stats_results, strict=True)
@@ -89,8 +111,8 @@ async def home(
 
     return templates.TemplateResponse(
         request=request,
-        name="home.html",
-        context={"servers": rows, "summary": summary},
+        name="_fleet.html" if request.url.path == "/fleet/status" else "home.html",
+        context={"servers": rows, "summary": summary, "observed_at": datetime.now(UTC).isoformat()},
     )
 
 

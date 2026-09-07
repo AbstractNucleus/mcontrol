@@ -1,0 +1,4 @@
+<section id="server-disk" class="disk-status" hx-get="/servers/{{ server.name }}/disk"
+         hx-trigger="every 60s, mc:refresh" hx-swap="outerHTML" data-poll data-async-label="Disk usage">
+  <span class="resources-strip__key">Disk</span> <span class="t-num">{{ disk_human }}</span>
+</section>

@@ -1,16 +1,16 @@
 {# Compact live-resources strip for the sticky detail header: memory (with a
-   mini bar that turns amber/red near the limit), CPU, uptime, disk. Same
+   mini bar that turns amber/red near the limit), CPU, uptime, and freshness. Same
    polling slot as before — keeps id + hx-* so it self-swaps every 5s and
    still doubles as the state reconciler (OOB pill/lifecycle fragments). #}
 <div class="resources-strip"
      id="server-resources"
      hx-get="/servers/{{ server.name }}/resources"
-     hx-trigger="every 5s"
+     hx-trigger="every 5s, mc:refresh"
      hx-swap="outerHTML"
-     aria-label="Live resource usage">
+     aria-label="Live resource usage" data-poll data-async-label="Resource usage">
   {% if ok %}
     <span class="resources-strip__item resources-strip__item--mem">
-      <span class="resources-strip__key">Mem</span>
+      <span class="resources-strip__key">Memory</span>
       <span class="resources-strip__val t-num">{{ format_bytes(mem_used) }} / {{ format_bytes(mem_limit) }}</span>
       <span class="resources-strip__bar" aria-hidden="true">
         {% set _bar_class = 'resources-strip__bar-fill--danger' if mem_percent >= 90 else ('resources-strip__bar-fill--warning' if mem_percent >= 75 else '') %}
@@ -24,19 +24,14 @@
       <span class="resources-strip__val t-num">{{ "%.1f"|format(cpu_percent) }} %</span>
     </span>
     <span class="resources-strip__item">
-      <span class="resources-strip__key">Up</span>
+      <span class="resources-strip__key">Uptime</span>
       <span class="resources-strip__val t-num">{% if started_at %}{{ started_at | uptime }}{% else %}-{% endif %}</span>
     </span>
-    <span class="resources-strip__item">
-      <span class="resources-strip__key">Disk</span>
-      <span class="resources-strip__val t-num">{{ disk_human }}</span>
-    </span>
-    <span class="resources-strip__caption">every 5 s</span>
+
+
   {% else %}
     <span class="resources-strip__item resources-strip__item--muted">{{ caption }}</span>
-    <span class="resources-strip__item">
-      <span class="resources-strip__key">Disk</span>
-      <span class="resources-strip__val t-num">{{ disk_human }}</span>
-    </span>
+
   {% endif %}
+  <span class="freshness">Checked <time data-observed-at="{{ updated_at }}">just now</time></span>
 </div>

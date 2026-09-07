@@ -5,6 +5,7 @@ routes/home.py and routes/server.py. Slice 4 adds four more route
 modules; sharing a single instance keeps configuration in one place.
 """
 
+import hashlib
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,7 +15,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from mcontrol import __version__
-from mcontrol.domain import health, lifecycle_state
+from mcontrol.domain import health, lifecycle_state, status
 from mcontrol.infra.resources import format_bytes
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -22,7 +23,13 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 # Every page's base.html needs `version` for asset cache-busting and the
 # sidebar brand; a global means no route can forget to pass it.
-templates.env.globals["version"] = __version__
+_assets = TEMPLATES_DIR.parent / "static"
+_digest = hashlib.sha256()
+for _asset in sorted(_assets.rglob("*")):
+    if _asset.is_file():
+        _digest.update(_asset.read_bytes())
+templates.env.globals["version"] = __version__ + "." + _digest.hexdigest()[:12]
+templates.env.globals["status_label"] = status.label
 
 
 def humantime(mtime_ns: int) -> str:
