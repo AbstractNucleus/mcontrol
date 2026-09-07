@@ -5,13 +5,14 @@ from pathlib import Path
 import aiodocker
 import aiohttp
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from mcontrol import __version__
 from mcontrol.domain import discovery, tombstones
-from mcontrol.infra import db_async, healthz
+from mcontrol.infra import db_async, docker_client, healthz
+from mcontrol.infra import probe_host as probe_host_mod
 from mcontrol.routes import (
     bindings,
     console,
@@ -30,6 +31,8 @@ from mcontrol.routes import (
     trash,
     variables,
 )
+from mcontrol.routes._flash import COOKIE as FLASH_COOKIE
+from mcontrol.routes._flash import read_flash
 from mcontrol.settings import Settings, get_settings
 from mcontrol.templates import templates
 
@@ -37,6 +40,32 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("mcontrol")
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+class _HealthzAccessFilter(logging.Filter):
+    """Drop uvicorn access lines for the liveness probe."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3:
+            path = args[2]
+            if isinstance(path, str) and path.split("?", 1)[0] == "/healthz":
+                return False
+        try:
+            return "/healthz" not in record.getMessage()
+        except Exception:
+            return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_HealthzAccessFilter())
+
+
+def _wants_html(request: Request) -> bool:
+    if request.headers.get("hx-request"):
+        return False
+    accept = request.headers.get("accept", "")
+    return "text/html" in accept or accept == ""
 
 
 @asynccontextmanager
@@ -55,6 +84,15 @@ async def lifespan(app: FastAPI):
     )
     app.state.docker = docker
 
+    try:
+        await probe_host_mod.resolve(docker)
+    except Exception:
+        logger.warning("probe host resolve failed", exc_info=True)
+    try:
+        await docker_client.prune_stale_self_networks(docker)
+    except Exception:
+        logger.warning("stale network prune failed", exc_info=True)
+
     base_path = Path(settings.server_base_path)
     try:
         count = await discovery.run_discovery(docker, base_path)
@@ -66,6 +104,8 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        with suppress(Exception):
+            await docker_client.disconnect_refcount_networks(docker)
         with suppress(Exception):
             await docker.close()
 
@@ -97,6 +137,11 @@ def create_app() -> FastAPI:
 
     templates.env.globals["sidebar_servers"] = _sidebar_servers
 
+    def _page_flash(request: Request) -> dict | None:
+        return getattr(request.state, "page_flash", None)
+
+    templates.env.globals["page_flash"] = _page_flash
+
     @app.middleware("http")
     async def _prime_sidebar(request: Request, call_next):
         # Full-page navigations render the sidebar and so need its server
@@ -106,16 +151,27 @@ def create_app() -> FastAPI:
         # the chrome, so they skip the round-trip. A DB blip leaves an
         # empty rail, not a 500 (same posture as tombstone_count).
         path = request.url.path
-        if not (
-            request.headers.get("hx-request")
-            or path.startswith("/static")
+        skip = (
+            path.startswith("/static")
             or path == "/healthz"
-        ):
+            or path.endswith("/logs")
+            or path.endswith("/rcon")
+            or path.endswith("/download")
+            or not _wants_html(request)
+        )
+        if not skip:
             try:
                 request.state.sidebar_servers = await db_async.list_servers()
             except Exception:
                 request.state.sidebar_servers = []
-        return await call_next(request)
+            flash = read_flash(request)
+            if flash:
+                request.state.page_flash = flash
+                request.state.clear_flash_cookie = True
+        response = await call_next(request)
+        if getattr(request.state, "clear_flash_cookie", False):
+            response.delete_cookie(FLASH_COOKIE, path="/")
+        return response
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(home.router)
@@ -142,25 +198,29 @@ def create_app() -> FastAPI:
         status_code, payload = await healthz.build_report(
             request.app.state.docker
         )
+        if status_code != 200:
+            logger.warning("healthz degraded: %s", payload["checks"])
         return JSONResponse(status_code=status_code, content=payload)
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> RedirectResponse:
+        return RedirectResponse(url="/static/favicon.svg", status_code=308)
 
     # Custom error pages. HTMX requests still
     # surface error JSON so swap targets behave; full-page navigations
     # render the chrome-shaped error template.
-    def _wants_html(request: Request) -> bool:
-        if request.headers.get("hx-request"):
-            return False
-        accept = request.headers.get("accept", "")
-        return "text/html" in accept or accept == ""
-
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-        if exc.status_code == 404 and _wants_html(request):
+        path = request.url.path
+        if exc.status_code == 404 and (path == "/static" or path.startswith("/static/")):
+            return PlainTextResponse("not found", status_code=404)
+        if exc.status_code in (404, 405) and _wants_html(request):
             return templates.TemplateResponse(
                 request=request,
                 name="404.html",
                 context={"detail": exc.detail},
-                status_code=404,
+                status_code=exc.status_code,
+                headers=getattr(exc, "headers", None) or {},
             )
         # Default: forward to FastAPI's normal JSON shape so HTMX
         # consumers and 4xx/5xx forms keep working.

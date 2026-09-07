@@ -171,7 +171,8 @@ async def test_run_command_reuses_active_console_connection(
 
     conn = _Conn()
     console._active_connections["atm10"] = conn
-    console._output_queues["atm10"] = asyncio.Queue()
+    queue: asyncio.Queue = asyncio.Queue()
+    console._subscribers["atm10"].add(queue)
     connects: list[tuple] = []
 
     async def fake_connect(*args, **kwargs):
@@ -187,11 +188,14 @@ async def test_run_command_reuses_active_console_connection(
         )
     finally:
         console._active_connections.pop("atm10", None)
-        console._output_queues.pop("atm10", None)
+        console._subscribers.pop("atm10", None)
 
     assert response == "Added Notch to the whitelist"
     assert conn.commands == ["whitelist add Notch"]
     assert connects == []
+    # The flip is echoed into the open console like a typed command.
+    assert queue.get_nowait() == "> whitelist add Notch"
+    assert queue.get_nowait() == "Added Notch to the whitelist"
 
 
 async def test_run_command_waits_for_console_instead_of_competing(
@@ -227,7 +231,7 @@ async def test_run_command_waits_for_console_instead_of_competing(
     async def register_later():
         await asyncio.sleep(0.05)
         console._active_connections["atm10"] = _Conn()
-        console._output_queues["atm10"] = asyncio.Queue()
+        console._subscribers["atm10"].add(asyncio.Queue())
 
     try:
         asyncio.create_task(register_later())
@@ -236,7 +240,7 @@ async def test_run_command_waits_for_console_instead_of_competing(
         )
     finally:
         console._active_connections.pop("atm10", None)
-        console._output_queues.pop("atm10", None)
+        console._subscribers.pop("atm10", None)
         lock.release()
 
     assert response == "ok:whitelist add Notch"

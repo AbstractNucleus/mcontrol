@@ -19,6 +19,7 @@ def test_render_compose_substitutes_name_memory_and_port():
     assert "container_name: atm10" in rendered
     assert "image: eclipse-temurin:21-jre" in rendered
     assert "mem_limit: 8g" in rendered
+    assert "stop_grace_period: 90s" in rendered
     assert '- "25565:25565"' in rendered
     # Bind mount + entrypoint stay verbatim.
     assert "./server:/data" in rendered
@@ -29,7 +30,7 @@ def test_render_start_script_derives_xmx_from_memory_budget():
     rendered = scaffolding.render_start_script(_VARS)
     # 8 GB budget − 2 GB headroom = -Xmx6g.
     assert "-Xmx6g" in rendered
-    assert "-jar paper-1.21.4.jar" in rendered
+    assert '-jar "paper-1.21.4.jar"' in rendered
     assert "-XX:+UseG1GC" in rendered
     assert rendered.startswith("#!/usr/bin/env bash\n")
     assert "set -euo pipefail" in rendered
@@ -39,7 +40,7 @@ def test_render_start_script_treats_jvm_extra_args_as_optional():
     minimal = {"memory_budget_gb": 8, "port": 25565, "server_jar": "paper.jar"}
     rendered = scaffolding.render_start_script(minimal)
     assert "-Xmx6g" in rendered
-    assert "-jar paper.jar" in rendered
+    assert '-jar "paper.jar"' in rendered
     # No extra args present in vars → none injected.
     assert "-XX" not in rendered
 
@@ -77,6 +78,24 @@ def test_scaffold_writes_both_files_under_base_name(tmp_path):
     assert "container_name: atm10" in compose.read_text()
     assert "-Xmx6g" in start.read_text()
     assert eula.read_text() == "eula=true\n"
+    props = tmp_path / "atm10" / "server" / "server.properties"
+    assert props.exists()
+    props_text = props.read_text(encoding="utf-8")
+    assert "enable-rcon=true" in props_text
+    assert "rcon.port=25575" in props_text
+    assert "server-port=25565" in props_text
+    assert "broadcast-rcon-to-ops=false" in props_text
+
+
+def test_scaffold_does_not_overwrite_existing_server_properties(tmp_path):
+    inner = tmp_path / "atm10" / "server"
+    inner.mkdir(parents=True)
+    props = inner / "server.properties"
+    props.write_text("enable-rcon=false\nmotd=keep-me\n", encoding="utf-8")
+
+    scaffolding.scaffold("atm10", _VARS, tmp_path)
+
+    assert props.read_text(encoding="utf-8") == "enable-rcon=false\nmotd=keep-me\n"
 
 
 def test_scaffold_creates_intermediate_directories(tmp_path):
@@ -112,4 +131,63 @@ def test_scaffold_uses_file_writer_atomic_write_text(monkeypatch, tmp_path):
     assert any(p.endswith("docker-compose.yml") for p in paths)
     assert any(p.endswith("start_server.sh") for p in paths)
     assert any(p.endswith("eula.txt") for p in paths)
-    assert len(seen) == 3
+    assert any(p.endswith("server.properties") for p in paths)
+    assert len(seen) == 4
+
+
+def test_render_compose_defaults_java_version_to_21():
+    rendered = scaffolding.render_compose("atm10", _VARS)
+    assert "image: eclipse-temurin:21-jre" in rendered
+
+
+def test_render_compose_uses_explicit_java_version():
+    rendered = scaffolding.render_compose(
+        "atm10", {**_VARS, "java_version": 25}
+    )
+    assert "image: eclipse-temurin:25-jre" in rendered
+    assert "eclipse-temurin:21-jre" not in rendered
+
+
+def test_memory_min_gb_is_headroom_plus_one():
+    assert scaffolding.MEMORY_MIN_GB == scaffolding.HEADROOM_GB + 1
+    assert scaffolding.MEMORY_MIN_GB == 3
+
+
+def test_scaffold_rcon_password_is_24_urlsafe_chars(tmp_path):
+    import re
+
+    scaffolding.scaffold("atm10", _VARS, tmp_path)
+    text = (tmp_path / "atm10" / "server" / "server.properties").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(r"^rcon\.password=(.+)$", text, re.M)
+    assert match is not None
+    assert len(match.group(1)) == 24
+
+
+def test_write_scaffold_files_does_not_touch_server_properties(tmp_path):
+    server_dir = tmp_path / "atm10"
+    inner = server_dir / "server"
+    inner.mkdir(parents=True)
+    props = inner / "server.properties"
+    props.write_text("enable-rcon=false\n", encoding="utf-8")
+
+    scaffolding.write_scaffold_files(server_dir, "atm10", _VARS)
+
+    assert props.read_text(encoding="utf-8") == "enable-rcon=false\n"
+
+
+def test_scaffold_inherits_base_owner(monkeypatch, tmp_path):
+    seen: list[tuple[str, int, int]] = []
+    monkeypatch.setattr(
+        scaffolding.os,
+        "chown",
+        lambda path, uid, gid: seen.append((str(path), uid, gid)),
+        raising=False,
+    )
+
+    scaffolding.scaffold("atm10", _VARS, tmp_path)
+
+    chowned = {p for p, _, _ in seen}
+    assert str(tmp_path / "atm10") in chowned
+    assert str(tmp_path / "atm10" / "server") in chowned

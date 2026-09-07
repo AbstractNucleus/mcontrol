@@ -15,6 +15,7 @@
     (function () {
       try {
         var stored = localStorage.getItem("theme");
+        if (stored !== "light" && stored !== "dark" && stored !== "system") stored = null;
         var resolved = stored;
         if (!stored || stored === "system") {
           resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -78,6 +79,11 @@
       {% block main %}{% endblock %}
     </main>
   </div>
-  <div id="flash-stack" class="flash-stack" aria-live="polite" aria-atomic="false"></div>
+  <div id="flash-stack" class="flash-stack" aria-live="polite" aria-atomic="false">
+    {% set flash = page_flash(request) if request is defined else none %}
+    {% if flash %}
+      {% include "_flash.html" %}
+    {% endif %}
+  </div>
 </body>
 </html>

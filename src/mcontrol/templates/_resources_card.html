@@ -5,7 +5,7 @@
 <div class="resources-strip"
      id="server-resources"
      hx-get="/servers/{{ server.name }}/resources"
-     hx-trigger="load, every 5s"
+     hx-trigger="every 5s"
      hx-swap="outerHTML"
      aria-label="Live resource usage">
   {% if ok %}
@@ -15,7 +15,7 @@
       <span class="resources-strip__bar" aria-hidden="true">
         {% set _bar_class = 'resources-strip__bar-fill--danger' if mem_percent >= 90 else ('resources-strip__bar-fill--warning' if mem_percent >= 75 else '') %}
         {# Stable id so htmx settle animates the width between polls. #}
-        <span id="resources-bar-fill" class="resources-strip__bar-fill {{ _bar_class }}" style="width: {{ mem_percent|round(1) }}%"></span>
+        <span id="resources-bar-fill" class="resources-strip__bar-fill {{ _bar_class }}" style="--fill: {{ mem_percent|round(1) }}%"></span>
       </span>
       <span class="resources-strip__pct t-num">({{ "%.0f"|format(mem_percent) }} %)</span>
     </span>

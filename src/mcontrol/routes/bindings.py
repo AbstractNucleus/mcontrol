@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 
+from mcontrol.infra import db_async
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.services import server_service
 from mcontrol.settings import Settings
@@ -51,7 +52,7 @@ async def post(
     name: str,
     server: dict = Depends(get_server_or_404),
     container_name: str = Form(""),
-    dir: str = Form(...),
+    dir: str = Form(""),
 ) -> HTMLResponse:
     # Empty string means "clear the override and fall back to name".
     cn_value: str | None = container_name.strip() or None
@@ -67,6 +68,16 @@ async def post(
     else:
         if not target.is_dir():
             error = "Directory does not exist on disk."
+        else:
+            for row in await db_async.list_servers():
+                if row["name"] == name:
+                    continue
+                other = row.get("dir")
+                if other and Path(other).resolve() == target:
+                    error = (
+                        f"Directory is already bound to '{row['name']}'."
+                    )
+                    break
 
     if error:
         return _form(
@@ -76,9 +87,10 @@ async def post(
             status_code=422,
         )
 
+    resolved = str(target)
     await server_service.update_server_bindings(
-        name=name, container_name=cn_value, dir=dir
+        name=name, container_name=cn_value, dir=resolved
     )
 
-    refreshed = {**server, "container_name": cn_value, "dir": dir}
+    refreshed = {**server, "container_name": cn_value, "dir": resolved}
     return _card(request, refreshed)

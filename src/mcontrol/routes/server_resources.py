@@ -4,7 +4,7 @@ Single endpoint:
 
   GET /servers/{name}/resources  → renders _resources_card.html
 
-The card auto-polls every 5s via HTMX (`hx-trigger="load, every 5s"`),
+The card auto-polls every 5s via HTMX (`hx-trigger="every 5s"`),
 swapping itself in place. Polling stops automatically when the
 operator navigates away. the trigger lives on a DOM node that the
 detail page replaces on navigation.
@@ -43,6 +43,7 @@ router = APIRouter()
 _CAPTION_BY_STATUS = {
     "not-running": "container not running",
     "unreachable": "Docker daemon unreachable",
+    "missing": "container not found",
 }
 
 

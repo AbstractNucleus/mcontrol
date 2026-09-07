@@ -1,10 +1,9 @@
 """One-shot RCON command runner for slice-7 whitelist/ops mutations.
 
-The slice-4 console (``routes/console.py``) keeps a long-lived RCON
-connection open per active SSE stream. When that connection exists —
-or is still being acquired — ``run_command`` reuses it and never opens
-a second TCP client. Minecraft RCON typically allows only one client;
-a competing connect races the console and can EOF mid-command.
+The slice-4 console (``routes/console.py``) keeps one long-lived RCON
+connection per server while a detail page has it open. When that
+connection exists — or is still being acquired — ``run_command`` reuses
+it so the command and its response also show up in the console.
 
 When no console is open, this module opens a short-lived connection,
 runs one command, and closes. The docker-network attach/detach dance
@@ -97,7 +96,7 @@ def _map_console_errors(exc: BaseException) -> RconUnavailable:
         return RconUnavailable("RCON command timed out.")
     if isinstance(exc, rcon.RconClosedError):
         return RconUnavailable(
-            "RCON connection closed; refresh the page to reconnect."
+            "RCON connection closed; the console is reconnecting, retry in a moment."
         )
     return RconUnavailable(str(exc))
 
@@ -106,8 +105,9 @@ async def _run_via_console(server_name: str, command: str) -> str | None:
     """Use the detail-page RCON socket when the console owns the slot.
 
     Returns the command response, or ``None`` when the console is not
-    involved and the caller may open a one-shot client. Never opens a
-    second Minecraft RCON TCP connection while the console lock is held.
+    involved and the caller may open a one-shot client. Waits briefly
+    while the console is still opening its connection so the command
+    lands on the shared socket rather than a second client.
     """
     # Lazy import: console imports server_rcon for record_authed_password.
     from mcontrol.routes import console
@@ -116,7 +116,7 @@ async def _run_via_console(server_name: str, command: str) -> str | None:
     if not owns:
         try:
             return await console.run_on_active(server_name, command)
-        except (TimeoutError, rcon.RconClosedError) as exc:
+        except (TimeoutError, rcon.RconError) as exc:
             raise _map_console_errors(exc) from exc
 
     loop = asyncio.get_running_loop()
@@ -124,7 +124,7 @@ async def _run_via_console(server_name: str, command: str) -> str | None:
     while True:
         try:
             reused = await console.run_on_active(server_name, command)
-        except (TimeoutError, rcon.RconClosedError) as exc:
+        except (TimeoutError, rcon.RconError) as exc:
             raise _map_console_errors(exc) from exc
         if reused is not None:
             return reused

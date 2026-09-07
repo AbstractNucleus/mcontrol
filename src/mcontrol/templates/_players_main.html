@@ -34,7 +34,8 @@
            required
            autocomplete="off"
            placeholder="e.g. Notch"
-           value="{{ form.name }}">
+           value="{{ form.name }}"
+           {% if errors.name %}autofocus{% endif %}>
     <button type="submit" class="btn btn--primary" id="players-page-add">Look up + add{% include "_spinner.html" %}</button>
     {% if errors.name %}
       <p class="players-page__error">{{ errors.name }}</p>
@@ -42,6 +43,7 @@
   </form>
 
   {% if roster %}
+    <div class="players-page__table-wrap">
     <table class="players-page__table">
       <thead>
         <tr>
@@ -80,6 +82,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   {% else %}
     <div class="empty-state">
       <svg class="empty-state__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

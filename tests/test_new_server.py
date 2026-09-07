@@ -10,6 +10,18 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 
+@pytest.fixture(autouse=True)
+def _stub_check_port_bound(monkeypatch):
+    """T-2: never open a real TCP connection from these unit tests."""
+    from mcontrol.domain import server_variables_form
+
+    monkeypatch.setattr(
+        server_variables_form,
+        "check_port_bound",
+        lambda port, host="127.0.0.1": None,
+    )
+
+
 @pytest.fixture
 def base_dir(tmp_path, monkeypatch, env):
     """Override SERVER_BASE_PATH to a per-test tmp_path. Depends on `env`
@@ -112,6 +124,10 @@ async def test_get_new_renders_form(app_client, fake_db):
     assert 'name="server_jar"' in body
     assert 'name="jvm_extra_args"' in body
     assert 'name="accept_eula"' in body
+    assert 'name="java_version"' in body
+    from mcontrol.domain.scaffolding import MEMORY_MIN_GB
+
+    assert f'min="{MEMORY_MIN_GB}"' in body
     # Hint about uploading the jar after scaffolding (slice 6 contract).
     assert "upload" in body.lower()
 
@@ -157,6 +173,7 @@ async def test_post_happy_path_scaffolds_and_redirects(
         "memory_budget_gb": 8,
         "port": 25575,
         "server_jar": "paper-1.21.4.jar",
+        "java_version": 21,
     }
 
     # Files landed on disk via the real scaffolding module.
@@ -168,7 +185,10 @@ async def test_post_happy_path_scaffolds_and_redirects(
     assert eula.exists()
     assert "container_name: newshire" in compose.read_text()
     assert "-Xmx6g" in start.read_text()
+    assert '-jar "paper-1.21.4.jar"' in start.read_text()
     assert "eula=true" in eula.read_text()
+    assert (base_dir / "newshire" / "server" / "server.properties").exists()
+    assert "stop_grace_period: 90s" in compose.read_text()
 
 
 async def test_post_includes_jvm_extra_args_in_variables_when_present(
@@ -238,6 +258,7 @@ async def test_post_does_not_silently_override_loader_from_jar_filename(
         ("name", "ab", "32 chars"),  # too short (< 3 after first letter)
         ("name", "1abc", "must start with a letter"),
         ("memory_budget_gb", "1", "Minimum"),
+        ("memory_budget_gb", "2", "Minimum"),
         ("port", "80", "between"),
         ("port", "70000", "between"),
         ("server_jar", "   ", "Required"),
@@ -379,6 +400,27 @@ async def test_post_surfaces_orphan_path_when_rollback_rmtree_fails(
 # ---- POST host-port probe (issue #124) -----------------------------
 
 
+async def test_post_port_probe_uses_lifecycle_probe_host(
+    app_client, fake_db, monkeypatch
+):
+    from mcontrol.domain import server_variables_form
+    from mcontrol.services import lifecycle_service
+
+    seen: dict = {}
+    monkeypatch.setattr(lifecycle_service, "probe_host", lambda: "172.18.0.1")
+
+    def capture(port, host="127.0.0.1"):
+        seen["port"] = port
+        seen["host"] = host
+        return None
+
+    monkeypatch.setattr(server_variables_form, "check_port_bound", capture)
+
+    await app_client.post("/servers/new", data=_form())
+
+    assert seen == {"port": 25575, "host": "172.18.0.1"}
+
+
 async def test_post_rejects_when_host_port_already_bound(
     app_client, fake_db, monkeypatch
 ):
@@ -387,7 +429,7 @@ async def test_post_rejects_when_host_port_already_bound(
     monkeypatch.setattr(
         server_variables_form,
         "check_port_bound",
-        lambda port: f"Port {port} is already bound on this host.",
+        lambda port, host="127.0.0.1": f"Port {port} is already bound on this host.",
     )
 
     response = await app_client.post("/servers/new", data=_form())
@@ -395,4 +437,49 @@ async def test_post_rejects_when_host_port_already_bound(
     assert response.status_code == 422
     assert "25575" in response.text
     assert "already bound on this host" in response.text
+    assert fake_db["writes"] == []
+
+
+async def test_post_rejects_reserved_name_new(app_client, fake_db):
+    response = await app_client.post("/servers/new", data=_form(name="new"))
+
+    assert response.status_code == 422
+    assert "reserved" in response.text.lower()
+    assert fake_db["writes"] == []
+
+
+async def test_post_persists_java_version(app_client, base_dir, fake_db):
+    response = await app_client.post("/servers/new", data=_form(java_version=17))
+
+    assert response.status_code == 303
+    assert fake_db["writes"][0][1]["variables"]["java_version"] == 17
+    compose = (base_dir / "newshire" / "docker-compose.yml").read_text()
+    assert "image: eclipse-temurin:17-jre" in compose
+
+
+async def test_post_rejects_port_collision_with_legacy_compose_port(
+    app_client, fake_db, base_dir
+):
+    legacy = base_dir / "loading"
+    legacy.mkdir()
+    (legacy / "docker-compose.yml").write_text(
+        "services:\n"
+        "  loading:\n"
+        "    ports:\n"
+        '      - "25575:25565"\n',
+        encoding="utf-8",
+    )
+    fake_db["rows"].append(
+        {
+            "name": "loading",
+            "dir": str(legacy),
+            "state": "running",
+            "variables": {},
+        }
+    )
+
+    response = await app_client.post("/servers/new", data=_form())
+
+    assert response.status_code == 422
+    assert "loading" in response.text
     assert fake_db["writes"] == []

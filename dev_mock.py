@@ -234,13 +234,17 @@ class _FakeContainer:
         _META[self._name]["state"] = "running"
         self._docker._bind(self._name)
 
-    async def stop(self) -> None:
+    async def stop(self, **_: Any) -> None:
         _META[self._name]["state"] = "exited"
         self._docker._unbind(self._name)
 
     async def restart(self) -> None:
         _META[self._name]["state"] = "running"
         self._docker._bind(self._name)
+
+    async def delete(self, **_: Any) -> None:
+        _META.pop(self._name, None)
+        self._docker._unbind(self._name)
 
     async def show(self) -> dict[str, Any]:
         state = _META[self._name]["state"]

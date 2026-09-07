@@ -14,11 +14,17 @@ Auth: send AUTH (type=3) with the password as the body. Server replies
 with AUTH_RESPONSE (type=2). id=-1 means auth failed; otherwise it
 echoes the request id.
 
-Exec: send EXECCOMMAND (type=2), then an empty SERVERDATA_RESPONSE_VALUE
-sentinel packet with a distinct id. Collect all RESPONSE_VALUE packets
-matching the command id until the sentinel echo arrives; concatenate their
-bodies. This handles Minecraft's multi-packet responses (e.g. `whitelist
-list` on a populated server).
+Exec: send EXECCOMMAND (type=2) and wait for the first RESPONSE_VALUE
+packet. Only then send an empty SERVERDATA_RESPONSE_VALUE sentinel with a
+distinct id, and collect RESPONSE_VALUE packets matching the command id
+until the sentinel echo ("Unknown request 0") arrives; concatenate their
+bodies. This handles Minecraft's multi-packet responses (4096-byte chunks,
+e.g. `help` or `whitelist list` on a populated server).
+
+The sentinel must not go out together with the command. Minecraft's RCON
+thread reads one buffer per loop and closes the socket when that read
+holds more than one packet (length != bytes_read - 4). asyncio enables
+TCP_NODELAY, so two back-to-back writes routinely arrive in one read.
 
 Reference: https://wiki.vg/RCON
 """
@@ -57,6 +63,10 @@ class _RconConnection:
         self._ids = itertools.count(1)
         self._closed = False
 
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
     async def run(self, command: str) -> str:
         if self._closed:
             raise RconClosedError("connection has been closed")
@@ -67,23 +77,38 @@ class _RconConnection:
             # this connection, so a timed-out command closes it.
             await self.close()
             raise
+        except OSError as exc:
+            await self.close()
+            raise RconClosedError(f"connection lost: {exc}") from exc
 
     async def _exchange(self, command: str) -> str:
         packet_id = next(self._ids)
         await self._send(packet_id, _EXECCOMMAND, command.encode("utf-8"))
+        # The first response proves the server has consumed the command
+        # packet; a sentinel written any earlier can share its read and
+        # makes Minecraft drop the connection (see module docstring).
+        parts = [await self._read_response(packet_id)]
         sentinel_id = next(self._ids)
         await self._send(sentinel_id, _RESPONSE_VALUE, b"")
-        parts: list[bytes] = []
         while True:
-            response_id, response_type, body = await self._read()
-            if response_type != _RESPONSE_VALUE:
-                raise RconError(f"unexpected response type {response_type}")
-            if response_id == sentinel_id:
+            body = await self._read_response(packet_id, sentinel_id)
+            if body is None:
                 break
-            if response_id != packet_id:
-                raise RconError(f"id mismatch: sent {packet_id}, got {response_id}")
             parts.append(body)
         return b"".join(parts).decode("utf-8", errors="replace")
+
+    async def _read_response(
+        self, packet_id: int, sentinel_id: int | None = None
+    ) -> bytes | None:
+        """Next RESPONSE_VALUE body for ``packet_id``; None for the sentinel echo."""
+        response_id, response_type, body = await self._read()
+        if response_type != _RESPONSE_VALUE:
+            raise RconError(f"unexpected response type {response_type}")
+        if response_id == sentinel_id:
+            return None
+        if response_id != packet_id:
+            raise RconError(f"id mismatch: sent {packet_id}, got {response_id}")
+        return body
 
     async def close(self) -> None:
         if self._closed:

@@ -46,8 +46,10 @@ const snbtParser = {
 // palette follows the active theme without remounting the editor.
 const themeHighlight = HighlightStyle.define([
   { tag: tags.string, color: "var(--code-string)" },
+  { tag: tags.quote, color: "var(--code-string)" },
   { tag: tags.number, color: "var(--code-number)" },
   { tag: [tags.keyword, tags.atom, tags.bool], color: "var(--code-keyword)" },
+  { tag: tags.heading, color: "var(--code-keyword)" },
   { tag: [tags.propertyName, tags.variableName], color: "var(--code-property)" },
   { tag: tags.comment, color: "var(--code-comment)" },
   { tag: tags.punctuation, color: "var(--code-punctuation)" },
@@ -58,11 +60,31 @@ const themeHighlight = HighlightStyle.define([
 let dirty = false;
 let currentView = null;
 let hintCounter = 0;
+let savedClearTimer = null;
+
+function clearSavedIndicator() {
+  if (savedClearTimer) {
+    clearTimeout(savedClearTimer);
+    savedClearTimer = null;
+  }
+  const pill = document.querySelector(".file-view__saved");
+  if (pill) pill.remove();
+}
 
 function languageFor(filename) {
   const lower = (filename || "").toLowerCase();
   if (lower.endsWith(".properties")) {
-    return StreamLanguage.define(propertiesMode);
+    return StreamLanguage.define({
+      name: propertiesMode.name,
+      token: (stream, state) => propertiesMode.token(stream, state),
+      startState: () => propertiesMode.startState(),
+      tokenTable: {
+        def: tags.propertyName,
+        quote: tags.string,
+        header: tags.heading,
+        comment: tags.comment,
+      },
+    });
   }
   if (lower.endsWith(".snbt")) {
     return StreamLanguage.define(snbtParser);
@@ -110,6 +132,7 @@ function mountEditor(textarea) {
       if (update.docChanged) {
         textarea.value = update.state.doc.toString();
         dirty = true;
+        clearSavedIndicator();
       }
     }),
   ];
@@ -142,24 +165,33 @@ function mountAll(root) {
 
 document.body.addEventListener("htmx:afterSettle", (evt) => {
   mountAll(evt.target);
+  const root = evt.target;
+  if (root && root.id === "file-editor-meta") {
+    if (savedClearTimer) clearTimeout(savedClearTimer);
+    if (document.querySelector(".file-view__saved")) {
+      savedClearTimer = setTimeout(clearSavedIndicator, 3000);
+    }
+  }
 });
 
-// Destroy the outgoing EditorView before a swap replaces #file-view's
-// content; otherwise every file-open leaks the doc buffer plus a
-// document-level event listener per abandoned view.
-document.body.addEventListener("htmx:beforeSwap", (evt) => {
-  const target = evt.detail && evt.detail.target;
-  if (!currentView || !target || !target.contains(currentView.dom)) return;
-  currentView.destroy();
-  currentView = null;
+// Destroy only after a real swap detached the view. beforeSwap also
+// fires for 4xx/5xx where shouldSwap is false (symlink 400, missing
+// file); destroying there unmounts the editor while the pane stays.
+document.body.addEventListener("htmx:afterSwap", () => {
+  if (currentView && !currentView.dom.isConnected) {
+    currentView.destroy();
+    currentView = null;
+  }
 });
 
 // Clear the dirty flag on a successful save. Document-level (not bound
 // to the form) because the conflict banner's Overwrite button POSTs
-// /files/save via its own hx-post outside the form.
+// /files/save via its own hx-post outside the form. Check the status
+// code: errors.js rescues 409 HTML so htmx marks successful=true.
 document.body.addEventListener("htmx:afterRequest", (evt) => {
   const path = evt.detail.pathInfo && evt.detail.pathInfo.requestPath;
-  if (evt.detail.successful && path && path.includes("/files/save")) {
+  const status = evt.detail.xhr && evt.detail.xhr.status;
+  if (path && path.includes("/files/save") && status < 300) {
     dirty = false;
   }
 });
@@ -175,7 +207,9 @@ document.body.addEventListener("htmx:confirm", (evt) => {
 });
 
 window.addEventListener("beforeunload", (evt) => {
-  if (dirty) evt.preventDefault();
+  if (!dirty) return;
+  evt.preventDefault();
+  evt.returnValue = "";
 });
 
 // Cover the case where the partial is already in the DOM at page load

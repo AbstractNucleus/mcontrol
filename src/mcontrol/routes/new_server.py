@@ -11,6 +11,7 @@ sides: rmtree(<dir>) + db.delete_server(name), then re-raise as 500.
 The rollback flow lives in ``services.server_service.scaffold_new_server``.
 """
 
+import asyncio
 import re
 from pathlib import Path
 
@@ -18,9 +19,14 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from mcontrol.domain import server_variables_form
-from mcontrol.domain.server_variables_form import LOADERS
+from mcontrol.domain.scaffolding import (
+    DEFAULT_JAVA_VERSION,
+    JAVA_VERSIONS,
+    MEMORY_MIN_GB,
+)
+from mcontrol.domain.server_variables_form import LOADERS, RESERVED_NAMES
 from mcontrol.infra import db_async
-from mcontrol.services import server_service
+from mcontrol.services import lifecycle_service, server_service
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
@@ -39,7 +45,14 @@ def _render_form(
     return templates.TemplateResponse(
         request=request,
         name="new_server.html",
-        context={"form": form, "errors": errors, "loaders": LOADERS},
+        context={
+            "form": form,
+            "errors": errors,
+            "loaders": LOADERS,
+            "memory_min_gb": MEMORY_MIN_GB,
+            "java_versions": JAVA_VERSIONS,
+            "default_java_version": DEFAULT_JAVA_VERSION,
+        },
         status_code=status_code,
     )
 
@@ -52,6 +65,8 @@ def _validate_static(form: dict) -> dict[str, str]:
         errors["name"] = (
             "3-32 chars; lowercase letters, digits, and hyphens; must start with a letter."
         )
+    elif form["name"] in RESERVED_NAMES:
+        errors["name"] = "This name is reserved."
     if not form["accept_eula"]:
         errors["accept_eula"] = "You must accept the Minecraft EULA to create a server."
 
@@ -71,6 +86,7 @@ async def new_submit(
     port: int = Form(...),
     server_jar: str = Form(...),
     loader: str = Form("vanilla"),
+    java_version: int = Form(DEFAULT_JAVA_VERSION),
     jvm_extra_args: str = Form(""),
     accept_eula: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
@@ -80,6 +96,7 @@ async def new_submit(
         "port": port,
         "server_jar": server_jar.strip(),
         "loader": loader,
+        "java_version": java_version,
         "jvm_extra_args": jvm_extra_args.strip(),
         "accept_eula": bool(accept_eula),
     }
@@ -110,7 +127,10 @@ async def new_submit(
             if collision:
                 errors["port"] = collision
             else:
-                bound = server_variables_form.check_port_bound(form["port"])
+                host = lifecycle_service.probe_host()
+                bound = await asyncio.to_thread(
+                    server_variables_form.check_port_bound, form["port"], host
+                )
                 if bound:
                     errors["port"] = bound
 

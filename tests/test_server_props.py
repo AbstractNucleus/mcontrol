@@ -99,3 +99,25 @@ def test_read_properties_cache_miss_on_mtime_change(tmp_path):
     os.utime(path, ns=(orig_mtime_ns + 2_000_000_000, orig_mtime_ns + 2_000_000_000))
 
     assert server_props.read_properties(path) == {"port": "25577"}
+
+
+def test_read_properties_decodes_latin1_when_not_utf8(tmp_path):
+    path = tmp_path / "server.properties"
+    path.write_bytes(b"motd=caf\xe4\nport=25565\n")
+
+    assert server_props.read_properties(path) == {"motd": "cafä", "port": "25565"}
+
+
+def test_read_properties_cache_is_keyed_by_path(tmp_path):
+    path = tmp_path / "server.properties"
+    path.write_text("port=25565\n")
+    server_props.read_properties(path)
+    orig_mtime_ns = path.stat().st_mtime_ns
+
+    path.write_text("port=25577\n")
+    os.utime(path, ns=(orig_mtime_ns + 2_000_000_000, orig_mtime_ns + 2_000_000_000))
+    server_props.read_properties(path)
+
+    key = str(path)
+    assert key in server_props._props_cache
+    assert server_props._props_cache[key][1] == {"port": "25577"}

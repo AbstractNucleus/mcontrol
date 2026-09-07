@@ -1,4 +1,7 @@
-<section class="players-card" id="server-players">
+<section class="players-card" id="server-players"
+         hx-get="/servers/{{ server.name }}/players"
+         hx-trigger="mc:state-changed from:body"
+         hx-swap="outerHTML">
   <header class="players-card__head">
     {% if running %}
       {# Lazy chip: fills with the RCON `list` head-count on load, then
@@ -53,6 +56,7 @@
                 <input type="hidden" name="enabled" value="{{ '0' if m.in_whitelist else '1' }}">
                 <input type="checkbox"
                        id="wl-{{ m.uuid }}"
+                       hx-disinherit="*"
                        {% if m.in_whitelist %}checked{% endif %}
                        onchange="this.form.requestSubmit()"
                        aria-label="Whitelist {{ m.name }}">
@@ -66,6 +70,7 @@
                 <input type="hidden" name="enabled" value="{{ '0' if m.in_op else '1' }}">
                 <input type="checkbox"
                        id="op-{{ m.uuid }}"
+                       hx-disinherit="*"
                        {% if m.in_op %}checked{% endif %}
                        onchange="this.form.requestSubmit()"
                        aria-label="Op {{ m.name }}">

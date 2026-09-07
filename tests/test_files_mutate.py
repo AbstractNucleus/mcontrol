@@ -1,4 +1,5 @@
 import os
+import stat
 import sys
 from pathlib import Path
 
@@ -166,6 +167,22 @@ async def test_mkdir_creates_directory_at_root(
     assert (server_dir / "newdir").is_dir()
     # Response is the parent (root) listing including the new entry.
     assert "newdir" in response.text
+
+
+async def test_mkdir_mode_is_0755(
+    client, fake_server, server_dir: Path
+) -> None:
+    """F-2: mkdir is 0755 on POSIX; the path must still succeed on Windows."""
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "", "dirname": "newdir"},
+    )
+
+    assert response.status_code == 200
+    created = server_dir / "newdir"
+    assert created.is_dir()
+    if sys.platform != "win32":
+        assert stat.S_IMODE(created.stat().st_mode) == 0o755
 
 
 async def test_mkdir_creates_directory_in_subpath(
@@ -366,6 +383,131 @@ async def test_rename_no_op_keeps_file(
     )
     assert response.status_code == 200
     assert (server_dir / "same.txt").read_text(encoding="utf-8") == "x"
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "bad?.txt",
+        "bad*.txt",
+        'bad".txt',
+        "bad<.txt",
+        "bad>.txt",
+        "bad|.txt",
+        "bad:.txt",
+        " spaced ",
+        "spaced ",
+        " spaced",
+        "trailing.",
+        ".",
+        "..",
+        "../escape",
+        "with/slash",
+        "with\\backslash",
+        "has\t tab.txt",
+        "a" * 256,
+    ],
+)
+async def test_rename_rejects_invalid_name(
+    client, fake_server, server_dir: Path, bad: str
+) -> None:
+    (server_dir / "ok.txt").write_text("x", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/rename",
+        data={"path": "ok.txt", "new_name": bad},
+    )
+
+    assert response.status_code == 400
+    assert str(response.json()["detail"]).startswith("invalid name:")
+    assert (server_dir / "ok.txt").read_text(encoding="utf-8") == "x"
+
+
+def test_validate_entry_name_rejects_nul_and_controls() -> None:
+    from fastapi import HTTPException
+
+    from mcontrol.routes.files.mutate import _validate_entry_name
+
+    for bad in ["has\x00nul.txt", "\x01hidden", "bell\x07.txt"]:
+        with pytest.raises(HTTPException) as ei:
+            _validate_entry_name(bad)
+        assert ei.value.status_code == 400
+        assert str(ei.value.detail).startswith("invalid name:")
+
+
+async def test_rename_rejects_empty_name(
+    client, fake_server, server_dir: Path
+) -> None:
+    (server_dir / "ok.txt").write_text("x", encoding="utf-8")
+
+    response = await client.post(
+        "/servers/atm10/files/rename",
+        data={"path": "ok.txt", "new_name": ""},
+    )
+
+    assert response.status_code == 400
+    assert str(response.json()["detail"]).startswith("invalid name:")
+    assert (server_dir / "ok.txt").exists()
+
+
+async def test_rename_oserror_becomes_400(
+    client, fake_server, server_dir: Path, monkeypatch
+) -> None:
+    (server_dir / "ok.txt").write_text("x", encoding="utf-8")
+
+    def boom(_src, _dst):
+        raise OSError(22, "Invalid argument")
+
+    monkeypatch.setattr(os, "rename", boom)
+
+    response = await client.post(
+        "/servers/atm10/files/rename",
+        data={"path": "ok.txt", "new_name": "new.txt"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid argument"
+    assert (server_dir / "ok.txt").exists()
+
+
+async def test_rename_file_exists_oserror_becomes_409(
+    client, fake_server, server_dir: Path, monkeypatch
+) -> None:
+    (server_dir / "ok.txt").write_text("x", encoding="utf-8")
+
+    def boom(_src, _dst):
+        raise FileExistsError(17, "File exists")
+
+    monkeypatch.setattr(os, "rename", boom)
+
+    response = await client.post(
+        "/servers/atm10/files/rename",
+        data={"path": "ok.txt", "new_name": "new.txt"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "File exists"
+
+
+async def test_move_oserror_becomes_400(
+    client, fake_server, server_dir: Path, monkeypatch
+) -> None:
+    (server_dir / "f.txt").write_text("x", encoding="utf-8")
+    (server_dir / "subdir").mkdir()
+
+    def boom(_src, _dst):
+        raise OSError(13, "Permission denied")
+
+    monkeypatch.setattr(os, "rename", boom)
+
+    response = await client.post(
+        "/servers/atm10/files/move",
+        data={"source": "f.txt", "dest_dir": "subdir"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Permission denied"
+    assert (server_dir / "f.txt").exists()
 
 
 # ---- /files/move ------------------------------------------------------

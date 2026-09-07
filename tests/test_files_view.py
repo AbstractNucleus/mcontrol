@@ -257,3 +257,65 @@ def test_file_view_size_caption_uses_format_bytes() -> None:
     from mcontrol.templates import templates
 
     assert templates.env.filters["humansize"] is format_bytes
+
+
+async def test_view_non_utf8_is_read_only_card(
+    client, fake_server, server_dir: Path
+) -> None:
+    """F-11: a latin-1 byte (0xE4) must not open the editor; Save would
+    persist U+FFFD. Render the download card instead."""
+    payload = b"motd=caf\xe4\n"
+    target = server_dir / "server.properties"
+    target.write_bytes(payload)
+
+    response = await client.get(
+        "/servers/atm10/files/view", params={"path": "server.properties"}
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "not UTF-8 text" in body
+    assert "download to edit" in body
+    assert "file-view__info-card" in body
+    assert "data-file-editor" not in body
+    assert "<textarea" not in body
+    assert "Save" not in body
+    assert "/servers/atm10/files/save" not in body
+    assert target.read_bytes() == payload
+
+
+async def test_view_utf8_text_still_opens_editor(
+    client, fake_server, server_dir: Path
+) -> None:
+    """F-11: valid UTF-8 (including multibyte) still mounts the editor."""
+    (server_dir / "server.properties").write_text("motd=café\n", encoding="utf-8")
+
+    response = await client.get(
+        "/servers/atm10/files/view", params={"path": "server.properties"}
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "café" in body
+    assert "data-file-editor" in body
+    assert "/servers/atm10/files/save" in body
+    assert "Save" in body
+    assert "not UTF-8 text" not in body
+
+
+async def test_view_nul_containing_file_is_binary(
+    client, fake_server, server_dir: Path
+) -> None:
+    """F-11: a NUL still wins over a non-UTF-8 sniff — binary, not not_utf8."""
+    (server_dir / "weird.cfg").write_bytes(b"motd=caf\xe4\x00more")
+
+    response = await client.get(
+        "/servers/atm10/files/view", params={"path": "weird.cfg"}
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "binary file" in body
+    assert "not UTF-8 text" not in body
+    assert "data-file-editor" not in body
+    assert "<textarea" not in body

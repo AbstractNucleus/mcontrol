@@ -16,11 +16,19 @@ function findTreeRow(path) {
 
 function waitForChildren(parentRow) {
   // Resolve once the parent's <ul.file-tree__children> has been
-  // populated by htmx. Single afterSwap listener; falls back after a
-  // generous timeout so a failed fetch can't hang the click handler.
+  // populated by htmx. The root #file-tree *is* the children list
+  // (no nested ul), so treat it as the container. Single afterSwap
+  // listener; falls back after a generous timeout so a failed fetch
+  // can't hang the click handler.
   return new Promise((resolve) => {
-    const children = parentRow.querySelector(":scope > .file-tree__children");
-    if (children && children.children.length > 0) { resolve(); return; }
+    const isRoot = parentRow && parentRow.id === "file-tree";
+    const children = isRoot
+      ? parentRow
+      : parentRow.querySelector(":scope > .file-tree__children");
+    if (children && children.querySelector(":scope > .file-tree__entry")) {
+      resolve();
+      return;
+    }
     const onSwap = (evt) => {
       if (!children) return;
       if (evt.target === children || children.contains(evt.target)) {
@@ -88,6 +96,7 @@ document.addEventListener("keydown", (evt) => {
   if (evt.key !== "p" && evt.key !== "P") return;
   if (!(evt.ctrlKey || evt.metaKey)) return;
   if (evt.altKey || evt.shiftKey) return;
+  if (evt.target.closest && evt.target.closest(".cm-editor")) return;
   const input = document.getElementById("file-search-input");
   if (!input) return;
   evt.preventDefault();
@@ -101,6 +110,15 @@ document.addEventListener("keydown", (evt) => {
   const input = document.getElementById("file-search-input");
   if (!input || document.activeElement !== input) return;
   evt.preventDefault();
+  if (input.value) {
+    const clearBtn = document.getElementById("file-search-clear");
+    if (clearBtn) clearBtn.click();
+    else {
+      input.value = "";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    return;
+  }
   const prev = searchPreviousFocus;
   searchPreviousFocus = null;
   if (prev && prev !== input && typeof prev.focus === "function" && document.contains(prev)) {
@@ -238,6 +256,7 @@ document.addEventListener("keydown", (evt) => {
   if (!root) return;
   const row = evt.target.closest && evt.target.closest(".file-tree__entry");
   if (!row || !root.contains(row)) return;
+  if (evt.target.closest("details.file-tree__menu")) return;
   // Don't hijack typing inside form controls within the tree (none
   // currently, but cheap insurance against future <input>s in rows).
   const tag = evt.target.tagName;
@@ -290,6 +309,28 @@ document.addEventListener("keydown", (evt) => {
       } else {
         const link = rowLink(row);
         if (link) link.click();
+      }
+      return;
+    }
+    case "ContextMenu":
+      {
+        const menu = row.querySelector(":scope > details.file-tree__menu");
+        const summary = menu && menu.querySelector(":scope > .file-tree__menu-trigger");
+        if (summary) {
+          evt.preventDefault();
+          menu.open = true;
+          summary.focus();
+        }
+        return;
+      }
+    case "F10": {
+      if (!evt.shiftKey) return;
+      const menu = row.querySelector(":scope > details.file-tree__menu");
+      const summary = menu && menu.querySelector(":scope > .file-tree__menu-trigger");
+      if (summary) {
+        evt.preventDefault();
+        menu.open = true;
+        summary.focus();
       }
       return;
     }
@@ -355,6 +396,11 @@ document.addEventListener("keydown", (evt) => {
 let preSwapFocusPath = null;
 let preSwapHadFocus = false;
 
+function clearPreSwapFocus() {
+  preSwapHadFocus = false;
+  preSwapFocusPath = null;
+}
+
 document.body.addEventListener("htmx:beforeSwap", (evt) => {
   const root = treeRoot();
   if (!root) return;
@@ -407,6 +453,10 @@ document.body.addEventListener("htmx:afterSwap", () => {
 // case; this also covers cases where the JS runs after the initial swap.
 document.addEventListener("DOMContentLoaded", () => syncTreeTabindex());
 
+document.body.addEventListener("htmx:afterRequest", (evt) => {
+  if (evt.detail && evt.detail.successful === false) clearPreSwapFocus();
+});
+
 // Mark a dir as aria-expanded=true after its first lazy-load completes.
 document.body.addEventListener("htmx:afterSwap", (evt) => {
   const tgt = evt.detail && evt.detail.target;
@@ -425,10 +475,26 @@ document.body.addEventListener("htmx:afterSwap", (evt) => {
 // with a retry, and stop propagation so the generic error toast doesn't
 // also fire for the tree's own load.
 document.body.addEventListener("htmx:responseError", (evt) => {
+  const d = evt.detail || {};
+  const tgt = d.target;
+  if (tgt && tgt.classList && tgt.classList.contains("file-tree__children")) {
+    clearPreSwapFocus();
+    const dir = tgt.parentElement;
+    if (dir && dir.classList.contains("file-tree__entry--dir")) {
+      dir.setAttribute("aria-expanded", "false");
+      const toggle = dir.querySelector(":scope > .file-tree__toggle");
+      if (toggle) {
+        const clone = toggle.cloneNode(true);
+        toggle.replaceWith(clone);
+        if (window.htmx && window.htmx.process) window.htmx.process(clone);
+      }
+    }
+    return;
+  }
   const root = treeRoot();
   if (!root) return;
-  const d = evt.detail || {};
   if (d.target !== root && d.elt !== root) return;
+  clearPreSwapFocus();
   evt.stopPropagation();
   root.innerHTML =
     '<li class="file-tree__status file-tree__status--error">' +

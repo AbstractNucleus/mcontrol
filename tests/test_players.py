@@ -193,6 +193,7 @@ async def test_post_returns_422_on_invalid_name_shape(client, fake_db, monkeypat
 
     assert response.status_code == 422
     assert "letters, digits, and underscores" in response.text
+    assert 'autofocus' in response.text
     assert called["n"] == 0  # never reached Mojang
 
 
@@ -550,6 +551,7 @@ async def test_post_scope_all_partial_failure_surfaces_in_flash(
     body = response.text
     assert "Removed Notch from atm10 (whitelist)." in body
     assert "Remove Notch from monifactory (whitelist) failed" in body
+    assert ".." not in body.split("flash-msg", 1)[-1][:800]
     # The row is still hard-deleted; partial state
     # surfaces as an unknown-UUID affordance on the next page render.
     assert _NOTCH_UUID in fake_db_with_delete["deleted"]

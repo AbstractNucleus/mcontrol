@@ -129,3 +129,7 @@ old path is retired.
 service two ways — one pulls, one builds. Change a port or add a service in
 one and you must mirror it in the other. They are in the same repo so the diff
 shows up in the same review.
+
+Both files set `name: mcontrol`. The image `CMD` is
+`/app/.venv/bin/uvicorn` (the venv from `uv sync`); it does not run
+`uv run` at container start.

@@ -3,17 +3,32 @@
 import stat
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from starlette.datastructures import FormData, UploadFile
 
 from mcontrol.infra import file_safety
-from mcontrol.infra.file_writer import atomic_write_stream_async, atomic_write_text_async
+from mcontrol.infra.file_writer import (
+    atomic_write_stream_async,
+    atomic_write_text_async,
+    mkdir_inherit_owner,
+)
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.routes.files._listing import _list_dir
+from mcontrol.routes.files.mutate import _http_oserror, _validate_entry_name
 from mcontrol.services import file_search
 from mcontrol.templates import templates
 
 router = APIRouter()
+
+MAX_UPLOAD_BYTES = 4 * 1024**3
+
+_TRUTHY = {"1", "true", "t", "yes", "y", "on"}
+
+
+def _text_field(form: FormData, key: str) -> str:
+    value = form.get(key, "")
+    return value if isinstance(value, str) else ""
 
 
 @router.post("/servers/{name}/files/save", response_class=HTMLResponse)
@@ -97,11 +112,13 @@ async def upload(
     request: Request,
     name: str,
     server: dict = Depends(get_server_or_404),
-    path: str = Form(""),
-    force: bool = Form(False),
-    files: list[UploadFile] = File(...),  # noqa: B008  (FastAPI dep-injection idiom)
 ) -> HTMLResponse:
     """Upload one-or-more files to a directory under the server's bind-mount.
+
+    The multipart form is read by hand rather than via Form()/File()
+    params: FastAPI parses declared body params before the handler or any
+    dependency runs, so the Content-Length cap could otherwise only fire
+    after the whole body had been spooled to disk.
 
     Conflict UX (per slice 5 plan): if any uploaded filename collides
     with an existing entry and `force` is not set, refuse the entire
@@ -113,61 +130,76 @@ async def upload(
     conflict scan, files 1-6 are on disk. That's acceptable; the
     operator can re-upload the failed remainder.
     """
-    target_dir = file_safety.resolve_within(server["dir"], path)
-    if not target_dir.exists():
-        raise HTTPException(status_code=404, detail="path not found")
-    if not target_dir.is_dir():
-        raise HTTPException(status_code=400, detail="not a directory")
-
-    if not files:
-        raise HTTPException(status_code=400, detail="no files uploaded")
-
-    # Filename validation first. never let an invalid name reach disk.
-    for f in files:
-        file_safety.validate_upload_filename(f.filename or "")
-
-    # Conflict scan: classify every existing target before any writes.
-    # Hard refusals (dir, special) abort with 400 even when force=true -
-    # the operator can't clobber these via this endpoint, and surfacing
-    # them through the conflict modal would be misleading.
-    conflicts: list[str] = []
-    for f in files:
-        target = target_dir / f.filename
-        try:
-            st = target.lstat()
-        except FileNotFoundError:
-            continue
-        if file_safety.is_special(st.st_mode):
-            raise HTTPException(
-                status_code=400,
-                detail=f"refusing to clobber special file: {f.filename}",
-            )
-        if stat.S_ISDIR(st.st_mode):
-            raise HTTPException(
-                status_code=400,
-                detail=f"refusing to clobber directory: {f.filename}",
-            )
-        # Regular files and symlinks are surfaced as conflicts. Overwriting
-        # a symlink via os.replace swaps the symlink itself (does not write
-        # through), which is consistent with the "never follow symlinks"
-        # contract.
-        conflicts.append(f.filename)
-
-    if conflicts and not force:
-        return templates.TemplateResponse(
-            request=request,
-            name="_file_upload_conflict.html",
-            context={
-                "server_name": name,
-                "path": path,
-                "conflicts": conflicts,
-            },
-            status_code=409,
+    length = request.headers.get("content-length", "")
+    if length.isdigit() and int(length) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"upload exceeds the {MAX_UPLOAD_BYTES // 1024**3} GiB limit",
         )
 
-    for f in files:
-        target = target_dir / f.filename
-        await atomic_write_stream_async(target, f.file)
+    async with request.form() as form:
+        path = _text_field(form, "path")
+        force = _text_field(form, "force").lower() in _TRUTHY
+        parts = form.getlist("files")
+        files = [f for f in parts if isinstance(f, UploadFile)]
+
+        target_dir = file_safety.resolve_within(server["dir"], path)
+        if not target_dir.exists():
+            raise HTTPException(status_code=404, detail="path not found")
+        if not target_dir.is_dir():
+            raise HTTPException(status_code=400, detail="not a directory")
+
+        if not files:
+            raise HTTPException(status_code=400, detail="no files uploaded")
+        if len(files) != len(parts):
+            raise HTTPException(status_code=400, detail="files must be file parts")
+
+        # Filename validation first. never let an invalid name reach disk.
+        for f in files:
+            file_safety.validate_upload_filename(f.filename or "")
+
+        # Conflict scan: classify every existing target before any writes.
+        # Hard refusals (dir, special) abort with 400 even when force=true -
+        # the operator can't clobber these via this endpoint, and surfacing
+        # them through the conflict modal would be misleading.
+        conflicts: list[str] = []
+        for f in files:
+            target = target_dir / f.filename
+            try:
+                st = target.lstat()
+            except FileNotFoundError:
+                continue
+            if file_safety.is_special(st.st_mode):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"refusing to clobber special file: {f.filename}",
+                )
+            if stat.S_ISDIR(st.st_mode):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"refusing to clobber directory: {f.filename}",
+                )
+            # Regular files and symlinks are surfaced as conflicts. Overwriting
+            # a symlink via os.replace swaps the symlink itself (does not write
+            # through), which is consistent with the "never follow symlinks"
+            # contract.
+            conflicts.append(f.filename)
+
+        if conflicts and not force:
+            return templates.TemplateResponse(
+                request=request,
+                name="_file_upload_conflict.html",
+                context={
+                    "server_name": name,
+                    "path": path,
+                    "conflicts": conflicts,
+                },
+                status_code=409,
+            )
+
+        for f in files:
+            target = target_dir / f.filename
+            await atomic_write_stream_async(target, f.file)
 
     file_search.invalidate(name)
     base = Path(server["dir"]).resolve()
@@ -185,7 +217,7 @@ async def mkdir(
     name: str,
     server: dict = Depends(get_server_or_404),
     path: str = Form(""),
-    dirname: str = Form(...),
+    dirname: str = Form(""),
 ) -> HTMLResponse:
     """Create an empty directory `dirname` inside `path` (the parent dir)."""
     parent = file_safety.resolve_within(server["dir"], path)
@@ -194,14 +226,17 @@ async def mkdir(
     if not parent.is_dir():
         raise HTTPException(status_code=400, detail="parent is not a directory")
 
-    file_safety.validate_upload_filename(dirname)
+    _validate_entry_name(dirname)
 
     target = parent / dirname
     # `lstat` catches both regular collisions and existing symlinks.
     try:
         target.lstat()
     except FileNotFoundError:
-        target.mkdir()
+        try:
+            mkdir_inherit_owner(target)
+        except OSError as exc:
+            raise _http_oserror(exc) from exc
     else:
         raise HTTPException(status_code=409, detail=f"already exists: {dirname}")
 

@@ -16,6 +16,9 @@ services:
     image: ghcr.io/abstractnucleus/mcontrol:${TAG:-latest}
     restart: unless-stopped
     env_file: .env
+    # Host-bind for the panel HTTP port. Defaults to 127.0.0.1 so a fresh
+    # clone is safe for local dev. In production, override HOST_BIND_IP
+    # with the interface your reverse proxy reaches the container on.
     ports:
       - "${HOST_BIND_IP:-127.0.0.1}:8003:8000"
     volumes:

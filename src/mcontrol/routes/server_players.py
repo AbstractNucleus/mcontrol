@@ -31,7 +31,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol.domain import lifecycle_state, membership
-from mcontrol.infra import db_async, server_rcon
+from mcontrol.infra import db_async
 from mcontrol.routes._dependencies import (
     get_docker,
     get_server_or_404,

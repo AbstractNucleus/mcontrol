@@ -1,9 +1,13 @@
-"""Lifecycle service: start / stop / restart with post-start listener probe.
+"""Lifecycle service: start / stop / restart / recreate with listener probe.
 
-After ``docker_client.start()`` returns, probe ``127.0.0.1:port`` until
-either the connect succeeds (state="running") or the deadline elapses
-(state="starting"). Stop and Restart commit a flat state. the
-JVM-up-but-port-not-bound window only applies to start.
+After Docker reports the container is up, probe ``probe_host():port``
+until the connect succeeds (state="running") or the deadline elapses
+(state="starting"). Start, restart, and recreate share that probe;
+stop commits ``exited``.
+
+``probe_host`` is re-exported from ``infra.probe_host`` so batch D's
+``getattr(lifecycle_service, "probe_host")`` and
+``from mcontrol.services.lifecycle_service import probe_host`` both work.
 
 Routes call into here for the post-Docker state transition. The
 "docker timed out" path raises ``TimeoutError`` straight through so
@@ -14,13 +18,15 @@ state string.
 import asyncio
 import socket
 import time
+from pathlib import Path
 
 import aiodocker
 
-from mcontrol.infra import db, db_async, docker_client, server_rcon
+from mcontrol.infra import compose, db, db_async, docker_client, server_rcon
+from mcontrol.infra.probe_host import probe_host
 
 # After docker_client.start() returns, the container process is up but
-# the JVM may still be binding the listener port. Probe 127.0.0.1:port
+# the JVM may still be binding the listener port. Probe probe_host:port
 # briefly so the DB state is honest: "running" only when the listener
 # is up, otherwise "starting".
 _LISTENER_PROBE_DEADLINE_S = 10.0
@@ -31,7 +37,7 @@ _LISTENER_PROBE_CONNECT_TIMEOUT_S = 0.5
 def _connect_once(port: int) -> bool:
     try:
         with socket.create_connection(
-            ("127.0.0.1", port), timeout=_LISTENER_PROBE_CONNECT_TIMEOUT_S
+            (probe_host(), port), timeout=_LISTENER_PROBE_CONNECT_TIMEOUT_S
         ):
             return True
     except OSError:
@@ -39,7 +45,7 @@ def _connect_once(port: int) -> bool:
 
 
 async def probe_listener(port: int) -> bool:
-    """Return True if a TCP connect to 127.0.0.1:port succeeds within
+    """Return True if a TCP connect to probe_host:port succeeds within
     the probe deadline. Connects are run in a thread to avoid blocking
     the event loop."""
     deadline = time.monotonic() + _LISTENER_PROBE_DEADLINE_S
@@ -57,17 +63,7 @@ async def probe_listener_once(port: int) -> bool:
     return await asyncio.to_thread(_connect_once, port)
 
 
-async def start_server(
-    docker: aiodocker.Docker, server: dict, name: str
-) -> str:
-    """Start the container, probe the listener, commit + return new state.
-
-    Returns ``"running"`` if the post-start TCP probe succeeds (or no
-    port is known), ``"starting"`` if the probe times out. Propagates
-    ``TimeoutError`` from ``docker_client.start`` so the route layer
-    can show the timeout flash without updating state.
-    """
-    await docker_client.start(docker, db.container_name_for(server))
+async def _commit_listener_state(server: dict, name: str) -> str:
     port = (server.get("variables") or {}).get("port")
     if isinstance(port, int):
         listening = await probe_listener(port)
@@ -76,6 +72,31 @@ async def start_server(
     new_state = "running" if listening else "starting"
     await db_async.update_server_state(name=name, state=new_state)
     return new_state
+
+
+async def start_server(
+    docker: aiodocker.Docker, server: dict, name: str
+) -> str:
+    """Start the container, probe the listener, commit + return new state.
+
+    When the container does not exist (aiodocker 404) and the server
+    dir has a compose file, run ``docker compose up -d`` first.
+
+    Returns ``"running"`` if the post-start TCP probe succeeds (or no
+    port is known), ``"starting"`` if the probe times out. Propagates
+    ``TimeoutError`` from ``docker_client.start`` so the route layer
+    can show the timeout flash without updating state.
+    """
+    try:
+        await docker_client.start(docker, db.container_name_for(server))
+    except aiodocker.DockerError as exc:
+        if exc.status != 404:
+            raise
+        server_dir = Path(server["dir"])
+        if not (server_dir / "docker-compose.yml").is_file():
+            raise
+        await compose.compose_up(server_dir)
+    return await _commit_listener_state(server, name)
 
 
 async def stop_server(
@@ -92,9 +113,16 @@ async def stop_server(
 async def restart_server(
     docker: aiodocker.Docker, server: dict, name: str
 ) -> str:
-    """Restart the container, commit state=running, drop the cached RCON
-    password baseline. Returns ``"running"`` on success."""
+    """Restart the container, probe the listener, commit starting/running,
+    drop the cached RCON password baseline."""
     await docker_client.restart(docker, db.container_name_for(server))
-    await db_async.update_server_state(name=name, state="running")
     server_rcon.forget_authed_password(name)
-    return "running"
+    return await _commit_listener_state(server, name)
+
+
+async def recreate_server(server: dict, name: str) -> str:
+    """``docker compose up -d`` (recreates only when config changed), then
+    probe the listener and commit starting/running."""
+    await compose.compose_up(Path(server["dir"]))
+    server_rcon.forget_authed_password(name)
+    return await _commit_listener_state(server, name)

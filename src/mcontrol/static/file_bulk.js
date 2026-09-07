@@ -7,6 +7,18 @@ let LAST_SELECTED_PATH = null;
 
 function bulkToolbar() { return document.getElementById("file-bulk-toolbar"); }
 
+function pruneSelection(path) {
+  if (!path) {
+    SELECTION.clear();
+    syncBulkUi();
+    return;
+  }
+  for (const p of [...SELECTION]) {
+    if (p === path || p.startsWith(path + "/")) SELECTION.delete(p);
+  }
+  syncBulkUi();
+}
+
 function syncBulkUi() {
   const tb = bulkToolbar();
   if (!tb) return;
@@ -52,7 +64,9 @@ document.addEventListener("click", (evt) => {
   // The native click has already toggled cb; for shift-range we always
   // additively select, so force cb checked even if the click unchecked it.
   cb.checked = true;
-  const all = Array.from(document.querySelectorAll("[data-select-path]"));
+  const root = document.getElementById("file-tree");
+  const all = Array.from((root || document).querySelectorAll("[data-select-path]"))
+    .filter((c) => c.offsetParent !== null);
   const ai = all.findIndex((c) => (c.dataset.selectPath || "") === LAST_SELECTED_PATH);
   const bi = all.indexOf(cb);
   if (ai < 0 || bi < 0) return;
@@ -73,7 +87,7 @@ document.addEventListener("click", (evt) => {
 document.addEventListener("click", (evt) => {
   if (!(evt.ctrlKey || evt.metaKey)) return;
   const link = evt.target.closest && evt.target.closest(
-    ".file-tree__entry--file > a, .file-tree__entry--symlink > a"
+    ".file-tree__entry--file > a, .file-tree__entry--symlink > a, .file-tree__entry--symlink > .file-tree__name"
   );
   if (!link) return;
   const row = link.closest(".file-tree__entry");
@@ -286,12 +300,6 @@ async function performBulkMove(sources, destDir) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
     clearBtn.hidden = true;
     input.focus();
-  });
-  input.addEventListener("keydown", (evt) => {
-    if (evt.key === "Escape" && input.value) {
-      evt.preventDefault();
-      clearBtn.click();
-    }
   });
   sync();
 })();

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from mcontrol.domain import migration, scaffolding
+from mcontrol.domain.scaffolding import DEFAULT_JAVA_VERSION
 from mcontrol.infra import db_async
 
 logger = logging.getLogger("mcontrol.services.server")
@@ -94,15 +95,17 @@ async def delete_server_with_tombstone(server: dict, base: Path) -> None:
 
 
 async def migrate_legacy_server(
-    *, name: str, variables: dict[str, Any], base: Path
+    *, name: str, variables: dict[str, Any], server_dir: Path
 ) -> None:
     """Run the legacy-to-scaffold migration + stamp the row.
 
-    Order: file ops first (``migration.migrate`` is idempotent), then
-    ``update_variables``, then ``mark_scaffolded``. State and
-    scaffolded-at checks happen in the route layer.
+    ``server_dir`` is the row's bound directory (Bindings may have
+    repointed it away from ``<base>/<name>``). Order: file ops first
+    (``migration.migrate`` is idempotent), then ``update_variables``,
+    then ``mark_scaffolded``. State and scaffolded-at checks happen
+    in the route layer.
     """
-    migration.migrate(name, variables, base)
+    migration.migrate(name, variables, server_dir)
     await db_async.update_variables(name=name, variables=variables)
     await db_async.mark_scaffolded(name=name)
 
@@ -114,9 +117,9 @@ async def update_server_variables(
 
     Returns the merged dict so the route can re-render the card without
     a fresh DB round-trip. ``new_values`` must contain
-    ``memory_budget_gb``, ``port``, ``server_jar``, and an optional
-    ``jvm_extra_args``: an empty/missing value drops the key from the
-    merged JSONB (matches the slice 6 contract).
+    ``memory_budget_gb``, ``port``, ``server_jar``, ``java_version``,
+    and an optional ``jvm_extra_args``: an empty/missing value drops
+    the key from the merged JSONB (matches the slice 6 contract).
     """
     existing = server.get("variables") or {}
     updated = {
@@ -124,6 +127,7 @@ async def update_server_variables(
         "memory_budget_gb": new_values["memory_budget_gb"],
         "port": new_values["port"],
         "server_jar": new_values["server_jar"],
+        "java_version": new_values.get("java_version", DEFAULT_JAVA_VERSION),
     }
     if new_values.get("jvm_extra_args"):
         updated["jvm_extra_args"] = new_values["jvm_extra_args"]

@@ -72,10 +72,13 @@ async def test_healthz_returns_200_and_ok_envelope_when_all_pass(client, patch_p
     assert body["elapsed_ms"] >= 0
 
 
-async def test_healthz_returns_503_when_db_fails(client, patch_probes):
+async def test_healthz_returns_503_when_db_fails(client, patch_probes, caplog):
+    import logging
+
     patch_probes["db"] = _fail("ConnectionError: gone")
 
-    response = await client.get("/healthz")
+    with caplog.at_level(logging.WARNING, logger="mcontrol"):
+        response = await client.get("/healthz")
 
     assert response.status_code == 503
     body = response.json()
@@ -83,6 +86,7 @@ async def test_healthz_returns_503_when_db_fails(client, patch_probes):
     assert body["checks"]["db"] == {"status": "fail", "detail": "ConnectionError: gone"}
     assert body["checks"]["docker"]["status"] == "ok"
     assert body["checks"]["base_path"]["status"] == "ok"
+    assert any("healthz degraded" in record.message for record in caplog.records)
 
 
 async def test_healthz_returns_503_when_docker_fails(client, patch_probes):

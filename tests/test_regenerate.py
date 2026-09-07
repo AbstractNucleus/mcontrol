@@ -131,6 +131,29 @@ async def test_confirm_writes_both_files_and_returns_card(
     assert "-Xmx6g" in start.read_text()
     # Response is the refreshed card, not the diff partial.
     assert "@@" not in response.text
+    assert 'hx-post="/servers/newshire/lifecycle/recreate"' in response.text
+    assert (Path(row["dir"]) / "server" / "server.properties").exists()
+
+
+async def test_confirm_does_not_overwrite_server_properties(
+    client, fake_db, tmp_path
+):
+    row = _row(tmp_path)
+    compose, start = _scaffold(tmp_path, row)
+    props = Path(row["dir"]) / "server" / "server.properties"
+    original = props.read_text(encoding="utf-8")
+    fake_db["rows"].append(row)
+
+    response = await client.post(
+        "/servers/newshire/regenerate/confirm",
+        data={
+            "compose_mtime_ns": str(compose.stat().st_mtime_ns),
+            "start_mtime_ns": str(start.stat().st_mtime_ns),
+        },
+    )
+
+    assert response.status_code == 200
+    assert props.read_text(encoding="utf-8") == original
 
 
 async def test_confirm_returns_409_with_diff_when_compose_mtime_drifts(

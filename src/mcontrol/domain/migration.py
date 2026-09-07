@@ -6,7 +6,7 @@ Pure file IO + small regex parsing. No DB writes. those happen in
 `routes/new_server.py`.
 
 The target shape is a generated `docker-compose.yml`
-referencing `eclipse-temurin:21-jre` directly + a re-rendered
+referencing `eclipse-temurin:<java_version>-jre` directly + a re-rendered
 `server/start_server.sh`. The migration deletes the four legacy build
 files (Dockerfile, entrypoint.sh, .dockerignore, .env) and is
 intentionally one-way.
@@ -21,8 +21,25 @@ from mcontrol.domain import scaffolding
 _LEGACY_FILENAMES = ("Dockerfile", "entrypoint.sh", ".dockerignore", ".env")
 
 _XMX_RE = re.compile(r"-Xmx(\d+)[gG]\b")
-_JAR_RE = re.compile(r"-jar\s+(\S+)")
+_JAR_RE = re.compile(r'-jar\s+"?([^"\s]+)"?')
 _PORT_RE = re.compile(r'"(\d+):25565"')
+_MEM_LIMIT_RE = re.compile(r"mem_limit:\s*(\d+)[gG]\b")
+_JAVA_IMAGE_RE = re.compile(r"eclipse-temurin:(\d+)")
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def parse_compose_port(server_dir: Path) -> int | None:
+    """First `"<host>:25565"` mapping in `<dir>/docker-compose.yml`, or
+    None. Also used by the port-collision check for legacy rows whose
+    `variables` never acquired a `port`."""
+    match = _PORT_RE.search(_read_text(server_dir / "docker-compose.yml"))
+    return int(match.group(1)) if match else None
 
 
 def legacy_files(server_dir: Path) -> list[Path]:
@@ -38,47 +55,58 @@ def legacy_files(server_dir: Path) -> list[Path]:
 def parse_legacy_variables(server_dir: Path) -> dict[str, Any]:
     """Best-effort parse to pre-populate the migration form.
 
-    Reads `<dir>/server/start_server.sh` for `-Xmx<N>g`, `-jar <file>`,
-    and any flags between, and `<dir>/docker-compose.yml` for the first
-    `"<host>:25565"` mapping. `memory_budget_gb = parsed_xmx + 2` so the
-    heap is preserved post-migration (slice-6's `-Xmx = budget − 2`).
+    Reads `<dir>/server/start_server.sh` (falling back to the legacy
+    `<dir>/entrypoint.sh`) for `-Xmx<N>g`, `-jar <file>`, and any flags
+    between; `<dir>/docker-compose.yml` for the first `"<host>:25565"`
+    mapping and, when no `-Xmx` was found, `mem_limit: <N>g`; and the
+    legacy Dockerfile for its `eclipse-temurin:<N>` tag.
+    `memory_budget_gb = parsed_xmx + 2` so the heap is preserved
+    post-migration (slice-6's `-Xmx = budget − 2`).
 
     Failures leave the corresponding key absent; the caller renders blank
     fields and lets form validation catch any leftover holes.
     """
     out: dict[str, Any] = {}
 
-    start_path = server_dir / "server" / "start_server.sh"
-    try:
-        start_text = start_path.read_text(encoding="utf-8")
-    except OSError:
-        start_text = ""
+    xmx_match = jar_match = None
+    script_text = ""
+    for script_path in (server_dir / "server" / "start_server.sh", server_dir / "entrypoint.sh"):
+        script_text = _read_text(script_path)
+        xmx_match = _XMX_RE.search(script_text)
+        jar_match = _JAR_RE.search(script_text)
+        if xmx_match or jar_match:
+            break
 
-    xmx_match = _XMX_RE.search(start_text)
-    jar_match = _JAR_RE.search(start_text)
     if xmx_match:
         out["memory_budget_gb"] = int(xmx_match.group(1)) + scaffolding.HEADROOM_GB
     if jar_match:
         out["server_jar"] = jar_match.group(1)
     if xmx_match and jar_match:
-        between = start_text[xmx_match.end():jar_match.start()].strip()
+        between = script_text[xmx_match.end():jar_match.start()].strip()
         if between:
             out["jvm_extra_args"] = between
 
-    compose_path = server_dir / "docker-compose.yml"
-    try:
-        compose_text = compose_path.read_text(encoding="utf-8")
-    except OSError:
-        compose_text = ""
+    compose_text = _read_text(server_dir / "docker-compose.yml")
     port_match = _PORT_RE.search(compose_text)
     if port_match:
         out["port"] = int(port_match.group(1))
+    if "memory_budget_gb" not in out:
+        mem_match = _MEM_LIMIT_RE.search(compose_text)
+        if mem_match:
+            out["memory_budget_gb"] = int(mem_match.group(1))
+
+    java_match = _JAVA_IMAGE_RE.search(_read_text(server_dir / "Dockerfile"))
+    if java_match and int(java_match.group(1)) in scaffolding.JAVA_VERSIONS:
+        out["java_version"] = int(java_match.group(1))
 
     return out
 
 
-def migrate(name: str, variables: dict[str, Any], base: Path) -> None:
-    """Converge `<base>/<name>/` on slice-6 scaffold output.
+def migrate(name: str, variables: dict[str, Any], server_dir: Path) -> None:
+    """Converge `<server_dir>/` on slice-6 scaffold output.
+
+    `server_dir` is the row's bound directory (Bindings may have
+    repointed it away from `<base>/<name>`).
 
     Steps in order:
       1. Render + atomic-write docker-compose.yml and server/start_server.sh
@@ -89,7 +117,6 @@ def migrate(name: str, variables: dict[str, Any], base: Path) -> None:
     No DB writes; no rollback. Re-running after a partial success
     converges on the same end state. every step is idempotent.
     """
-    server_dir = base / name
     scaffolding.write_scaffold_files(server_dir, name, variables)
 
     for filename in _LEGACY_FILENAMES:

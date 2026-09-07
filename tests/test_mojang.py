@@ -50,6 +50,15 @@ async def test_lookup_returns_none_on_204(monkeypatch):
     assert await mojang.lookup_by_name("nope") is None
 
 
+async def test_lookup_returns_none_on_404(monkeypatch):
+    def handler(request):
+        return httpx.Response(404, json={"errorMessage": "Couldn't find any profile"})
+
+    _patch_async_client(monkeypatch, handler)
+
+    assert await mojang.lookup_by_name("nope") is None
+
+
 async def test_lookup_raises_on_5xx(monkeypatch):
     # Both endpoints return 5xx → MojangError after both are tried.
     def handler(request):

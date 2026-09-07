@@ -50,6 +50,7 @@ async def test_server_detail_renders_panel_board_scaffolding(client, fake_get_se
         assert f'data-pane="{pane}"' in body
     # atm10 is legacy (not scaffolded), so the migrate pane renders too.
     assert 'data-pane="migrate"' in body
+    assert 'data-pane="variables"' not in body
     for hook in ("panel__grip", "panel__collapse", "panel__hide", "panel__fullwidth"):
         assert hook in body
     for hook in ("data-panels-menu", "data-panels-list", "data-panels-reset"):
@@ -263,7 +264,13 @@ async def test_server_detail_delete_disabled_when_running(client, fake_get_serve
     response = await client.get("/servers/atm10")
     body = response.text
     assert "Stop the server before deleting." in body
-    assert 'hx-get="/servers/atm10/delete"' not in body
+    assert "data-delete-server" in body
+    # hx-get stays so lifecycle.js can enable the item after Stop;
+    # the disabled attribute keeps it from opening the modal while running.
+    assert 'hx-get="/servers/atm10/delete"' in body
+    delete_idx = body.index("data-delete-server")
+    chunk = body[delete_idx:body.index("</button>", delete_idx)]
+    assert "disabled" in chunk
 
 
 async def test_server_detail_renders_bindings_card(client, fake_get_server):
@@ -296,7 +303,7 @@ async def test_server_detail_legacy_row_has_no_variables_card_or_banner(
     assert "no variables set" in body or "kv-list" in body
 
 
-async def test_server_detail_scaffolded_row_omits_variables_and_migrate_panes(
+async def test_server_detail_scaffolded_row_lazy_loads_variables_panel(
     client, fake_get_server, tmp_path
 ):
     from mcontrol.domain import scaffolding
@@ -318,10 +325,10 @@ async def test_server_detail_scaffolded_row_omits_variables_and_migrate_panes(
     response = await client.get("/servers/newshire")
     body = response.text
     assert response.status_code == 200
-    # The Variables card was retired from the panel board; a scaffolded row
-    # shows neither a Variables pane nor the legacy Migrate pane. The
-    # /variables route still exists and is covered by test_variables.py.
-    assert 'id="variables"' not in body
+    assert 'data-pane="variables"' in body
+    assert 'id="variables"' in body
+    assert 'hx-get="/servers/newshire/variables"' in body
+    assert 'hx-trigger="load"' in body
     assert 'id="migrate-card"' not in body
     # No health banner when files are intact and variables are complete.
     assert "health-banner" not in body
@@ -347,3 +354,23 @@ async def test_server_detail_renders_health_banner_for_stuck_scaffolding(
     body = response.text
     assert "health-banner" in body
     assert "stuck-scaffolding" in body
+
+
+async def test_server_detail_hides_last_seen_when_updated_at_missing(
+    client, fake_get_server
+):
+    row = _row("atm10")
+    row["updated_at"] = ""
+    fake_get_server["atm10"] = row
+    body = (await client.get("/servers/atm10")).text
+    assert "Last seen" not in body
+
+
+async def test_server_detail_players_and_migrate_listen_for_state_change(
+    client, fake_get_server
+):
+    fake_get_server["atm10"] = _row("atm10")
+    body = (await client.get("/servers/atm10")).text
+    assert "mc:state-changed from:body" in body
+    assert 'aria-label="Search files"' in body
+    assert "data-delete-server" in body

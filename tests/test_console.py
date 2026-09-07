@@ -1,7 +1,20 @@
 import asyncio
 from pathlib import Path
 
+import aiodocker
 import pytest
+
+from mcontrol.infra import rcon
+from mcontrol.routes import console
+
+
+@pytest.fixture(autouse=True)
+def _clear_console_state():
+    console._active_connections.clear()
+    console._subscribers.clear()
+    yield
+    console._active_connections.clear()
+    console._subscribers.clear()
 
 
 @pytest.fixture
@@ -38,11 +51,14 @@ def fake_docker_network(monkeypatch):
 class _FakeRconConnection:
     def __init__(self):
         self.commands: list[str] = []
-        self._queue: asyncio.Queue[str] = asyncio.Queue()
         self.closed = False
+        self.fail_with: Exception | None = None
 
     async def run(self, command: str) -> str:
         self.commands.append(command)
+        if self.fail_with is not None:
+            exc, self.fail_with = self.fail_with, None
+            raise exc
         return f"ack: {command}"
 
     async def close(self):
@@ -51,19 +67,32 @@ class _FakeRconConnection:
 
 @pytest.fixture
 def fake_rcon(monkeypatch):
-    captured: dict[str, _FakeRconConnection] = {}
+    """Stub rcon.connect. ``failures`` are raised (in order) before a
+    connection is handed out; ``conns`` collects every connection made."""
+    captured: dict = {"connects": 0, "failures": [], "conns": []}
 
     async def fake_connect(host, port, password):
+        captured["connects"] += 1
+        if captured["failures"]:
+            raise captured["failures"].pop(0)
         conn = _FakeRconConnection()
+        captured["conns"].append(conn)
         captured["conn"] = conn
         captured["host"] = host
         captured["port"] = port
         captured["password"] = password
         return conn
 
-    from mcontrol.infra import rcon
     monkeypatch.setattr(rcon, "connect", fake_connect)
     return captured
+
+
+class _Request:
+    def __init__(self, disconnected: bool = False):
+        self.disconnected = disconnected
+
+    async def is_disconnected(self):
+        return self.disconnected
 
 
 def _write_props(server_dir: Path, *, enable_rcon: bool, password: str) -> None:
@@ -75,6 +104,13 @@ def _write_props(server_dir: Path, *, enable_rcon: bool, password: str) -> None:
         f"rcon.port=25575\n"
         f"rcon.password={password}\n"
     )
+
+
+async def _collect(gen) -> bytes:
+    chunks: list[bytes] = []
+    async for chunk in gen:
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 async def test_rcon_get_returns_404_for_unknown_server(
@@ -91,43 +127,31 @@ async def test_stream_attaches_then_detaches_network(
     that reports disconnected immediately. With a valid server.properties
     in place, the generator should attach the network on entry, yield the
     connected banner, observe disconnect, and detach on exit."""
-    from mcontrol.routes import console
-
     _write_props(tmp_path, enable_rcon=True, password="hunter2")
 
-    class _MockRequest:
-        async def is_disconnected(self):
-            return True
+    body = await _collect(
+        console._stream(_Request(disconnected=True), object(), "atm10", "atm10", tmp_path)
+    )
 
-    gen = console._stream(_MockRequest(), object(), "atm10", "atm10", tmp_path)
-    chunks: list[bytes] = []
-    async for chunk in gen:
-        chunks.append(chunk)
-    await gen.aclose()
-
-    assert any(b"data:" in c for c in chunks)
+    assert b"rcon connected" in body
     assert fake_docker_network["attaches"] == ["atm10_default"]
     assert fake_docker_network["detaches"] == ["atm10_default"]
     assert fake_rcon["password"] == "hunter2"
+    # Last subscriber out closes the shared connection and forgets it.
+    assert fake_rcon["conn"].closed
+    assert "atm10" not in console._active_connections
+    assert not console._subscribers["atm10"]
 
 
 async def test_stream_yields_friendly_message_when_rcon_disabled(
     fake_docker_network, fake_rcon, tmp_path
 ):
-    from mcontrol.routes import console
-
     _write_props(tmp_path, enable_rcon=False, password="hunter2")
 
-    class _MockRequest:
-        async def is_disconnected(self):
-            return False
+    body = await _collect(console._stream(_Request(), object(), "atm10", "atm10", tmp_path))
 
-    chunks: list[bytes] = []
-    async for chunk in console._stream(_MockRequest(), object(), "atm10", "atm10", tmp_path):
-        chunks.append(chunk)
-
-    body = b"".join(chunks)
     assert b"RCON is not enabled" in body
+    assert body.endswith(console._CLOSED)
     # Network must not be touched when RCON is disabled.
     assert fake_docker_network["attaches"] == []
     assert fake_docker_network["detaches"] == []
@@ -136,19 +160,10 @@ async def test_stream_yields_friendly_message_when_rcon_disabled(
 async def test_stream_yields_friendly_message_when_password_empty(
     fake_docker_network, fake_rcon, tmp_path
 ):
-    from mcontrol.routes import console
-
     _write_props(tmp_path, enable_rcon=True, password="")
 
-    class _MockRequest:
-        async def is_disconnected(self):
-            return False
+    body = await _collect(console._stream(_Request(), object(), "atm10", "atm10", tmp_path))
 
-    chunks: list[bytes] = []
-    async for chunk in console._stream(_MockRequest(), object(), "atm10", "atm10", tmp_path):
-        chunks.append(chunk)
-
-    body = b"".join(chunks)
     assert b"RCON is not enabled" in body
     assert fake_docker_network["attaches"] == []
 
@@ -156,21 +171,135 @@ async def test_stream_yields_friendly_message_when_password_empty(
 async def test_stream_yields_friendly_message_when_properties_missing(
     fake_docker_network, fake_rcon, tmp_path
 ):
-    from mcontrol.routes import console
-
     # No server.properties at all.
+    body = await _collect(console._stream(_Request(), object(), "atm10", "atm10", tmp_path))
 
-    class _MockRequest:
-        async def is_disconnected(self):
-            return False
-
-    chunks: list[bytes] = []
-    async for chunk in console._stream(_MockRequest(), object(), "atm10", "atm10", tmp_path):
-        chunks.append(chunk)
-
-    body = b"".join(chunks)
     assert b"RCON is not enabled" in body
     assert fake_docker_network["attaches"] == []
+
+
+async def test_stream_reports_docker_error_and_closes(
+    fake_docker_network, fake_rcon, tmp_path, monkeypatch
+):
+    """A missing container (never started) used to escape as a traceback and
+    an EventSource reconnect loop; it must be a legible terminal message."""
+    from mcontrol.infra import docker_client
+
+    async def missing(_docker, _name):
+        raise aiodocker.DockerError(404, "No such container: atm10")
+
+    monkeypatch.setattr(docker_client, "find_network_name", missing)
+    _write_props(tmp_path, enable_rcon=True, password="hunter2")
+
+    body = await _collect(console._stream(_Request(), object(), "atm10", "atm10", tmp_path))
+
+    assert b"[error] docker: No such container: atm10" in body
+    assert body.endswith(console._CLOSED)
+    assert fake_docker_network["attaches"] == []
+    assert fake_rcon["connects"] == 0
+
+
+async def test_stream_reports_auth_failure_and_closes(
+    fake_docker_network, fake_rcon, tmp_path
+):
+    _write_props(tmp_path, enable_rcon=True, password="hunter2")
+    fake_rcon["failures"].append(rcon.AuthenticationError("RCON authentication failed"))
+
+    body = await _collect(console._stream(_Request(), object(), "atm10", "atm10", tmp_path))
+
+    assert b"authentication failed" in body
+    assert body.endswith(console._CLOSED)
+    assert fake_rcon["connects"] == 1
+    assert fake_docker_network["detaches"] == ["atm10_default"]
+
+
+async def test_stream_retries_until_rcon_is_reachable(
+    fake_docker_network, fake_rcon, tmp_path, monkeypatch
+):
+    """Stopped or still-booting server: announce once, keep retrying while
+    the page is open, connect when RCON comes up."""
+    monkeypatch.setattr(console, "_RETRY_INTERVAL_S", 0.01)
+    _write_props(tmp_path, enable_rcon=True, password="hunter2")
+    fake_rcon["failures"].extend([ConnectionRefusedError(), ConnectionRefusedError()])
+    request = _Request()
+
+    gen = console._stream(request, object(), "atm10", "atm10", tmp_path)
+    async with asyncio.timeout(5):
+        first = await gen.__anext__()
+        assert b"RCON unreachable (connection refused" in first
+        second = await gen.__anext__()
+        assert second == console._KEEPALIVE  # second failed attempt stays quiet
+        third = await gen.__anext__()
+        assert b"rcon connected" in third
+        request.disconnected = True
+        with pytest.raises(StopAsyncIteration):
+            await gen.__anext__()
+
+    assert fake_rcon["connects"] == 3
+    assert fake_docker_network["attaches"] == ["atm10_default"]
+    assert fake_docker_network["detaches"] == ["atm10_default"]
+
+
+async def test_stream_shares_one_connection_between_subscribers(
+    fake_docker_network, fake_rcon, tmp_path
+):
+    """A second tab (or a reload racing the old stream's teardown) joins the
+    live connection instead of being refused; both see every command."""
+    _write_props(tmp_path, enable_rcon=True, password="hunter2")
+
+    gen1 = console._stream(_Request(), object(), "atm10", "atm10", tmp_path)
+    gen2 = console._stream(_Request(), object(), "atm10", "atm10", tmp_path)
+    async with asyncio.timeout(5):
+        assert b"rcon connected" in await gen1.__anext__()
+        assert b"rcon connected" in await gen2.__anext__()
+        assert fake_rcon["connects"] == 1
+        assert len(console._subscribers["atm10"]) == 2
+
+        assert await console.run_on_active("atm10", "list") == "ack: list"
+        for gen in (gen1, gen2):
+            assert b"&gt; list" in await gen.__anext__()
+            assert b"ack: list" in await gen.__anext__()
+
+        await gen1.aclose()
+        assert not fake_rcon["conn"].closed
+        assert console._active_connections["atm10"] is fake_rcon["conn"]
+
+        await gen2.aclose()
+        assert fake_rcon["conn"].closed
+        assert "atm10" not in console._active_connections
+
+    assert fake_docker_network["attaches"] == ["atm10_default"] * 2
+    assert fake_docker_network["detaches"] == ["atm10_default"] * 2
+
+
+async def test_dead_connection_is_dropped_and_streams_reconnect(
+    fake_docker_network, fake_rcon, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(console, "_RETRY_INTERVAL_S", 0.01)
+    _write_props(tmp_path, enable_rcon=True, password="hunter2")
+    request = _Request()
+
+    gen = console._stream(request, object(), "atm10", "atm10", tmp_path)
+    async with asyncio.timeout(5):
+        assert b"rcon connected" in await gen.__anext__()
+        first_conn = fake_rcon["conn"]
+        first_conn.fail_with = rcon.RconClosedError("connection closed by peer")
+
+        with pytest.raises(rcon.RconClosedError):
+            await console.run_on_active("atm10", "list")
+        assert first_conn.closed
+        assert "atm10" not in console._active_connections
+
+        assert b"&gt; list" in await gen.__anext__()
+        assert b"rcon connection lost; reconnecting" in await gen.__anext__()
+        assert b"rcon connected" in await gen.__anext__()
+        assert fake_rcon["connects"] == 2
+        assert console._active_connections["atm10"] is fake_rcon["conn"]
+        assert await console.run_on_active("atm10", "seed") == "ack: seed"
+
+        request.disconnected = True
+        with pytest.raises(StopAsyncIteration):
+            await gen.__anext__()
 
 
 async def test_rcon_post_finds_active_session_and_runs_command(
@@ -178,8 +307,6 @@ async def test_rcon_post_finds_active_session_and_runs_command(
 ):
     """Once the SSE stream has populated _active_connections, POST should
     run the command and return 204."""
-    from mcontrol.routes import console
-
     fake_get_server["atm10"] = {
         "name": "atm10", "container_name": None, "dir": str(tmp_path),
     }
@@ -187,12 +314,9 @@ async def test_rcon_post_finds_active_session_and_runs_command(
     fake_conn = _FakeRconConnection()
     fake_queue: asyncio.Queue = asyncio.Queue()
     console._active_connections["atm10"] = fake_conn
-    console._output_queues["atm10"] = fake_queue
-    try:
-        response = await client.post("/servers/atm10/rcon", data={"command": "list"})
-    finally:
-        console._active_connections.pop("atm10", None)
-        console._output_queues.pop("atm10", None)
+    console._subscribers["atm10"].add(fake_queue)
+
+    response = await client.post("/servers/atm10/rcon", data={"command": "list"})
 
     assert response.status_code == 204
     assert fake_conn.commands == ["list"]
@@ -200,8 +324,7 @@ async def test_rcon_post_finds_active_session_and_runs_command(
     queued: list[str] = []
     while not fake_queue.empty():
         queued.append(fake_queue.get_nowait())
-    assert "> list" in queued
-    assert "ack: list" in queued
+    assert queued == ["> list", "ack: list"]
 
 
 async def test_rcon_post_returns_409_when_no_open_session(
@@ -212,41 +335,47 @@ async def test_rcon_post_returns_409_when_no_open_session(
     }
     response = await client.post("/servers/atm10/rcon", data={"command": "list"})
     assert response.status_code == 409
+    assert "not connected" in response.json()["detail"]
 
 
-async def test_stream_rejects_concurrent_connection(
-    fake_docker_network, fake_rcon, tmp_path
+async def test_rcon_post_returns_409_and_tells_streams_when_socket_died(
+    client, fake_get_server, fake_docker_network, fake_rcon, tmp_path
 ):
-    """A second SSE connect for the same server while one is already open must
-    yield an error immediately and touch no network resources."""
-    from mcontrol.routes import console
+    fake_get_server["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": str(tmp_path),
+    }
+    fake_conn = _FakeRconConnection()
+    fake_conn.fail_with = rcon.RconClosedError("connection closed by peer")
+    fake_queue: asyncio.Queue = asyncio.Queue()
+    console._active_connections["atm10"] = fake_conn
+    console._subscribers["atm10"].add(fake_queue)
 
-    _write_props(tmp_path, enable_rcon=True, password="hunter2")
+    response = await client.post("/servers/atm10/rcon", data={"command": "list"})
 
-    lock = console._connection_locks["concurrent_test"]
-    await lock.acquire()
-    try:
-        class _MockRequest:
-            async def is_disconnected(self):
-                return False
+    assert response.status_code == 409
+    assert "reconnecting" in response.json()["detail"]
+    assert "atm10" not in console._active_connections
+    assert fake_queue.get_nowait() == "> list"
+    assert fake_queue.get_nowait() is console._CONNECTION_LOST
 
-        chunks: list[bytes] = []
-        async for chunk in console._stream(
-            _MockRequest(), object(), "concurrent_test", "concurrent_test", tmp_path
-        ):
-            chunks.append(chunk)
-    finally:
-        lock.release()
 
-    body = b"".join(chunks)
-    assert b"already open" in body
-    assert fake_docker_network["attaches"] == []
-    assert "conn" not in fake_rcon
+async def test_rcon_post_returns_504_on_timeout(
+    client, fake_get_server, fake_docker_network, fake_rcon, tmp_path
+):
+    fake_get_server["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": str(tmp_path),
+    }
+    fake_conn = _FakeRconConnection()
+    fake_conn.fail_with = TimeoutError()
+    console._active_connections["atm10"] = fake_conn
+
+    response = await client.post("/servers/atm10/rcon", data={"command": "list"})
+
+    assert response.status_code == 504
+    assert "atm10" not in console._active_connections
 
 
 def test_read_rcon_properties_parses_enabled_and_password(tmp_path):
-    from mcontrol.routes import console
-
     props = tmp_path / "server.properties"
     props.write_text(
         "#Minecraft server properties\n"
@@ -261,8 +390,6 @@ def test_read_rcon_properties_parses_enabled_and_password(tmp_path):
 
 
 def test_read_rcon_properties_returns_disabled_when_flag_false(tmp_path):
-    from mcontrol.routes import console
-
     props = tmp_path / "server.properties"
     props.write_text("enable-rcon=false\nrcon.password=hunter2\n")
 
@@ -272,8 +399,6 @@ def test_read_rcon_properties_returns_disabled_when_flag_false(tmp_path):
 
 
 def test_read_rcon_properties_returns_empty_password_when_blank(tmp_path):
-    from mcontrol.routes import console
-
     props = tmp_path / "server.properties"
     props.write_text("enable-rcon=true\nrcon.password=\n")
 
@@ -281,6 +406,4 @@ def test_read_rcon_properties_returns_empty_password_when_blank(tmp_path):
 
 
 def test_read_rcon_properties_returns_defaults_when_file_missing(tmp_path):
-    from mcontrol.routes import console
-
     assert console._read_rcon_properties(tmp_path / "nope.properties") == (False, "")

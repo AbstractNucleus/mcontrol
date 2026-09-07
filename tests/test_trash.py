@@ -180,8 +180,16 @@ async def test_post_empty_purges_only_tombstones_older_than_seven_days(trash_cli
 
     assert response.status_code == 200
     assert response.headers.get("HX-Redirect") == "/trash"
+    assert "mcontrol-flash=" in response.headers.get("set-cookie", "")
     assert not stale.exists()
     assert fresh.exists()
+
+    page = await client.get("/trash", headers={"Accept": "text/html"})
+    assert "Purged 1 tombstone." in page.text
+    assert "flash-msg--ok" in page.text
+
+    again = await client.get("/trash", headers={"Accept": "text/html"})
+    assert "Purged 1 tombstone." not in again.text
 
 
 async def test_post_empty_rejects_when_confirm_text_wrong(trash_client):
@@ -233,6 +241,28 @@ async def test_post_delete_removes_the_named_tombstone(trash_client):
 
     assert response.status_code == 200
     assert response.headers.get("HX-Redirect") == "/trash"
+    assert "mcontrol-flash=" in response.headers.get("set-cookie", "")
+    assert not tomb.exists()
+
+    page = await client.get("/trash", headers={"Accept": "text/html"})
+    assert "Purged atm10." in page.text
+    assert "flash-msg--ok" in page.text
+
+    again = await client.get("/trash", headers={"Accept": "text/html"})
+    assert "Purged atm10." not in again.text
+
+
+async def test_post_delete_removes_underscore_named_tombstone(trash_client):
+    client, base = trash_client
+    now = int(time.time())
+    tomb = _make_tombstone(base, "kobra_kollektivet", now - 60)
+
+    response = await client.post(
+        f"/trash/{tomb.name}/delete",
+        data={"confirm_name": "kobra_kollektivet"},
+    )
+
+    assert response.status_code == 200
     assert not tomb.exists()
 
 
@@ -266,9 +296,8 @@ async def test_post_delete_returns_404_for_non_tombstone_dir_name(trash_client):
 @pytest.mark.parametrize(
     "payload",
     [
-        ".deleted-AB-1700000000",        # uppercase in slug
-        ".deleted-foo_bar-1700000000",   # underscore not allowed
         ".deleted-foo-bar",              # ts not digits
+        ".deleted-atm10",                # missing ts
     ],
 )
 async def test_post_delete_rejects_malformed_tombstone_names(trash_client, payload: str):

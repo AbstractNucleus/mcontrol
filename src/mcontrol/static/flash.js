@@ -5,13 +5,17 @@
   var stack = document.getElementById("flash-stack");
   if (!stack) return;
 
+  function scheduleDismiss(node) {
+    if (node.nodeType === 1 && node.classList.contains("flash-msg")) {
+      setTimeout(function () { node.remove(); }, 4000);
+    }
+  }
+
+  stack.querySelectorAll(".flash-msg").forEach(scheduleDismiss);
+
   new MutationObserver(function (records) {
     records.forEach(function (record) {
-      record.addedNodes.forEach(function (node) {
-        if (node.nodeType === 1 && node.classList.contains("flash-msg")) {
-          setTimeout(function () { node.remove(); }, 4000);
-        }
-      });
+      record.addedNodes.forEach(scheduleDismiss);
     });
   }).observe(stack, { childList: true });
 })();

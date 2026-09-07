@@ -2,18 +2,29 @@
 
 Used by routes/new_server.py, routes/migrate.py, and routes/variables.py,
 all of which accept the same (memory_budget_gb, port, server_jar,
-jvm_extra_args) fields with the same rules.
+java_version, jvm_extra_args) fields with the same rules.
 """
 
 import socket
+from pathlib import Path
 from typing import Literal
 
+from mcontrol.domain import migration
+from mcontrol.domain.scaffolding import (
+    DEFAULT_JAVA_VERSION,
+    HEADROOM_GB,
+    JAVA_VERSIONS,
+    MEMORY_MIN_GB,
+)
 from mcontrol.infra import db_async
 
 PORT_MIN = 1024
 PORT_MAX = 65535
-MEMORY_MIN_GB = 2
 _PORT_PROBE_TIMEOUT = 0.5
+
+# `/servers/new` is the create form; a server with that name would be
+# unreachable behind it.
+RESERVED_NAMES: frozenset[str] = frozenset({"new"})
 
 # Loader enum, mirroring app_mcontrol.servers.loader in supabase-server.
 # Order is significant for `infer_loader_from_jar`: forge → fabric →
@@ -43,14 +54,20 @@ def infer_loader_from_jar(server_jar: str) -> Loader:
 def validate(form: dict) -> dict[str, str]:
     """Validate the variables fields. No DB or disk lookups."""
     errors: dict[str, str] = {}
-    if form["memory_budget_gb"] < MEMORY_MIN_GB:
-        errors["memory_budget_gb"] = f"Minimum {MEMORY_MIN_GB} GB."
+    if form["memory_budget_gb"] - HEADROOM_GB < 1:
+        errors["memory_budget_gb"] = (
+            f"Minimum {MEMORY_MIN_GB} GB ({HEADROOM_GB} GB headroom + at least 1 GB heap)."
+        )
     if not (PORT_MIN <= form["port"] <= PORT_MAX):
         errors["port"] = f"Port must be between {PORT_MIN} and {PORT_MAX}."
     if not form["server_jar"].strip():
         errors["server_jar"] = "Required."
     if "loader" in form and form["loader"] not in LOADERS:
         errors["loader"] = f"Must be one of: {', '.join(LOADERS)}."
+    if "java_version" in form and form["java_version"] not in JAVA_VERSIONS:
+        errors["java_version"] = (
+            f"Must be one of: {', '.join(str(v) for v in JAVA_VERSIONS)}."
+        )
     return errors
 
 
@@ -67,10 +84,22 @@ def build_variables(form: dict) -> dict:
         "memory_budget_gb": form["memory_budget_gb"],
         "port": form["port"],
         "server_jar": form["server_jar"],
+        "java_version": form.get("java_version", DEFAULT_JAVA_VERSION),
     }
     if form.get("jvm_extra_args"):
         variables["jvm_extra_args"] = form["jvm_extra_args"]
     return variables
+
+
+def _row_port(row: dict) -> tuple[int | None, str]:
+    """(host port, source) for a server row. Scaffolded rows carry it in
+    variables; legacy rows only have it in their docker-compose.yml."""
+    row_vars = row.get("variables") or {}
+    if "port" in row_vars:
+        return row_vars["port"], "variables"
+    if row.get("dir"):
+        return migration.parse_compose_port(Path(row["dir"])), "docker-compose.yml"
+    return None, ""
 
 
 async def check_port_collision(exclude_name: str | None, port: int) -> str | None:
@@ -83,19 +112,21 @@ async def check_port_collision(exclude_name: str | None, port: int) -> str | Non
     for row in await db_async.list_servers():
         if exclude_name is not None and row["name"] == exclude_name:
             continue
-        row_vars = row.get("variables") or {}
-        if row_vars.get("port") == port:
-            return f"Port {port} is already used by '{row['name']}'."
+        row_port, source = _row_port(row)
+        if row_port == port:
+            suffix = " (from its docker-compose.yml)" if source == "docker-compose.yml" else ""
+            return f"Port {port} is already used by '{row['name']}'{suffix}."
     return None
 
 
-def check_port_bound(port: int) -> str | None:
-    """Return an error string if something on the host is already
-    listening on *port*. Catches collisions with non-mcontrol services
-    that ``check_port_collision`` can't see (issue #124).
+def check_port_bound(port: int, host: str = "127.0.0.1") -> str | None:
+    """Return an error string if something at *host* is already listening
+    on *port*. Catches collisions with non-mcontrol services that
+    ``check_port_collision`` can't see (issue #124). Blocking; callers
+    on the event loop run it via ``asyncio.to_thread``.
     """
     try:
-        with socket.create_connection(("127.0.0.1", port), timeout=_PORT_PROBE_TIMEOUT):
+        with socket.create_connection((host, port), timeout=_PORT_PROBE_TIMEOUT):
             return f"Port {port} is already bound on this host."
     except OSError:
         return None

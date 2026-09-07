@@ -68,6 +68,7 @@
 .trash-page {
   display: grid;
   gap: var(--space-5);
+  min-width: 0;
 }
 
 .players-page__title,
@@ -137,7 +138,7 @@
 }
 
 .players-page__add input {
-  min-width: 16rem;
+  min-width: 0;
 }
 
 .players-page__error {
@@ -152,6 +153,11 @@
     grid-template-columns: 1fr;
     align-items: stretch;
   }
+}
+
+.players-page__table-wrap {
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .players-page__table,
@@ -255,6 +261,7 @@
   padding: var(--space-5);
   display: grid;
   gap: var(--space-4);
+  min-width: 0;
 }
 
 .players-card__head {
@@ -518,7 +525,7 @@
   font-family: var(--font-mono);
   font-size: var(--fs-3xl);
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent-text);
   letter-spacing: -0.02em;
   margin: 0;
 }

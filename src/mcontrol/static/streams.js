@@ -95,6 +95,25 @@
     rcon.addEventListener("closed", function () { rcon.close(); });
   }
 
+  function appendErrorLine(text) {
+    if (!consoleOut) return;
+    var span = document.createElement("span");
+    span.className = "console-line console-line--error";
+    span.textContent = "[error] " + text;
+    consoleOut.appendChild(span);
+    consoleOut.appendChild(document.createTextNode("\n"));
+  }
+
+  function describeFailure(xhr) {
+    if (xhr && xhr.responseText) {
+      try {
+        var detail = JSON.parse(xhr.responseText).detail;
+        if (typeof detail === "string" && detail) return detail;
+      } catch (_) {}
+    }
+    return xhr && xhr.status ? "HTTP " + xhr.status : "request failed";
+  }
+
   // ---- Console form: reset on accept + command history ----------------
   var form = document.querySelector("[data-console-form]");
   if (!form) return;
@@ -125,7 +144,11 @@
       form.reset();
       histIndex = -1;
       if (input) input.focus();
+      return;
     }
+    // Rejected commands (409 no console, 504 timeout, …) have hx-swap="none",
+    // so without this the pane would just sit there.
+    appendErrorLine(describeFailure(evt.detail.xhr));
   });
 
   if (!input) return;

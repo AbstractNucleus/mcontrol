@@ -55,7 +55,7 @@
 <section class="panel" data-pane="{{ pane_id }}" data-collapsed="false" data-fullwidth="false">
   <header class="panel__bar">
     <span class="panel__grip" title="Drag to rearrange" aria-hidden="true">
-      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
         <circle cx="5" cy="4" r="1.3"/><circle cx="11" cy="4" r="1.3"/>
         <circle cx="5" cy="8" r="1.3"/><circle cx="11" cy="8" r="1.3"/>
         <circle cx="5" cy="12" r="1.3"/><circle cx="11" cy="12" r="1.3"/>
@@ -65,7 +65,7 @@
     <button type="button" class="panel__btn panel__fullwidth" aria-pressed="false"
             title="Toggle full width" aria-label="Toggle full width for {{ title }} panel">
       <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
-           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <polyline points="8 7 4 12 8 17"/>
         <polyline points="16 7 20 12 16 17"/>
         <line x1="4" y1="12" x2="20" y2="12"/>
@@ -74,14 +74,14 @@
     <button type="button" class="panel__btn panel__collapse" aria-expanded="true"
             title="Collapse panel" aria-label="Collapse {{ title }} panel">
       <svg class="panel__chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"
-           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M6 9l6 6 6-6"/>
       </svg>
     </button>
     <button type="button" class="panel__btn panel__hide"
             title="Hide panel" aria-label="Hide {{ title }} panel">
       <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
-           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
         <line x1="1" y1="1" x2="23" y2="23"/>
       </svg>
@@ -136,18 +136,14 @@
         <details class="detail-menu">
           <summary class="detail-menu__trigger" title="More actions" aria-label="More actions">⋯</summary>
           <div class="detail-menu__panel">
-            {% if server.state == 'running' %}
-              <button type="button"
-                      class="detail-menu__item detail-menu__item--danger"
-                      disabled
-                      title="Stop the server before deleting.">Delete server</button>
-            {% else %}
-              <button type="button"
-                      class="detail-menu__item detail-menu__item--danger"
-                      hx-get="/servers/{{ server.name }}/delete"
-                      hx-target="#server-modal"
-                      hx-swap="innerHTML">Delete server</button>
-            {% endif %}
+            <button type="button"
+                    class="detail-menu__item detail-menu__item--danger"
+                    data-delete-server
+                    hx-get="/servers/{{ server.name }}/delete"
+                    hx-target="#server-modal"
+                    hx-swap="innerHTML"
+                    {% if server.state == 'running' %}disabled
+                    title="Stop the server before deleting."{% endif %}>Delete server</button>
           </div>
         </details>
       </div>
@@ -164,9 +160,11 @@
                aria-label="Live resource usage">
         <span class="resources-strip__item resources-strip__item--muted">loading…</span>
       </section>
+      {% if server.updated_at %}
       <p class="detail-header__meta t-caption" title="{{ server.updated_at }}">
         Last seen {{ server.updated_at | reltime or server.updated_at }}
       </p>
+      {% endif %}
     </div>
     {#
       Visually-hidden aria-live region for lifecycle state announcements
@@ -225,6 +223,7 @@
              class="file-search-input"
              name="q"
              placeholder="search filename (≥ 2 chars)…"
+             aria-label="Search files"
              autocomplete="off"
              hx-get="/servers/{{ server.name }}/files/search"
              hx-trigger="input changed delay:200ms, search"
@@ -270,7 +269,7 @@
         <section id="server-players"
                  class="hx-slot hx-slot--players"
                  hx-get="/servers/{{ server.name }}/players"
-                 hx-trigger="load"
+                 hx-trigger="load, mc:state-changed from:body"
                  hx-swap="outerHTML">
           <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
           <span class="skeleton skeleton--line" aria-hidden="true"></span>
@@ -283,6 +282,20 @@
           <section id="migrate-card"
                    class="hx-slot hx-slot--migrate"
                    hx-get="/servers/{{ server.name }}/migrate"
+                   hx-trigger="load, mc:state-changed from:body"
+                   hx-swap="outerHTML">
+            <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>
+            <span class="skeleton skeleton--line" aria-hidden="true"></span>
+            <span class="skeleton skeleton--block" aria-hidden="true"></span>
+          </section>
+        {% endcall %}
+      {% endif %}
+
+      {% if server.scaffolded_at %}
+        {% call panel('variables', 'Variables') %}
+          <section id="variables"
+                   class="hx-slot hx-slot--variables"
+                   hx-get="/servers/{{ server.name }}/variables"
                    hx-trigger="load"
                    hx-swap="outerHTML">
             <span class="skeleton skeleton--eyebrow" aria-hidden="true"></span>

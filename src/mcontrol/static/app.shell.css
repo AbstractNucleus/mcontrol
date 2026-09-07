@@ -266,7 +266,6 @@
 [data-sidebar="collapsed"] .sidebar__nav-count,
 [data-sidebar="collapsed"] .sidebar__servers,
 [data-sidebar="collapsed"] .sidebar__empty,
-[data-sidebar="collapsed"] .theme-toggle,
 [data-sidebar="collapsed"] .sidebar__nav-link .topnav__badge {
   display: none;
 }
@@ -331,6 +330,7 @@
 .sidebar__server-dot--pending,
 .sidebar__server-dot--removing   { background: var(--warning-fg); }
 .sidebar__server-dot--paused     { background: var(--info-fg); }
+.sidebar__server-dot--missing    { background: var(--fg-muted); }
 
 .sidebar__server-name {
   flex: 1;
@@ -363,6 +363,18 @@
 
 [data-sidebar="collapsed"] .sidebar__footer {
   justify-content: center;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+[data-sidebar="collapsed"] .theme-toggle {
+  display: inline-flex;
+  flex-direction: column;
+  border-radius: var(--radius-md);
+}
+
+[data-sidebar="collapsed"] .theme-toggle__option {
+  padding: 6px;
 }
 
 .sidebar__collapse {
@@ -495,17 +507,36 @@
   :root:not([data-sidebar="expanded"]) .sidebar__nav-label,
   :root:not([data-sidebar="expanded"]) .sidebar__nav-count,
   :root:not([data-sidebar="expanded"]) .sidebar__servers,
-  :root:not([data-sidebar="expanded"]) .sidebar__empty,
-  :root:not([data-sidebar="expanded"]) .theme-toggle {
+  :root:not([data-sidebar="expanded"]) .sidebar__empty {
     display: none;
   }
   :root:not([data-sidebar="expanded"]) .sidebar__nav-link {
     justify-content: center;
     padding: 7px;
   }
+  :root:not([data-sidebar="expanded"]) .sidebar__footer {
+    justify-content: center;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  :root:not([data-sidebar="expanded"]) .theme-toggle {
+    display: inline-flex;
+    flex-direction: column;
+    border-radius: var(--radius-md);
+  }
+  :root:not([data-sidebar="expanded"]) .theme-toggle__option {
+    padding: 6px;
+  }
   .page-main {
     padding-left: var(--space-5);
     padding-right: var(--space-5);
+  }
+}
+
+@media (max-width: 480px) {
+  .page-main {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
   }
 }
 

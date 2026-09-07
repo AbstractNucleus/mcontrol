@@ -116,6 +116,9 @@
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
   padding: var(--space-5);
+  min-width: 0;
+  container-type: inline-size;
+  container-name: files-pane;
 }
 
 .files-pane__head {
@@ -132,13 +135,23 @@
 
 .files-pane__split {
   display: grid;
-  grid-template-columns: minmax(16rem, 1fr) 2fr;
+  grid-template-columns: minmax(0, 16rem) minmax(0, 1fr);
   gap: var(--space-4);
+  min-width: 0;
+}
+
+@container files-pane (max-width: 40rem) {
+  .files-pane__split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .file-tree {
+    height: 12rem;
+  }
 }
 
 @media (max-width: 768px) {
   .files-pane__split {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -153,6 +166,7 @@
   overflow: auto;
   font-size: var(--fs-sm);
   font-family: var(--font-mono);
+  min-width: 0;
 }
 
 .file-tree__children {
@@ -224,18 +238,17 @@
 }
 
 .file-tree__toggle:hover,
-.file-tree__entry--file > a:hover,
-.file-tree__entry--symlink > a:hover {
+.file-tree__entry--file > a:hover {
   color: var(--accent-text);
 }
 
-.file-tree__entry--file > a,
-.file-tree__entry--symlink > a {
+.file-tree__entry--file > a {
   color: var(--fg-primary);
   text-decoration: none;
 }
 
-.file-tree__entry--symlink > a {
+.file-tree__entry--symlink > a,
+.file-tree__entry--symlink > .file-tree__name {
   color: var(--fg-muted);
   font-style: italic;
 }
@@ -607,6 +620,7 @@
   display: grid;
   gap: var(--space-3);
   align-content: start;
+  min-width: 0;
 }
 
 .file-view__saved {
@@ -738,6 +752,11 @@
   display: flex;
   gap: var(--space-2);
   align-items: center;
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-sunken);
+  padding-top: var(--space-2);
+  z-index: 1;
 }
 
 /* In-flight disable for the Save button (issue #65). htmx sets the

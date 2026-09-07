@@ -192,6 +192,7 @@ async def remove(
         )
         await db_async.delete_player(uuid)
         flash = membership_service.cascade_flash(player["name"], removed, failures)
+        flash["message"] = re.sub(r"\.{2,}", ".", flash["message"])
         return _partial(
             request, _ctx(await membership_service.build_roster_view(), flash=flash)
         )

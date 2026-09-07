@@ -22,6 +22,7 @@ from fastapi.responses import HTMLResponse
 
 from mcontrol.domain import tombstones
 from mcontrol.infra.resources import format_bytes
+from mcontrol.routes._flash import hx_redirect
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
@@ -124,10 +125,10 @@ async def empty(request: Request, confirm: str = Form("")) -> HTMLResponse:
             context=context,
             status_code=422,
         )
-    await asyncio.to_thread(tombstones.purge_older_than, _base(request))
-    response = HTMLResponse("", status_code=200)
-    response.headers["HX-Redirect"] = "/trash"
-    return response
+    purged = await asyncio.to_thread(tombstones.purge_older_than, _base(request))
+    n = len(purged)
+    label = "tombstone" if n == 1 else "tombstones"
+    return hx_redirect("/trash", kind="ok", message=f"Purged {n} {label}.")
 
 
 @router.get("/trash/{dir_name}/confirm", response_class=HTMLResponse)
@@ -168,6 +169,4 @@ async def delete(
         await asyncio.to_thread(tombstones.purge_one, _base(request), dir_name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    response = HTMLResponse("", status_code=200)
-    response.headers["HX-Redirect"] = "/trash"
-    return response
+    return hx_redirect("/trash", kind="ok", message=f"Purged {original_name}.")

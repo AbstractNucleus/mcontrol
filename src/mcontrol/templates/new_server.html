@@ -25,7 +25,7 @@
       <span class="t-eyebrow">Memory budget (GB)</span>
       <input type="number"
              name="memory_budget_gb"
-             min="2"
+             min="{{ memory_min_gb }}"
              value="{{ form.memory_budget_gb or '' }}"
              required>
       <small class="new-server__hint">Drives <code>mem_limit</code> and <code>-Xmx</code> (= budget − 2 GB).</small>
@@ -54,6 +54,17 @@
              required>
       <small class="new-server__hint">You'll upload the jar after scaffolding via the file browser.</small>
       {% if errors.server_jar %}<small class="new-server__error">{{ errors.server_jar }}</small>{% endif %}
+    </label>
+
+    <label>
+      <span class="t-eyebrow">Java version</span>
+      <select name="java_version" required>
+        {% for v in java_versions %}
+          <option value="{{ v }}"{% if (form.java_version or default_java_version) == v %} selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+      <small class="new-server__hint">Minecraft 1.20.5–1.21.x need Java 21; 26.x needs Java 25; ≤1.20.4 works with 17</small>
+      {% if errors.java_version %}<small class="new-server__error">{{ errors.java_version }}</small>{% endif %}
     </label>
 
     <label>

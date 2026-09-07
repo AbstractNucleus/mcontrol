@@ -1,4 +1,5 @@
 {# `oob` (optional): set for out-of-band swaps (the resources poll heals a
    stale pill alongside its card response). Lifecycle responses leave it
    unset, keeping their body byte-identical to before. #}
-<span id="state-pill" class="state-pill state-pill--{{ state }}"{% if oob %} hx-swap-oob="true"{% endif %}>{{ state }}</span>
+{# missing reuses the created pill token — no CSS for a new state. #}
+<span id="state-pill" class="state-pill state-pill--{{ 'created' if state == 'missing' else state }}"{% if oob %} hx-swap-oob="true"{% endif %}>{{ state }}</span>

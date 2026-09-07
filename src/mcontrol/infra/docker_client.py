@@ -18,11 +18,16 @@ closed its own client (~10 sites, see #98).
 """
 
 import asyncio
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import suppress
 
 import aiodocker
+
+logger = logging.getLogger(__name__)
+
+_COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
 
 
 def self_container_id() -> str:
@@ -37,6 +42,36 @@ def self_container_id() -> str:
         return hostname
     with open("/etc/hostname") as f:
         return f.read().strip()
+
+
+async def _self_inspect(docker: aiodocker.Docker) -> dict | None:
+    """``docker inspect`` of this process's own container; None when not
+    running inside Docker (no such container, or no hostname file)."""
+    try:
+        cid = self_container_id()
+    except OSError:
+        return None
+    try:
+        return await (await docker.containers.get(cid)).show()
+    except aiodocker.DockerError as exc:
+        if exc.status == 404:
+            return None
+        raise
+
+
+async def self_network_gateway(docker: aiodocker.Docker) -> str | None:
+    """Gateway IP of the first Docker network this container is attached
+    to. Host-published ports are reachable through it from inside the
+    container. None when not running in Docker or no gateway is known."""
+    info = await _self_inspect(docker)
+    if info is None:
+        return None
+    networks = (info.get("NetworkSettings") or {}).get("Networks") or {}
+    for endpoint in networks.values():
+        gateway = (endpoint or {}).get("Gateway")
+        if gateway:
+            return gateway
+    return None
 
 
 async def container_states_by_name(docker: aiodocker.Docker) -> dict[str, str]:
@@ -62,6 +97,8 @@ async def container_states_by_name(docker: aiodocker.Docker) -> dict[str, str]:
 
 
 _LIFECYCLE_TIMEOUT_S = 30
+_STOP_GRACE_S = 90
+_STOP_WAIT_S = _STOP_GRACE_S + 10
 
 
 async def start(docker: aiodocker.Docker, container_name: str) -> None:
@@ -71,12 +108,23 @@ async def start(docker: aiodocker.Docker, container_name: str) -> None:
 
 async def stop(docker: aiodocker.Docker, container_name: str) -> None:
     c = await docker.containers.get(container_name)
-    await asyncio.wait_for(c.stop(), timeout=_LIFECYCLE_TIMEOUT_S)
+    await asyncio.wait_for(c.stop(t=_STOP_GRACE_S), timeout=_STOP_WAIT_S)
 
 
 async def restart(docker: aiodocker.Docker, container_name: str) -> None:
     c = await docker.containers.get(container_name)
     await asyncio.wait_for(c.restart(), timeout=_LIFECYCLE_TIMEOUT_S)
+
+
+async def remove_container(docker: aiodocker.Docker, container_name: str) -> None:
+    """Remove a stopped container. Missing (404) is a no-op."""
+    try:
+        c = await docker.containers.get(container_name)
+        await c.delete(v=False)
+    except aiodocker.DockerError as exc:
+        if exc.status == 404:
+            return
+        raise
 
 
 async def logs_stream(
@@ -159,3 +207,65 @@ async def detach_self_from_network(
             network = await docker.networks.get(network_name)
             with suppress(Exception):
                 await network.disconnect({"Container": self_container_id()})
+
+
+def _keep_self_network(name: str, info: dict) -> bool:
+    """Networks we must stay on: the one we were started with, our
+    compose project, and Docker builtins. Everything else is a leaked
+    RCON attachment to a server network."""
+    if name in {"bridge", "host", "none", "ingress"}:
+        return True
+    host_mode = (info.get("HostConfig") or {}).get("NetworkMode") or ""
+    if name == host_mode:
+        return True
+    labels = (info.get("Config") or {}).get("Labels") or {}
+    project = labels.get(_COMPOSE_PROJECT_LABEL)
+    if project and (name == project or name.startswith(f"{project}_")):
+        return True
+    if name == "mcontrol_default" or name.startswith("mcontrol_"):
+        return True
+    return False
+
+
+async def prune_stale_self_networks(docker: aiodocker.Docker) -> None:
+    """Disconnect leftover server-network attachments. No-op off Docker."""
+    try:
+        info = await _self_inspect(docker)
+    except Exception:
+        logger.warning("could not inspect self for network prune", exc_info=True)
+        return
+    if info is None:
+        return
+    try:
+        cid = self_container_id()
+    except OSError:
+        return
+    networks = (info.get("NetworkSettings") or {}).get("Networks") or {}
+    for name in networks:
+        if _keep_self_network(name, info):
+            continue
+        try:
+            network = await docker.networks.get(name)
+            await network.disconnect({"Container": cid})
+            logger.info("disconnected stale network attachment %s", name)
+        except Exception:
+            logger.warning("failed to disconnect stale network %s", name, exc_info=True)
+
+
+async def disconnect_refcount_networks(docker: aiodocker.Docker) -> None:
+    """Best-effort detach of every network still in ``_network_refcounts``."""
+    async with _network_refcounts_lock:
+        names = list(_network_refcounts)
+        _network_refcounts.clear()
+    if not names:
+        return
+    try:
+        cid = self_container_id()
+    except OSError:
+        return
+    for name in names:
+        try:
+            network = await docker.networks.get(name)
+            await network.disconnect({"Container": cid})
+        except Exception:
+            logger.warning("failed to disconnect %s on shutdown", name, exc_info=True)

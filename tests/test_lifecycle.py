@@ -479,3 +479,259 @@ async def test_start_without_fleet_target_keeps_pill_shape(
     assert response.status_code == 200
     assert 'id="state-pill"' in response.text
     assert 'id="fleet-row-atm10"' not in response.text
+
+
+def test_connect_once_uses_resolved_probe_host(monkeypatch):
+    from mcontrol.services import lifecycle_service
+
+    seen: list[tuple] = []
+
+    def fake_create_connection(addr, timeout=None):  # noqa: ARG001
+        seen.append(addr)
+
+        class _Sock:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        return _Sock()
+
+    monkeypatch.setattr(lifecycle_service.socket, "create_connection", fake_create_connection)
+    monkeypatch.setattr(lifecycle_service, "probe_host", lambda: "172.18.0.1")
+
+    assert lifecycle_service._connect_once(25590) is True
+    assert seen == [("172.18.0.1", 25590)]
+
+
+async def test_restart_with_listener_probe_timeout_commits_starting(
+    client, fake_server_row, stub_db_writes, stub_docker, monkeypatch
+):
+    from mcontrol.services import lifecycle_service
+
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "running", "variables": {"port": 25565},
+    }
+
+    async def fake_probe(_port):
+        return False
+
+    monkeypatch.setattr(lifecycle_service, "probe_listener", fake_probe)
+
+    response = await client.post("/servers/atm10/lifecycle/restart")
+
+    assert response.status_code == 200
+    assert "state-pill--starting" in response.text
+    assert ("update_server_state", {"name": "atm10", "state": "starting"}) in stub_db_writes
+
+
+async def test_restart_with_listener_bound_commits_running(
+    client, fake_server_row, stub_db_writes, stub_docker, monkeypatch
+):
+    from mcontrol.services import lifecycle_service
+
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "running", "variables": {"port": 25565},
+    }
+
+    async def fake_probe(port):
+        return port == 25565
+
+    monkeypatch.setattr(lifecycle_service, "probe_listener", fake_probe)
+
+    response = await client.post("/servers/atm10/lifecycle/restart")
+
+    assert "state-pill--running" in response.text
+    assert ("update_server_state", {"name": "atm10", "state": "running"}) in stub_db_writes
+
+
+async def test_start_compose_up_when_container_missing(
+    client, fake_server_row, stub_db_writes, monkeypatch, tmp_path
+):
+    import aiodocker
+
+    from mcontrol.infra import compose, docker_client
+
+    server_dir = tmp_path / "atm10"
+    server_dir.mkdir()
+    (server_dir / "docker-compose.yml").write_text("services: {}\n")
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": str(server_dir),
+        "state": "created",
+    }
+
+    async def _boom(_docker, name):
+        raise aiodocker.DockerError(404, {"message": "No such container"})
+
+    called: list = []
+
+    async def fake_up(path, *, timeout_s=180):  # noqa: ARG001
+        called.append(path)
+
+    monkeypatch.setattr(docker_client, "start", _boom)
+    monkeypatch.setattr(compose, "compose_up", fake_up)
+
+    response = await client.post("/servers/atm10/lifecycle/start")
+
+    assert response.status_code == 200
+    assert called == [server_dir]
+    assert "state-pill--running" in response.text
+    assert ("update_server_state", {"name": "atm10", "state": "running"}) in stub_db_writes
+
+
+async def test_recreate_runs_compose_up_and_returns_pill(
+    client, fake_server_row, stub_db_writes, monkeypatch, tmp_path
+):
+    from mcontrol.infra import compose
+
+    server_dir = tmp_path / "atm10"
+    server_dir.mkdir()
+    (server_dir / "docker-compose.yml").write_text("services: {}\n")
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": str(server_dir),
+        "state": "exited", "variables": {"port": 25565},
+    }
+
+    called: list = []
+
+    async def fake_up(path, *, timeout_s=180):  # noqa: ARG001
+        called.append(path)
+
+    async def fake_probe(_port):
+        return True
+
+    monkeypatch.setattr(compose, "compose_up", fake_up)
+    from mcontrol.services import lifecycle_service
+    monkeypatch.setattr(lifecycle_service, "probe_listener", fake_probe)
+
+    response = await client.post("/servers/atm10/lifecycle/recreate")
+
+    assert response.status_code == 200
+    assert called == [server_dir]
+    assert "state-pill--running" in response.text
+    assert 'id="lifecycle-buttons"' in response.text
+    assert 'id="lifecycle-flash"' in response.text
+    assert ("update_server_state", {"name": "atm10", "state": "running"}) in stub_db_writes
+
+
+async def test_recreate_compose_error_returns_flash(
+    client, fake_server_row, stub_db_writes, monkeypatch, tmp_path
+):
+    from mcontrol.infra import compose
+    from mcontrol.infra.compose import ComposeError
+
+    server_dir = tmp_path / "atm10"
+    server_dir.mkdir()
+    (server_dir / "docker-compose.yml").write_text("services: {}\n")
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": str(server_dir),
+        "state": "created",
+    }
+
+    async def boom(_path, *, timeout_s=180):  # noqa: ARG001
+        raise ComposeError("docker compose up failed (1): no such image")
+
+    monkeypatch.setattr(compose, "compose_up", boom)
+
+    response = await client.post("/servers/atm10/lifecycle/recreate")
+
+    assert response.status_code == 200
+    assert "lifecycle-flash--error" in response.text
+    assert "no such image" in response.text
+    assert "state-pill--created" in response.text
+    assert stub_db_writes == []
+
+
+async def test_stop_response_includes_apply_compose_button(
+    client, fake_server_row, stub_db_writes, stub_docker
+):
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "running",
+    }
+
+    body = (await client.post("/servers/atm10/lifecycle/stop")).text
+    recreate = _button_chunk(body, "recreate")
+    assert "Apply compose" in recreate
+    assert not _is_disabled(recreate)
+
+
+async def test_start_docker_error_is_logged(
+    client, fake_server_row, stub_db_writes, monkeypatch, caplog
+):
+    import logging
+
+    import aiodocker
+
+    from mcontrol.infra import docker_client
+
+    fake_server_row["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": "/srv/atm10",
+        "state": "exited",
+    }
+
+    async def _boom(_docker, name):
+        raise aiodocker.DockerError(404, "No such container: atm10")
+
+    monkeypatch.setattr(docker_client, "start", _boom)
+
+    with caplog.at_level(logging.WARNING, logger="mcontrol.routes.lifecycle"):
+        await client.post("/servers/atm10/lifecycle/start")
+
+    assert any(
+        "lifecycle start failed for atm10" in record.message
+        for record in caplog.records
+    )
+
+
+async def test_start_docker_error_flash_uses_message_not_dict_repr(
+    client, fake_server_row, stub_db_writes, monkeypatch
+):
+    import aiodocker
+
+    from mcontrol.infra import docker_client
+
+    fake_server_row["uitest-1"] = {
+        "name": "uitest-1", "container_name": None, "dir": "/srv/uitest-1",
+        "state": "created",
+    }
+
+    async def _boom(_docker, name):
+        raise aiodocker.DockerError(404, {"message": "no such container: uitest-1"})
+
+    monkeypatch.setattr(docker_client, "start", _boom)
+
+    response = await client.post("/servers/uitest-1/lifecycle/start")
+
+    assert response.status_code == 200
+    assert "lifecycle-flash--error" in response.text
+    assert "Docker error: no such container: uitest-1" in response.text
+    assert "{'message'" not in response.text
+    assert stub_db_writes == []
+
+
+def test_docker_error_msg_unwraps_dict_and_falls_back_to_str():
+    import aiodocker
+
+    from mcontrol.routes.lifecycle import _docker_error_msg
+
+    dict_exc = aiodocker.DockerError(404, {"message": "no such container: uitest-1"})
+    assert _docker_error_msg(dict_exc) == (
+        "Docker error: no such container: uitest-1. "
+        "Check Bindings or run docker compose up."
+    )
+
+    str_exc = aiodocker.DockerError(404, "No such container: atm10")
+    assert _docker_error_msg(str_exc) == (
+        "Docker error: No such container: atm10. "
+        "Check Bindings or run docker compose up."
+    )
+
+    empty_exc = aiodocker.DockerError(500, {})
+    msg = _docker_error_msg(empty_exc)
+    assert msg.startswith("Docker error:")
+    assert "{'message'" not in msg
+

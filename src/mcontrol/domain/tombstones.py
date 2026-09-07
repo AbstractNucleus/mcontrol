@@ -28,12 +28,14 @@ from mcontrol.infra.resources import read_disk_usage
 
 DEFAULT_PURGE_AGE_DAYS = 7
 
-# Mirrors the slug shape from routes/new_server.py (`_NAME_RE`). Greedy
-# backtrack on the slug + the trailing `-\d+$` anchor pins the unix-ts
-# to the rightmost `-<digits>` run, so a slug-with-hyphens parses
-# correctly (e.g. `.deleted-kobra-2022-1700000000` → name=`kobra-2022`,
-# ts=`1700000000`).
-_TOMB_RE = re.compile(r"^\.deleted-(?P<name>[a-z][a-z0-9-]{2,31})-(?P<ts>\d+)$")
+# Docker container-name grammar so discovered legacy dirs with `_`,
+# uppercase, or dots round-trip through delete → trash. Greedy
+# backtrack on the name + the trailing `-\d+$` anchor pins the unix-ts
+# to the rightmost `-<digits>` run (e.g. `.deleted-kobra-2022-1700000000`
+# → name=`kobra-2022`, ts=`1700000000`).
+_TOMB_RE = re.compile(
+    r"^\.deleted-(?P<name>[A-Za-z0-9][A-Za-z0-9_.-]{0,63})-(?P<ts>\d+)$"
+)
 
 
 @dataclass(frozen=True)
@@ -126,8 +128,9 @@ def purge_one(base: Path, dir_name: str) -> None:
     Path-safety:
       1. ``dir_name`` must fullmatch ``_TOMB_RE``. URL-decoded payloads
          like ``..`` / ``../foo`` / ``foo/bar`` / ``foo%00bar`` fail
-         the regex (hyphen + dot + slash + null are all outside
-         ``[a-z0-9-]``) and never reach the filesystem.
+         the regex (slash and NUL are outside the name class; ``..``
+         cannot start with an alphanumeric) and never reach the
+         filesystem.
       2. ``target.parent`` must equal ``base.resolve()``. Defends
          against the theoretical "regex passed but ``Path`` resolution
          still landed us elsewhere" case.

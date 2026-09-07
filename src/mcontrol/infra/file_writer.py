@@ -6,15 +6,56 @@ endpoint (slice 5 PR 3). Writes a sibling tempfile, then `os.replace()`
 over the target so a partial write can never leave a half-baked file on
 disk visible to the running container.
 
-Files land as root. No chown step.
+Replacing a file keeps its mode and owner; a new file lands as 0644 owned
+like its parent directory. chown is best-effort (needs root), so dev runs
+as an ordinary user are unaffected.
 """
 
 import asyncio
 import os
 import shutil
+import stat
 import tempfile
+from contextlib import suppress
 from pathlib import Path
 from typing import BinaryIO
+
+
+def _chown_best_effort(path: Path, uid: int, gid: int) -> None:
+    chown = getattr(os, "chown", None)
+    if chown is None:
+        return
+    with suppress(PermissionError):
+        chown(path, uid, gid)
+
+
+def _adopt_ownership(tmp: Path, path: Path) -> None:
+    """Give the tempfile the mode/owner `path` should end up with.
+
+    mkstemp creates 0600 and os.replace keeps the tempfile's inode, so
+    without this every panel write ends up root-only and the operator
+    (or a non-root Minecraft image) loses read access. A symlink at
+    `path` is being replaced, not written through, so it counts as new.
+    """
+    try:
+        st = path.lstat()
+    except FileNotFoundError:
+        st = None
+    if st is not None and not stat.S_ISLNK(st.st_mode):
+        mode, uid, gid = stat.S_IMODE(st.st_mode), st.st_uid, st.st_gid
+    else:
+        pst = path.parent.stat()
+        mode, uid, gid = 0o644, pst.st_uid, pst.st_gid
+    os.chmod(tmp, mode)
+    _chown_best_effort(tmp, uid, gid)
+
+
+def mkdir_inherit_owner(path: Path) -> None:
+    """Create `path` as 0755 owned like its parent (chown best-effort)."""
+    path.mkdir()
+    os.chmod(path, 0o755)
+    pst = path.parent.stat()
+    _chown_best_effort(path, pst.st_uid, pst.st_gid)
 
 
 def atomic_write_text(path: Path, content: str) -> None:
@@ -29,6 +70,7 @@ def atomic_write_text(path: Path, content: str) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             f.write(content)
+        _adopt_ownership(tmp, path)
         os.replace(tmp, path)
     except Exception:
         if tmp.exists():
@@ -55,6 +97,7 @@ def atomic_write_stream(path: Path, src: BinaryIO) -> None:
     try:
         with os.fdopen(fd, "wb") as f:
             shutil.copyfileobj(src, f)
+        _adopt_ownership(tmp, path)
         os.replace(tmp, path)
     except Exception:
         if tmp.exists():

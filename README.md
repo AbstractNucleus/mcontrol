@@ -6,15 +6,15 @@ mcontrol sits a thin Minecraft-aware UI over plain `docker compose`. No daemon a
 
 ## What it does
 
-- **Server lifecycle**: start / stop / restart with state-aware buttons and Docker-backed health, including a "starting" state that probes the listener port before reporting healthy.
+- **Server lifecycle**: start / stop / restart with state-aware buttons and Docker-backed health, including a "starting" state that probes the listener port before reporting healthy. Start creates the container from the server's compose file when it does not exist yet.
 - **Live RCON console**: SSE-backed terminal that auto-connects on page load and reads the RCON password from `server.properties`.
 - **Live log stream**: tail container logs via SSE without polling.
 - **File browser**: read-only tree + CodeMirror editor (JSON / YAML / TOML / XML syntax highlighting), multi-file upload with drag-drop, rename/move with destination picker, single-file download, bulk delete and move, full-text search across `server/` with Ctrl/Cmd+P.
-- **New-server scaffolding**: generate a working `docker-compose.yml` + `start_server.sh` for a fresh server in one form submit; no per-server Dockerfile.
+- **New-server scaffolding**: generate a working `docker-compose.yml` + `start_server.sh` for a fresh server in one form submit; no per-server Dockerfile. The form picks a Java version (17 / 21 / 25) and turns RCON on in `server.properties`.
 - **Player roster**: DB-backed player list with Mojang UUID lookup, per-server whitelist / ops membership, and an Import button to ingest existing `whitelist.json` / `ops.json`.
 - **Resource visibility**: CPU %, memory, and disk usage per server, plus per-row memory on the home page.
 - **Discovery**: operator-triggered fleet rescan that picks up new server directories without restarting the panel.
-- **Trash & tombstones**: delete-server flow renames to a `.tombstone-` prefix so the row is recoverable; trash page lists tombstones with per-row Delete-now and bulk Empty-trash (7-day default).
+- **Trash & tombstones**: delete-server flow renames to a `.deleted-<name>-<unix-ts>/` prefix so the row is recoverable; trash page lists tombstones with per-row Delete-now and bulk Empty-trash (7-day default).
 - **Legacy-server migration**: one-way migrate card for servers that were running before mcontrol existed (itzg-image shape to mcontrol scaffold shape).
 - **Health probe**: `GET /healthz` returns a deep per-subsystem JSON (Supabase + Docker socket + bind-mount); 503 on any subsystem degraded.
 - **Theme**: dark / light / system toggle persisted to `localStorage`.

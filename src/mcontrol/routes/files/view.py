@@ -59,9 +59,23 @@ async def view(
                 "mtime_ns": st.st_mtime_ns,
             },
         )
-    content = await asyncio.to_thread(
-        target.read_text, encoding="utf-8", errors="replace"
-    )
+    # Strict decode: a lenient `errors="replace"` would hand the editor
+    # U+FFFD for every undecodable byte (latin-1 server.properties, cp1252
+    # .cfg) and Save would persist the replacement characters.
+    try:
+        content = await asyncio.to_thread(target.read_text, encoding="utf-8")
+    except UnicodeDecodeError:
+        return templates.TemplateResponse(
+            request=request,
+            name="_file_view.html",
+            context={
+                "mode": "not_utf8",
+                "server_name": name,
+                "filename": rel,
+                "size": size,
+                "mtime_ns": st.st_mtime_ns,
+            },
+        )
     return templates.TemplateResponse(
         request=request,
         name="_file_view.html",

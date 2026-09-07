@@ -3,6 +3,8 @@
 import os
 import shutil
 import stat
+from collections import Counter
+from contextlib import suppress
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -15,6 +17,30 @@ from mcontrol.services import file_search
 from mcontrol.templates import templates
 
 router = APIRouter()
+
+_ILLEGAL_NAME_CHARS = frozenset('<>:"/\\|?*')
+_MAX_NAME_BYTES = 255
+
+
+def _validate_entry_name(name: str) -> None:
+    """Refuse a single path component that cannot be created on Windows
+    or that would confuse operators (padded whitespace, trailing dot)."""
+    invalid = (
+        not name
+        or name in (".", "..")
+        or any(ord(c) < 32 or c == "\x7f" for c in name)
+        or any(c in _ILLEGAL_NAME_CHARS for c in name)
+        or name != name.strip()
+        or name.endswith(".")
+        or len(name.encode("utf-8")) > _MAX_NAME_BYTES
+    )
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"invalid name: {name}")
+
+
+def _http_oserror(exc: OSError) -> HTTPException:
+    status = 409 if isinstance(exc, FileExistsError) else 400
+    return HTTPException(status_code=status, detail=exc.strerror or str(exc))
 
 
 def _resolve_and_classify(server_dir: str, path: str) -> tuple[Path, int]:
@@ -47,6 +73,25 @@ def _remove(target: Path, mode: int) -> None:
         shutil.rmtree(target)
     else:
         os.unlink(target)
+
+
+def _prune_nested(server_dir: str, paths: list[str]) -> list[str]:
+    """Drop duplicates and any path whose ancestor is also in the batch.
+
+    The tree lets the operator tick a folder and its children together;
+    acting on the child after the folder was removed or moved would fail
+    mid-batch with the parent's mutation already applied.
+    """
+    resolved = {p: file_safety.resolve_within(server_dir, p) for p in paths}
+    targets = set(resolved.values())
+    kept: list[str] = []
+    seen: set[Path] = set()
+    for p, target in resolved.items():
+        if target in seen or any(parent in targets for parent in target.parents):
+            continue
+        seen.add(target)
+        kept.append(p)
+    return kept
 
 
 def _plan_move(
@@ -140,12 +185,12 @@ async def rename(
     name: str,
     server: dict = Depends(get_server_or_404),
     path: str = Form(""),
-    new_name: str = Form(...),
+    new_name: str = Form(""),
 ) -> HTMLResponse:
     """Rename an entry within its current parent.
 
     Refuses `path=""` (server root has no parent), names that fail the
-    upload-filename validator, and any pre-existing collision (no force).
+    entry-name validator, and any pre-existing collision (no force).
     A no-op rename (`new_name` unchanged) re-renders the listing without
     touching disk so the client always sees a coherent tree.
     """
@@ -158,7 +203,7 @@ async def rename(
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="path not found") from exc
 
-    file_safety.validate_upload_filename(new_name)
+    _validate_entry_name(new_name)
 
     if new_name != target.name:
         dest = target.parent / new_name
@@ -168,7 +213,10 @@ async def rename(
             pass
         else:
             raise HTTPException(status_code=409, detail=f"already exists: {new_name}")
-        os.rename(target, dest)
+        try:
+            os.rename(target, dest)
+        except OSError as exc:
+            raise _http_oserror(exc) from exc
         file_search.invalidate(name)
 
     return _tree_response(request, name, server["dir"], target)
@@ -194,7 +242,10 @@ async def move(
     src, dest = _plan_move(
         server["dir"], source, dst_parent, dst_parent.resolve(strict=False)
     )
-    os.rename(src, dest)
+    try:
+        os.rename(src, dest)
+    except OSError as exc:
+        raise _http_oserror(exc) from exc
 
     file_search.invalidate(name)
     return _tree_response(request, name, server["dir"], src)
@@ -222,9 +273,11 @@ async def bulk_delete(
     if len(cleaned) != len(paths):
         raise HTTPException(status_code=400, detail="cannot delete server root")
 
-    resolved = [_resolve_and_classify(server["dir"], p) for p in cleaned]
+    kept = _prune_nested(server["dir"], cleaned)
+    resolved = [_resolve_and_classify(server["dir"], p) for p in kept]
     for target, mode in resolved:
-        _remove(target, mode)
+        with suppress(FileNotFoundError):
+            _remove(target, mode)
 
     file_search.invalidate(name)
     return Response(status_code=204)
@@ -240,10 +293,10 @@ async def bulk_move(
     """Move every `sources` entry into `dest_dir`, keeping each basename.
 
     Validates the whole batch first (collision, cyclic move, no-op, missing
-    source, root source, non-dir destination) so a validation failure
-    causes no partial moves. Once validated, performs every os.rename; a
-    later OS-level error is a system fault, not operator-recoverable, and
-    is not rolled back.
+    source, root source, non-dir destination, two sources sharing a
+    basename) so a validation failure causes no partial moves. Once
+    validated, performs every os.rename; a later OS-level error is a
+    system fault, not operator-recoverable, and is not rolled back.
     """
     if not sources:
         raise HTTPException(status_code=400, detail="no sources")
@@ -257,9 +310,21 @@ async def bulk_move(
         raise HTTPException(status_code=400, detail="destination is not a directory")
     dst_resolved = dst_parent.resolve(strict=False)
 
-    plan = [_plan_move(server["dir"], s, dst_parent, dst_resolved) for s in sources]
+    kept = _prune_nested(server["dir"], sources)
+    plan = [_plan_move(server["dir"], s, dst_parent, dst_resolved) for s in kept]
+    # _plan_move only checks each destination against what is already on
+    # disk; two sources with the same basename would pass and the second
+    # rename would silently replace the first.
+    names = Counter(dest.name for _src, dest in plan)
+    dupes = sorted(n for n, count in names.items() if count > 1)
+    if dupes:
+        raise HTTPException(
+            status_code=409,
+            detail=f"multiple sources share a name: {', '.join(dupes)}",
+        )
     for src, dest in plan:
-        os.rename(src, dest)
+        with suppress(FileNotFoundError):
+            os.rename(src, dest)
 
     file_search.invalidate(name)
     return Response(status_code=204)

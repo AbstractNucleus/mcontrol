@@ -130,7 +130,9 @@
     });
     inputEl.addEventListener("keydown", function (evt) {
       if (evt.key === "ArrowDown") {
-        selected = Math.min(selected + 1, matches.length - 1);
+        if (matches.length) {
+          selected = Math.min(selected + 1, matches.length - 1);
+        }
         renderList(inputEl.value);
         evt.preventDefault();
       } else if (evt.key === "ArrowUp") {
@@ -152,6 +154,7 @@
 
   document.addEventListener("keydown", function (evt) {
     if ((evt.ctrlKey || evt.metaKey) && evt.key.toLowerCase() === "k") {
+      if (evt.target.closest && evt.target.closest(".cm-editor")) return;
       evt.preventDefault();
       if (overlay) close(); else open();
       return;

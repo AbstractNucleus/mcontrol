@@ -1,4 +1,5 @@
 import os
+import stat
 import sys
 from pathlib import Path
 
@@ -232,3 +233,166 @@ async def test_save_is_atomic_no_partial_visible(
     # No leftover sibling tempfiles.
     siblings = [p.name for p in server_dir.iterdir()]
     assert siblings == ["server.properties"]
+
+
+async def test_save_preserves_existing_file_mode(
+    client, fake_server, server_dir: Path
+) -> None:
+    """F-2: replacing a file keeps its mode (0664 on POSIX; no crash on Windows)."""
+    target = server_dir / "server.properties"
+    target.write_text("old\n", encoding="utf-8")
+    os.chmod(target, 0o664)
+    mtime_ns = target.stat().st_mtime_ns
+
+    response = await client.post(
+        "/servers/atm10/files/save",
+        data={
+            "path": "server.properties",
+            "content": "new\n",
+            "mtime_ns": str(mtime_ns),
+        },
+    )
+
+    assert response.status_code == 200
+    assert target.read_text(encoding="utf-8") == "new\n"
+    if sys.platform != "win32":
+        assert stat.S_IMODE(target.stat().st_mode) == 0o664
+
+
+def test_atomic_write_text_new_file_is_0644(tmp_path: Path) -> None:
+    """F-2: a brand-new file lands as 0644 (mode bits are POSIX-only)."""
+    from mcontrol.infra.file_writer import atomic_write_text
+
+    target = tmp_path / "new.txt"
+    atomic_write_text(target, "hi\n")
+    assert target.read_text(encoding="utf-8") == "hi\n"
+    if sys.platform != "win32":
+        assert stat.S_IMODE(target.stat().st_mode) == 0o644
+
+
+def test_atomic_write_text_preserves_0664(tmp_path: Path) -> None:
+    from mcontrol.infra.file_writer import atomic_write_text
+
+    target = tmp_path / "old.txt"
+    target.write_text("old\n", encoding="utf-8")
+    os.chmod(target, 0o664)
+    atomic_write_text(target, "new\n")
+    assert target.read_text(encoding="utf-8") == "new\n"
+    if sys.platform != "win32":
+        assert stat.S_IMODE(target.stat().st_mode) == 0o664
+
+
+def test_chown_best_effort_noop_when_chown_missing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """F-2: Windows has no os.chown; the write must still succeed."""
+    from mcontrol.infra import file_writer as fw
+
+    monkeypatch.setattr(fw.os, "chown", None, raising=False)
+    target = tmp_path / "n.txt"
+    fw.atomic_write_text(target, "ok\n")
+    assert target.read_text(encoding="utf-8") == "ok\n"
+
+
+def test_chown_best_effort_swallows_permission_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """F-2: chown is best-effort when the process is not root."""
+    from mcontrol.infra import file_writer as fw
+
+    def deny(_path, _uid, _gid):
+        raise PermissionError
+
+    monkeypatch.setattr(fw.os, "chown", deny, raising=False)
+    target = tmp_path / "n.txt"
+    fw.atomic_write_text(target, "ok\n")
+    assert target.read_text(encoding="utf-8") == "ok\n"
+
+
+def test_mkdir_inherit_owner_runs_without_error(tmp_path: Path) -> None:
+    from mcontrol.infra.file_writer import mkdir_inherit_owner
+
+    created = tmp_path / "newdir"
+    mkdir_inherit_owner(created)
+    assert created.is_dir()
+    if sys.platform != "win32":
+        assert stat.S_IMODE(created.stat().st_mode) == 0o755
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "bad name?",
+        "bad*",
+        " spaced ",
+        "trailing.",
+        ".",
+        "..",
+        "../escape",
+        "a/b",
+        "a" * 256,
+    ],
+)
+async def test_mkdir_rejects_invalid_name(
+    client, fake_server, server_dir: Path, bad: str
+) -> None:
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "", "dirname": bad},
+    )
+
+    assert response.status_code == 400
+    assert str(response.json()["detail"]).startswith("invalid name:")
+    assert list(server_dir.iterdir()) == []
+
+
+async def test_mkdir_rejects_empty_name(
+    client, fake_server, server_dir: Path
+) -> None:
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "", "dirname": ""},
+    )
+
+    assert response.status_code == 400
+    assert str(response.json()["detail"]).startswith("invalid name:")
+    assert list(server_dir.iterdir()) == []
+
+
+async def test_mkdir_oserror_becomes_400(
+    client, fake_server, server_dir: Path, monkeypatch
+) -> None:
+    from mcontrol.routes.files import write as write_mod
+
+    def boom(_path):
+        raise OSError(22, "Invalid argument")
+
+    monkeypatch.setattr(write_mod, "mkdir_inherit_owner", boom)
+
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "", "dirname": "newdir"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid argument"
+    assert not (server_dir / "newdir").exists()
+
+
+async def test_mkdir_file_exists_oserror_becomes_409(
+    client, fake_server, server_dir: Path, monkeypatch
+) -> None:
+    from mcontrol.routes.files import write as write_mod
+
+    def boom(_path):
+        raise FileExistsError(17, "File exists")
+
+    monkeypatch.setattr(write_mod, "mkdir_inherit_owner", boom)
+
+    response = await client.post(
+        "/servers/atm10/files/mkdir",
+        data={"path": "", "dirname": "newdir"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "File exists"

@@ -5,15 +5,19 @@
   POST /servers/{name}/variables          → write-back JSONB, re-render card
 
 The card is gated on `server.scaffolded_at is not null` at the
-template level, but these endpoints don't enforce that. a non-
-scaffolded row's edit POST would still write JSONB. The detail page
-is the only entry point in the UI.
+template level; POST also refuses unscaffolded rows with 409 so a
+direct edit cannot write JSONB on a legacy server.
 """
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol.domain import server_variables_form
+from mcontrol.domain.scaffolding import (
+    DEFAULT_JAVA_VERSION,
+    JAVA_VERSIONS,
+    MEMORY_MIN_GB,
+)
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.services import server_service
 from mcontrol.templates import render_variables_card, templates
@@ -35,6 +39,9 @@ def _form(
             "server": server,
             "form": form,
             "errors": errors or {},
+            "memory_min_gb": MEMORY_MIN_GB,
+            "java_versions": JAVA_VERSIONS,
+            "default_java_version": DEFAULT_JAVA_VERSION,
         },
         status_code=status_code,
     )
@@ -57,12 +64,20 @@ async def post(
     memory_budget_gb: int = Form(...),
     port: int = Form(...),
     server_jar: str = Form(...),
+    java_version: int = Form(DEFAULT_JAVA_VERSION),
     jvm_extra_args: str = Form(""),
 ) -> HTMLResponse:
+    if server.get("scaffolded_at") is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Variables are only editable on a scaffolded server.",
+        )
+
     form = {
         "memory_budget_gb": memory_budget_gb,
         "port": port,
         "server_jar": server_jar.strip(),
+        "java_version": java_version,
         "jvm_extra_args": jvm_extra_args.strip(),
     }
     errors = server_variables_form.validate(form)

@@ -68,3 +68,25 @@ def test_css_var_references_resolve():
         f"CSS references undefined custom properties: {undefined!r}. "
         "Define them in tokens.css, or add a var(--x, fallback)."
     )
+
+
+_STYLE_ATTR = re.compile(r"""\bstyle\s*=\s*(['"])(.*?)\1""", re.DOTALL)
+_CUSTOM_PROP = re.compile(r"^--[a-zA-Z0-9-]+\s*:.+$")
+
+
+def test_templates_inline_style_only_custom_properties():
+    """Templates may set style= only to assign --* custom properties.
+    Layout values (width, color, …) belong in CSS and consume those vars."""
+    templates_dir = (
+        Path(__file__).resolve().parent.parent / "src" / "mcontrol" / "templates"
+    )
+    bad: list[tuple[str, str]] = []
+    for html in sorted(templates_dir.rglob("*.html")):
+        text = html.read_text(encoding="utf-8")
+        for _quote, value in _STYLE_ATTR.findall(text):
+            decls = [d.strip() for d in value.split(";") if d.strip()]
+            if not decls or any(not _CUSTOM_PROP.match(d) for d in decls):
+                bad.append((html.name, value))
+    assert bad == [], (
+        f"template style= must only set --* custom properties, got {bad!r}"
+    )

@@ -22,6 +22,57 @@
     return el && el.matches && el.matches("[data-lifecycle-button]");
   }
 
+  function currentServerName() {
+    const board = document.querySelector("[data-dashboard]");
+    if (board && board.dataset.server) return board.dataset.server;
+    const pane = document.querySelector(".files-pane");
+    return pane ? pane.dataset.serverName : null;
+  }
+
+  function syncDeleteItem(state) {
+    const btn = document.querySelector("[data-delete-server]");
+    if (!btn) return;
+    if (state === "running") {
+      btn.disabled = true;
+      btn.title = "Stop the server before deleting.";
+    } else {
+      btn.disabled = false;
+      btn.removeAttribute("title");
+    }
+  }
+
+  function syncSidebarDot(name, state) {
+    if (!name || !state) return;
+    const href = "/servers/" + name;
+    document.querySelectorAll(".sidebar__server").forEach((a) => {
+      if (a.getAttribute("href") !== href) return;
+      const dot = a.querySelector(".sidebar__server-dot");
+      if (dot) {
+        dot.className = "sidebar__server-dot sidebar__server-dot--" + state;
+      }
+      a.title = name + " (" + state + ")";
+    });
+  }
+
+  function syncHomeSummary() {
+    const summary = document.querySelector(".fleet-summary");
+    if (!summary) return;
+    const n = document.querySelectorAll(".server-list .state-pill--running").length;
+    summary.textContent = summary.textContent.replace(/\d+ running/, n + " running");
+  }
+
+  function applyState(state, name) {
+    if (!state) return;
+    const server = name || currentServerName();
+    syncDeleteItem(state);
+    syncSidebarDot(server, state);
+    syncHomeSummary();
+    document.body.dispatchEvent(new CustomEvent("mc:state-changed", {
+      bubbles: true,
+      detail: { state: state, server: server },
+    }));
+  }
+
   document.body.addEventListener("htmx:beforeRequest", (evt) => {
     const elt = evt.detail && evt.detail.elt;
     if (isLifecycleBtn(elt)) {
@@ -37,16 +88,30 @@
   });
 
   // The OOB swap replaces `#lifecycle-buttons` with a fresh wrapper that
-  // carries `data-state` reflecting the new server state. htmx fires
-  // `htmx:oobAfterSwap` against the newly-inserted node (`detail.elt`;
-  // `detail.target` is the replaced old node), so we read the state off
-  // it and write a short sentence into the aria-live region.
+  // carries `data-state` reflecting the new server state. htmx 2 fires
+  // `htmx:oobAfterSwap` on the newly-inserted node (`evt.target`), so
+  // we read the state off it and write a short sentence into the
+  // aria-live region.
   document.body.addEventListener("htmx:oobAfterSwap", (evt) => {
-    const elt = evt.detail && evt.detail.elt;
-    if (!elt || elt.id !== "lifecycle-buttons") return;
+    const elt = evt.target;
+    if (!(elt instanceof Element) || elt.id !== "lifecycle-buttons") return;
     const status = document.getElementById("lifecycle-status");
-    if (!status) return;
     const state = elt.getAttribute("data-state") || "unknown";
-    status.textContent = `Server state: ${state}.`;
+    if (status) status.textContent = `Server state: ${state}.`;
+    applyState(state);
+  });
+
+  document.body.addEventListener("htmx:afterSwap", (evt) => {
+    const t = evt.detail && evt.detail.target;
+    const el = (t instanceof Element && t.classList.contains("server-card"))
+      ? t
+      : (evt.target instanceof Element && evt.target.classList
+        && evt.target.classList.contains("server-card") ? evt.target : null);
+    if (!el) return;
+    const pill = el.querySelector(".state-pill");
+    const nameEl = el.querySelector(".server-card__name");
+    const state = pill ? (pill.textContent || "").trim() : "";
+    const name = nameEl ? nameEl.textContent.trim() : "";
+    if (state) applyState(state, name);
   });
 })();

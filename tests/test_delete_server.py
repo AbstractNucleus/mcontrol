@@ -51,6 +51,7 @@ def fake_db(monkeypatch):
 
     monkeypatch.setattr(db, "get_server", fake_get_server)
     monkeypatch.setattr(db, "delete_server", fake_delete_server)
+    monkeypatch.setattr(db, "list_servers", lambda: list(state["rows"]))
     return state
 
 
@@ -109,6 +110,7 @@ async def test_post_tombstones_dir_and_deletes_row(
 
     assert response.status_code == 200
     assert response.headers.get("HX-Redirect") == "/"
+    assert "mcontrol-flash=" in response.headers.get("set-cookie", "")
 
     # DB row is gone.
     assert fake_db["deletes"] == ["newshire"]
@@ -228,6 +230,50 @@ async def test_post_returns_404_for_unknown(app_client, fake_db):
     assert response.status_code == 404
 
 
+async def test_post_allows_when_db_running_but_container_absent(
+    app_client, fake_db, base_dir, monkeypatch
+):
+    from mcontrol.infra import docker_client
+
+    fake_db["rows"].append(_row(base_dir, state="running"))
+
+    async def fake_states(_docker):
+        return {"someone-else": "exited"}
+
+    monkeypatch.setattr(docker_client, "container_states_by_name", fake_states)
+
+    response = await app_client.post(
+        "/servers/newshire/delete",
+        data={"confirm_name": "newshire"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers.get("HX-Redirect") == "/"
+    assert fake_db["deletes"] == ["newshire"]
+
+
+async def test_post_removes_container_after_tombstone(
+    app_client, fake_db, base_dir, monkeypatch
+):
+    from mcontrol.infra import docker_client
+
+    fake_db["rows"].append(_row(base_dir))
+    removed: list[str] = []
+
+    async def fake_remove(_docker, name):
+        removed.append(name)
+
+    monkeypatch.setattr(docker_client, "remove_container", fake_remove)
+
+    response = await app_client.post(
+        "/servers/newshire/delete",
+        data={"confirm_name": "newshire"},
+    )
+
+    assert response.status_code == 200
+    assert removed == ["newshire"]
+
+
 async def test_post_succeeds_when_dir_already_missing(
     app_client, fake_db, base_dir
 ):
@@ -264,3 +310,24 @@ async def test_detail_page_exposes_delete_action(app_client, fake_db, base_dir):
     assert 'class="detail-menu"' in body
     assert 'id="server-modal"' in body
     assert 'id="delete-zone"' not in body
+
+
+async def test_post_flash_appears_on_home_after_redirect(
+    app_client, fake_db, base_dir
+):
+    fake_db["rows"].append(_row(base_dir))
+
+    response = await app_client.post(
+        "/servers/newshire/delete",
+        data={"confirm_name": "newshire"},
+    )
+    assert response.status_code == 200
+    assert response.headers.get("HX-Redirect") == "/"
+
+    home = await app_client.get("/", headers={"Accept": "text/html"})
+    assert home.status_code == 200
+    assert "Deleted newshire (moved to Trash)." in home.text
+    assert "flash-msg--ok" in home.text
+
+    again = await app_client.get("/", headers={"Accept": "text/html"})
+    assert "Deleted newshire (moved to Trash)." not in again.text

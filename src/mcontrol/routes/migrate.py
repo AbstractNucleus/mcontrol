@@ -25,6 +25,11 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol.domain import lifecycle_state, migration, server_variables_form
+from mcontrol.domain.scaffolding import (
+    DEFAULT_JAVA_VERSION,
+    JAVA_VERSIONS,
+    MEMORY_MIN_GB,
+)
 from mcontrol.routes._dependencies import get_server_or_404
 from mcontrol.services import server_service
 from mcontrol.settings import Settings
@@ -47,6 +52,9 @@ def _initial_form(server: dict) -> dict:
         "server_jar": parsed.get("server_jar", existing.get("server_jar", "")),
         "jvm_extra_args": parsed.get(
             "jvm_extra_args", existing.get("jvm_extra_args", "")
+        ),
+        "java_version": parsed.get(
+            "java_version", existing.get("java_version", DEFAULT_JAVA_VERSION)
         ),
     }
 
@@ -73,6 +81,9 @@ def _render_card(
             "error_banner": error_banner,
             "running": lifecycle_state.is_running(server),
             "legacy_filenames": [p.name for p in migration.legacy_files(server_dir)],
+            "memory_min_gb": MEMORY_MIN_GB,
+            "java_versions": JAVA_VERSIONS,
+            "default_java_version": DEFAULT_JAVA_VERSION,
         },
         status_code=status_code,
     )
@@ -95,6 +106,7 @@ async def run_migration(
     memory_budget_gb: int = Form(...),
     port: int = Form(...),
     server_jar: str = Form(...),
+    java_version: int = Form(DEFAULT_JAVA_VERSION),
     jvm_extra_args: str = Form(""),
 ) -> HTMLResponse:
     if server.get("scaffolded_at") is not None:
@@ -106,6 +118,7 @@ async def run_migration(
         "memory_budget_gb": memory_budget_gb,
         "port": port,
         "server_jar": server_jar.strip(),
+        "java_version": java_version,
         "jvm_extra_args": jvm_extra_args.strip(),
     }
     errors = server_variables_form.validate(form)
@@ -121,15 +134,17 @@ async def run_migration(
 
     settings: Settings = request.app.state.settings
     base = Path(settings.server_base_path).resolve()
-    target = (base / name).resolve()
+    server_dir = Path(server["dir"]).resolve()
     try:
-        target.relative_to(base)
+        server_dir.relative_to(base)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid path.") from exc
 
     variables = server_variables_form.build_variables(form)
 
-    await server_service.migrate_legacy_server(name=name, variables=variables, base=base)
+    await server_service.migrate_legacy_server(
+        name=name, variables=variables, server_dir=server_dir
+    )
 
     response = HTMLResponse("", status_code=200)
     response.headers["HX-Redirect"] = f"/servers/{name}"

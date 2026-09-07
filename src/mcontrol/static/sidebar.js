@@ -18,16 +18,21 @@
     document.documentElement.style.setProperty(prop, value);
   }
 
-  function setWidth(px) {
+  function setWidth(px, persist) {
     var clamped = Math.max(MIN, Math.min(MAX, px));
     setRoot("--sidebar-width", clamped + "px");
     if (resizeHandle) resizeHandle.setAttribute("aria-valuenow", String(clamped));
-    try { localStorage.setItem(WIDTH_KEY, clamped + "px"); } catch (_) {}
+    if (persist !== false) {
+      try { localStorage.setItem(WIDTH_KEY, clamped + "px"); } catch (_) {}
+    }
     return clamped;
   }
 
   function isCollapsed() {
-    return document.documentElement.getAttribute("data-sidebar") === "collapsed";
+    var attr = document.documentElement.getAttribute("data-sidebar");
+    if (attr === "collapsed") return true;
+    if (attr === "expanded") return false;
+    return window.matchMedia("(max-width: 768px)").matches;
   }
 
   function syncCollapseBtn(collapsed) {
@@ -94,13 +99,15 @@
 
     document.addEventListener("mousemove", function (evt) {
       if (!dragging) return;
-      setWidth(startWidth + (evt.clientX - startX));
+      setWidth(startWidth + (evt.clientX - startX), false);
     });
 
     document.addEventListener("mouseup", function () {
       if (!dragging) return;
       dragging = false;
       document.documentElement.removeAttribute("data-sidebar-resizing");
+      var sidebar = document.querySelector(".sidebar");
+      if (sidebar) setWidth(sidebar.offsetWidth, true);
     });
 
     // Double-click resets to the default width. Cheap escape hatch for
@@ -109,6 +116,13 @@
       if (isCollapsed()) return;
       try { localStorage.removeItem(WIDTH_KEY); } catch (_) {}
       document.documentElement.style.removeProperty("--sidebar-width");
+      var sidebar = document.querySelector(".sidebar");
+      if (resizeHandle) {
+        resizeHandle.setAttribute(
+          "aria-valuenow",
+          String(sidebar ? sidebar.offsetWidth : 248)
+        );
+      }
     });
   }
 
@@ -121,6 +135,11 @@
     btn.addEventListener("click", function () {
       setCollapsed(!isCollapsed());
     });
+    var mq = window.matchMedia("(max-width: 768px)");
+    var onMq = function () { syncCollapseBtn(isCollapsed()); };
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", onMq);
+    }
   }
 
   function init() {

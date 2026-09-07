@@ -70,6 +70,9 @@ class _FakeContainer:
         self._started = False
         self._stopped = False
         self._restarted = False
+        self._deleted = False
+        self._stop_kwargs: dict = {}
+        self._delete_kwargs: dict = {}
         nets = networks if networks is not None else {"atm10_default": {}}
         self._show_data = {
             "Name": f"/{name}",
@@ -79,8 +82,13 @@ class _FakeContainer:
     async def start(self) -> None:
         self._started = True
 
-    async def stop(self) -> None:
+    async def stop(self, **kwargs) -> None:
         self._stopped = True
+        self._stop_kwargs = kwargs
+
+    async def delete(self, **kwargs) -> None:
+        self._deleted = True
+        self._delete_kwargs = kwargs
 
     async def restart(self) -> None:
         self._restarted = True
@@ -116,6 +124,7 @@ async def test_stop_calls_container_stop(env):
     await docker_client.stop(docker, "atm10")
 
     assert fake._stopped is True
+    assert fake._stop_kwargs.get("t") == 90
 
 
 async def test_restart_calls_container_restart(env):
@@ -145,11 +154,11 @@ async def test_stop_raises_timeout_when_container_hangs(env, monkeypatch):
     import asyncio
 
     class _HangingContainer(_FakeContainer):
-        async def stop(self):
+        async def stop(self, **_kwargs):
             await asyncio.sleep(9999)
 
     docker = _docker_with_container(_HangingContainer())
-    monkeypatch.setattr(docker_client, "_LIFECYCLE_TIMEOUT_S", 0.01)
+    monkeypatch.setattr(docker_client, "_STOP_WAIT_S", 0.01)
 
     with pytest.raises(asyncio.TimeoutError):
         await docker_client.stop(docker, "atm10")
@@ -356,3 +365,117 @@ async def test_refcounts_are_per_network(env, monkeypatch):
         ("moni_default", {"Container": "selfid"}),
     ]
     assert disconnects == [("atm10_default", {"Container": "selfid"})]
+
+
+async def test_remove_container_calls_delete(env):
+    fake = _FakeContainer()
+    docker = _docker_with_container(fake)
+
+    await docker_client.remove_container(docker, "atm10")
+
+    assert fake._deleted is True
+    assert fake._delete_kwargs.get("v") is False
+
+
+async def test_remove_container_ignores_404(env):
+    docker = MagicMock()
+    docker.containers = MagicMock()
+    docker.containers.get = AsyncMock(
+        side_effect=aiodocker.DockerError(404, {"message": "No such container"})
+    )
+
+    await docker_client.remove_container(docker, "atm10")
+
+
+async def test_self_network_gateway_returns_first_gateway(env, monkeypatch):
+    class _Container:
+        async def show(self):
+            return {
+                "NetworkSettings": {
+                    "Networks": {
+                        "mcontrol_default": {"Gateway": "172.18.0.1"},
+                        "other": {"Gateway": "172.19.0.1"},
+                    }
+                }
+            }
+
+    docker = MagicMock()
+    docker.containers = MagicMock()
+    docker.containers.get = AsyncMock(return_value=_Container())
+    monkeypatch.setenv("HOSTNAME", "selfid")
+
+    assert await docker_client.self_network_gateway(docker) == "172.18.0.1"
+
+
+async def test_self_network_gateway_none_when_not_in_docker(env, monkeypatch):
+    docker = MagicMock()
+    docker.containers = MagicMock()
+    docker.containers.get = AsyncMock(
+        side_effect=aiodocker.DockerError(404, {"message": "nope"})
+    )
+    monkeypatch.setenv("HOSTNAME", "not-a-container")
+
+    assert await docker_client.self_network_gateway(docker) is None
+
+
+async def test_prune_disconnects_server_networks_keeps_home(env, monkeypatch):
+    disconnected: list[str] = []
+
+    class _Network:
+        def __init__(self, name):
+            self.name = name
+
+        async def disconnect(self, config):  # noqa: ARG002
+            disconnected.append(self.name)
+
+    class _Container:
+        async def show(self):
+            return {
+                "HostConfig": {"NetworkMode": "mcontrol_default"},
+                "Config": {"Labels": {"com.docker.compose.project": "mcontrol"}},
+                "NetworkSettings": {
+                    "Networks": {
+                        "mcontrol_default": {},
+                        "loading_default": {},
+                        "atm10-030826_default": {},
+                    }
+                },
+            }
+
+    docker = MagicMock()
+    docker.containers = MagicMock()
+    docker.containers.get = AsyncMock(return_value=_Container())
+    docker.networks = MagicMock()
+    docker.networks.get = AsyncMock(side_effect=lambda name: _Network(name))
+    monkeypatch.setenv("HOSTNAME", "selfid")
+
+    await docker_client.prune_stale_self_networks(docker)
+
+    assert set(disconnected) == {"loading_default", "atm10-030826_default"}
+
+
+async def test_prune_is_noop_when_not_in_docker(env, monkeypatch):
+    docker = MagicMock()
+    docker.containers = MagicMock()
+    docker.containers.get = AsyncMock(
+        side_effect=aiodocker.DockerError(404, {"message": "nope"})
+    )
+    docker.networks = MagicMock()
+    docker.networks.get = AsyncMock()
+    monkeypatch.setenv("HOSTNAME", "not-a-container")
+
+    await docker_client.prune_stale_self_networks(docker)
+
+    docker.networks.get.assert_not_called()
+
+
+async def test_disconnect_refcount_networks_clears(env, monkeypatch):
+    disconnects: list = []
+    docker = _refcount_docker([], disconnects)
+    monkeypatch.setenv("HOSTNAME", "selfid")
+    docker_client._network_refcounts["atm10_default"] = 1
+
+    await docker_client.disconnect_refcount_networks(docker)
+
+    assert disconnects == [("atm10_default", {"Container": "selfid"})]
+    assert docker_client._network_refcounts == {}

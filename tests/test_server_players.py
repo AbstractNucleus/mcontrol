@@ -102,6 +102,8 @@ async def test_get_combines_whitelist_and_ops_into_one_row_per_uuid(
     notch_row = notch_row.split('class="players-card__add"')[0]
     assert herobrine_row.count("checked") == 1
     assert notch_row.count("checked") == 2
+    assert "hx-disinherit" in body
+    assert "mc:state-changed from:body" in body
 
 
 async def test_get_surfaces_malformed_whitelist_inline(client, fake_db, tmp_path):

@@ -12,9 +12,9 @@ def _reset_client_singleton(monkeypatch):
 
 
 def _fake_supabase_client():
-    """Build a fake supabase client whose .schema().table() chain we can introspect."""
+    """Build a fake supabase client whose .table() we can introspect."""
     client = MagicMock(name="supabase_client")
-    table = client.schema.return_value.table.return_value
+    table = client.table.return_value
     return client, table
 
 
@@ -33,9 +33,10 @@ def test_client_constructed_with_settings(env, monkeypatch):
 
     assert captured["url"] == "https://example.supabase.co"
     assert captured["key"] == "test-key"
-    # Bounded PostgREST round-trips so abandoned healthz probe threads
-    # self-terminate instead of lingering for the OS TCP timeout.
-    assert captured["options"].postgrest_client_timeout == 5
+    opts = captured["options"]
+    assert opts.schema == "app_mcontrol"
+    assert opts.httpx_client is not None
+    assert opts.httpx_client.timeout.connect == 5.0
 
 
 def test_client_is_cached(env, monkeypatch):
@@ -60,8 +61,8 @@ def test_table_targets_app_mcontrol_servers(env, monkeypatch):
 
     db._table()
 
-    client.schema.assert_called_once_with("app_mcontrol")
-    client.schema.return_value.table.assert_called_once_with("servers")
+    client.table.assert_called_once_with("servers")
+    client.schema.assert_not_called()
 
 
 def test_list_servers_orders_by_name(env, monkeypatch):
@@ -218,8 +219,8 @@ def test_players_table_targets_app_mcontrol_players(env, monkeypatch):
 
     db._players_table()
 
-    client.schema.assert_called_once_with("app_mcontrol")
-    client.schema.return_value.table.assert_called_once_with("players")
+    client.table.assert_called_once_with("players")
+    client.schema.assert_not_called()
 
 
 def test_list_players_orders_by_name(env, monkeypatch):

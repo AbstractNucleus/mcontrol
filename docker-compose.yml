@@ -5,6 +5,8 @@
 # against the server would replace the pulled image with a local build in
 # place, and report success. Don't.
 
+name: mcontrol
+
 services:
   app:
     build: .

@@ -11,6 +11,7 @@ page render and confirm-click still refuses cleanly. The tombstone +
 DB delete sequence lives in ``services.server_service``.
 """
 
+import logging
 from pathlib import Path
 
 import aiodocker
@@ -20,11 +21,13 @@ from fastapi.responses import HTMLResponse
 from mcontrol.domain import lifecycle_state
 from mcontrol.infra import db, docker_client
 from mcontrol.routes._dependencies import get_docker, get_server_or_404
+from mcontrol.routes._flash import hx_redirect
 from mcontrol.services import server_service
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _partial(
@@ -63,19 +66,19 @@ async def post(
     confirm_name: str = Form(""),
     docker: aiodocker.Docker = Depends(get_docker),
 ) -> HTMLResponse:
-    # Re-check state at request time. protects against the operator
-    # starting the server in another tab between page render and click.
-    if lifecycle_state.is_running(server):
-        raise HTTPException(
-            status_code=409, detail="Stop the server before deleting."
-        )
-
     # The DB state column can be stale (started outside the panel), so
     # also ask Docker before tombstoning a bind-mount the JVM may still
     # be writing to. An unreachable daemon yields {} and the DB check
-    # above stands alone. deleting while the daemon is down is legitimate.
+    # stands alone. A reachable daemon that has no container for this
+    # name (removed out of band) must not 409 on a stale "running" row.
+    container_name = db.container_name_for(server)
     live_states = await docker_client.container_states_by_name(docker)
-    if live_states.get(db.container_name_for(server)) == "running":
+    container_absent = bool(live_states) and container_name not in live_states
+    if lifecycle_state.is_running(server) and not container_absent:
+        raise HTTPException(
+            status_code=409, detail="Stop the server before deleting."
+        )
+    if live_states.get(container_name) == "running":
         raise HTTPException(
             status_code=409, detail="Stop the server before deleting."
         )
@@ -94,10 +97,13 @@ async def post(
 
     await server_service.delete_server_with_tombstone(server, base)
 
-    response = HTMLResponse("", status_code=200)
-    # HTMX picks up this header and navigates the browser to /. The
-    # confirm modal's #server-modal slot was the form's swap target;
-    # without HX-Redirect we'd swap an empty body into it and the user
-    # would still be on a page whose row no longer exists.
-    response.headers["HX-Redirect"] = "/"
-    return response
+    try:
+        await docker_client.remove_container(docker, container_name)
+    except Exception:
+        logger.warning("failed to remove container %s after delete", container_name, exc_info=True)
+
+    # HTMX picks up HX-Redirect and navigates to /. The confirm modal's
+    # #server-modal slot was the form's swap target; without the
+    # redirect we'd swap an empty body into it. The cookie flash lands
+    # in #flash-stack on Home.
+    return hx_redirect("/", kind="ok", message=f"Deleted {name} (moved to Trash).")

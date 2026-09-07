@@ -43,7 +43,7 @@
       <button type="submit" class="btn btn--primary btn--sm">Save</button>
     </div>
   </form>
-{% elif mode == 'binary' or mode == 'too_large' %}
+{% elif mode == 'binary' or mode == 'too_large' or mode == 'not_utf8' %}
   {# Info card replaces the dead-end placeholder (issue #54). Action buttons
      reuse the tree popover's data-action-* selectors so the existing
      file_uploader.js handlers wire up without duplication. #}
@@ -51,6 +51,8 @@
   <div class="file-view__info-card">
     {% if mode == 'too_large' %}
       <p class="t-muted">file too large to view inline</p>
+    {% elif mode == 'not_utf8' %}
+      <p class="t-muted">not UTF-8 text — download to edit</p>
     {% else %}
       <p class="t-muted">binary file</p>
     {% endif %}

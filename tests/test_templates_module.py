@@ -52,6 +52,16 @@ def test_flash_partial_dismiss_button_has_aria_label():
 def test_base_flash_stack_is_a_polite_live_region():
     # Container is polite by default; individual error messages upgrade
     # to assertive via their own role="alert".
-    html = templates_module.templates.get_template("base.html").render(version="x")
-    assert 'id="flash-stack"' in html
-    assert 'aria-live="polite"' in html
+    body = templates_module.templates.get_template("base.html").render(version="x")
+    assert 'id="flash-stack"' in body
+    assert 'aria-live="polite"' in body
+    assert 'stored !== "light"' in body
+
+
+def test_fleet_row_targets_closest_li():
+    html = templates_module.templates.get_template("_fleet_row.html").render(
+        server={"name": "foo.bar", "state": "exited", "port": None, "cpu": None,
+                "memory": None, "started_at": None},
+    )
+    assert 'hx-target="closest li"' in html
+    assert "#fleet-row-foo.bar" not in html

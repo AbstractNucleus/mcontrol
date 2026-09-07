@@ -52,13 +52,16 @@ document.addEventListener("dragenter", (evt) => {
   highlight(target);
 });
 
-document.addEventListener("dragover", (evt) => {
+window.addEventListener("dragover", (evt) => {
   if (!isFilesDrag(evt)) return;
-  const target = evt.target.closest && evt.target.closest("[data-upload-target]");
-  if (!target) return;
   evt.preventDefault();
-  evt.dataTransfer.dropEffect = "copy";
-  highlight(target);
+  const target = evt.target.closest && evt.target.closest("[data-upload-target]");
+  if (target) {
+    evt.dataTransfer.dropEffect = "copy";
+    highlight(target);
+  } else {
+    evt.dataTransfer.dropEffect = "none";
+  }
 });
 
 document.addEventListener("dragleave", (evt) => {
@@ -69,11 +72,12 @@ document.addEventListener("dragleave", (evt) => {
   unhighlight();
 });
 
-document.addEventListener("drop", async (evt) => {
-  const target = evt.target.closest && evt.target.closest("[data-upload-target]");
-  if (!target) return;
+window.addEventListener("drop", async (evt) => {
+  if (!isFilesDrag(evt)) return;
   evt.preventDefault();
   unhighlight();
+  const target = evt.target.closest && evt.target.closest("[data-upload-target]");
+  if (!target) return;
   const path = target.dataset.uploadPath || "";
   const files = Array.from(evt.dataTransfer.files || []);
   if (files.length === 0) return;
@@ -122,9 +126,24 @@ document.addEventListener("change", async (evt) => {
   await uploadFiles(path, files, false);
 });
 
+let uploadInFlight = false;
+
 async function uploadFiles(path, files, force) {
   const name = serverName();
   if (!name) return;
+  if (uploadInFlight) {
+    showError("An upload is already in progress.");
+    return;
+  }
+  uploadInFlight = true;
+  try {
+    await runUpload(name, path, files, force);
+  } finally {
+    uploadInFlight = false;
+  }
+}
+
+async function runUpload(name, path, files, force) {
 
   const fd = new FormData();
   fd.append("path", path);
@@ -229,9 +248,55 @@ function swapTreeAt(path, html) {
     if (t) t.innerHTML = html;
     return;
   }
-  const sel = `[data-upload-target][data-upload-path="${cssEscape(path)}"] > .file-tree__children`;
-  const ul = document.querySelector(sel);
+  const row = document.querySelector(
+    `[data-upload-target][data-upload-path="${cssEscape(path)}"]`
+  );
+  if (!row) return;
+  const ul = row.querySelector(":scope > .file-tree__children");
   if (ul) ul.innerHTML = html;
+  row.setAttribute("aria-expanded", "true");
+}
+
+function openFilePath() {
+  const input = document.querySelector("#file-view input[name='path']");
+  return input ? input.value : "";
+}
+
+function renamedPath(path, newName) {
+  const parent = parentOf(path);
+  return parent ? `${parent}/${newName}` : newName;
+}
+
+function movedPath(source, destDir) {
+  const base = source.split("/").pop();
+  return destDir ? `${destDir}/${base}` : base;
+}
+
+function syncOpenFile(oldPath, nextPath) {
+  const open = openFilePath();
+  if (!open || !oldPath) return;
+  const view = document.getElementById("file-view");
+  if (!view) return;
+  let target = null;
+  if (open === oldPath) {
+    target = nextPath;
+  } else if (open.startsWith(oldPath + "/")) {
+    target = nextPath ? nextPath + open.slice(oldPath.length) : null;
+  } else {
+    return;
+  }
+  if (!target) {
+    view.innerHTML = '<p class="t-muted">This file is no longer available.</p>';
+    return;
+  }
+  const name = serverName();
+  if (name && window.htmx) {
+    window.htmx.ajax(
+      "GET",
+      `/servers/${encodeURIComponent(name)}/files/view?path=${encodeURIComponent(target)}`,
+      { target: view, swap: "innerHTML" }
+    );
+  }
 }
 
 function showConflict(html, onOverwrite) {
@@ -410,6 +475,8 @@ async function performDelete(path, confirmName) {
 
   const html = await resp.text();
   swapTreeAt(parentOf(path), html);
+  if (typeof pruneSelection === "function") pruneSelection(path);
+  syncOpenFile(path, null);
   const s = status();
   if (s) s.innerHTML = "";
   const t = tree();
@@ -510,6 +577,8 @@ async function performRename(path, newName) {
 
   const html = await resp.text();
   swapTreeAt(parentOf(path), html);
+  if (typeof pruneSelection === "function") pruneSelection(path);
+  syncOpenFile(path, renamedPath(path, newName));
   const s = status();
   if (s) s.innerHTML = "";
   const t = tree();
@@ -607,6 +676,8 @@ async function performMove(source, destDir) {
   // tree, refresh its listing too so the moved item appears without the
   // operator having to collapse and re-expand.
   await refreshTreeAt(destDir);
+  if (typeof pruneSelection === "function") pruneSelection(source);
+  syncOpenFile(source, movedPath(source, destDir));
   const s = status();
   if (s) s.innerHTML = "";
   const t = tree();

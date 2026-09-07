@@ -1,8 +1,11 @@
 """End-to-end tests for the bespoke async RCON client against a fake
 Source-protocol server built on asyncio.start_server.
 
-The fake mirrors Minecraft's RCON: AUTH (type=3) → AUTH_RESPONSE (type=2,
-id=match for ok, id=-1 for fail), EXEC (type=2) → RESPONSE_VALUE (type=0).
+The fake mirrors Minecraft's RCON thread: AUTH (type=3) → AUTH_RESPONSE
+(type=2, id=match for ok, id=-1 for fail), EXEC (type=2) → RESPONSE_VALUE
+(type=0) in 4096-byte chunks, any other type → "Unknown request <hex>".
+Like Minecraft it reads one buffer per loop and drops the connection when
+that buffer holds anything but exactly one packet.
 """
 
 import asyncio
@@ -11,6 +14,9 @@ import struct
 import pytest
 
 from mcontrol.infra import rcon
+
+_MC_READ_SIZE = 1460
+_MC_CHUNK = 4096
 
 
 def _pack(packet_id: int, packet_type: int, body: bytes) -> bytes:
@@ -32,11 +38,11 @@ class _FakeRconServer:
     def __init__(self, password: str = "hunter2"):
         self.password = password
         self.received_commands: list[bytes] = []
+        self.coalesced_reads = 0  # reads that held more than one packet
         self.fail_auth = False
         self.hang_auth = False  # accept TCP, never answer the AUTH packet
         self.hang_exec = False  # answer auth, never answer EXECCOMMAND
         self.exec_response = b"There are 3 of a max of 20 players online: alice, bob, carol"
-        self.exec_response_parts: list[bytes] | None = None  # overrides exec_response when set
         self._server: asyncio.base_events.Server | None = None
         self.host = "127.0.0.1"
         self.port = 0  # populated after start
@@ -50,44 +56,54 @@ class _FakeRconServer:
         self._server.close()
         await self._server.wait_closed()
 
+    async def _read_one(self, reader: asyncio.StreamReader) -> tuple[int, int, bytes] | None:
+        """Minecraft-shaped read: whatever is buffered, which must be one packet."""
+        data = await reader.read(_MC_READ_SIZE)
+        if len(data) < 10:
+            return None
+        length = struct.unpack("<i", data[:4])[0]
+        if length != len(data) - 4:
+            self.coalesced_reads += 1
+            return None
+        packet_id, packet_type = struct.unpack("<ii", data[4:12])
+        return packet_id, packet_type, data[12:-2]
+
+    @staticmethod
+    def _chunked(packet_id: int, body: bytes) -> bytes:
+        chunks = [body[i : i + _MC_CHUNK] for i in range(0, len(body), _MC_CHUNK)] or [b""]
+        return b"".join(_pack(packet_id, 0, chunk) for chunk in chunks)
+
     async def _handler(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
-            # Auth packet first
-            pid, ptype, body = await _read_packet(reader)
+            frame = await self._read_one(reader)
+            if frame is None:
+                return
+            pid, ptype, body = frame
             assert ptype == 3, "first packet must be AUTH"
             if self.hang_auth:
                 await reader.read()  # wait for the client to give up and close
                 return
-            ok = body.rstrip(b"\x00").decode() == self.password and not self.fail_auth
+            ok = body.decode() == self.password and not self.fail_auth
             response_id = pid if ok else -1
             writer.write(_pack(response_id, 2, b""))  # AUTH_RESPONSE
             await writer.drain()
             if not ok:
-                writer.close()
                 return
 
-            # One or more EXEC packets, each followed by a sentinel packet
-            while not reader.at_eof():
-                try:
-                    pid, ptype, body = await _read_packet(reader)
-                except asyncio.IncompleteReadError:
-                    break
+            while True:
+                frame = await self._read_one(reader)
+                if frame is None:
+                    return
+                pid, ptype, body = frame
                 if ptype == 2:  # EXECCOMMAND
-                    self.received_commands.append(body.rstrip(b"\x00"))
+                    self.received_commands.append(body)
                     if self.hang_exec:
                         await reader.read()  # wait for the client to give up and close
                         return
-                    parts = (
-                        self.exec_response_parts
-                        if self.exec_response_parts is not None
-                        else [self.exec_response]
-                    )
-                    for part in parts:
-                        writer.write(_pack(pid, 0, part))
-                    await writer.drain()
-                elif ptype == 0:  # sentinel SERVERDATA_RESPONSE_VALUE. echo it back
-                    writer.write(_pack(pid, 0, b""))
-                    await writer.drain()
+                    writer.write(self._chunked(pid, self.exec_response))
+                else:
+                    writer.write(self._chunked(pid, f"Unknown request {ptype:x}".encode()))
+                await writer.drain()
         finally:
             writer.close()
 
@@ -101,6 +117,20 @@ async def test_connect_and_run_returns_response():
             assert server.received_commands == [b"list"]
         finally:
             await client.close()
+
+
+async def test_run_never_shares_a_read_with_the_command():
+    """Minecraft drops the socket when a read holds more than one packet, so
+    the end-of-response sentinel must wait for the first response packet."""
+    async with _FakeRconServer() as server:
+        client = await rcon.connect(server.host, server.port, "hunter2")
+        try:
+            for _ in range(5):
+                assert await client.run("list") == server.exec_response.decode()
+        finally:
+            await client.close()
+        assert server.coalesced_reads == 0
+        assert server.received_commands == [b"list"] * 5
 
 
 async def test_connect_raises_on_bad_password():
@@ -121,6 +151,7 @@ async def test_run_after_close_raises():
     async with _FakeRconServer() as server:
         client = await rcon.connect(server.host, server.port, "hunter2")
         await client.close()
+        assert client.closed
         with pytest.raises(rcon.RconClosedError):
             await client.run("list")
 
@@ -137,14 +168,20 @@ async def test_run_handles_empty_response():
 
 
 async def test_run_reassembles_multi_packet_response():
+    long_response = b"".join(f"/command{i:04d} <args>\n".encode() for i in range(500))
+    assert len(long_response) > 2 * _MC_CHUNK
     async with _FakeRconServer() as server:
-        server.exec_response_parts = [b"chunk-one ", b"chunk-two"]
+        server.exec_response = long_response
         client = await rcon.connect(server.host, server.port, "hunter2")
         try:
-            response = await client.run("whitelist list")
-            assert response == "chunk-one chunk-two"
+            response = await client.run("help")
+            assert response == long_response.decode()
+            # Connection is still in sync afterwards.
+            server.exec_response = b"Seed: [42]"
+            assert await client.run("seed") == "Seed: [42]"
         finally:
             await client.close()
+        assert server.coalesced_reads == 0
 
 
 async def test_connect_times_out_when_auth_hangs(monkeypatch):
@@ -164,8 +201,21 @@ async def test_run_times_out_and_closes_when_exec_hangs(monkeypatch):
             await client.run("list")
         # A timed-out exchange desyncs the stream; the connection must
         # be closed rather than reused.
+        assert client.closed
         with pytest.raises(rcon.RconClosedError):
             await client.run("list")
+
+
+async def test_run_maps_transport_loss_to_rcon_closed():
+    """A socket that died underneath us (interface gone, reset) surfaces as
+    RconClosedError, not a bare OSError the routes don't expect."""
+    async with _FakeRconServer() as server:
+        client = await rcon.connect(server.host, server.port, "hunter2")
+        client._writer.transport.abort()
+        await asyncio.sleep(0)  # let connection_lost run
+        with pytest.raises(rcon.RconClosedError, match="connection lost"):
+            await client.run("list")
+        assert client.closed
 
 
 async def test_run_maps_peer_disconnect_to_rcon_closed():

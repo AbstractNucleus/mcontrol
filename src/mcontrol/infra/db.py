@@ -8,6 +8,7 @@ process.
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 from supabase import Client, ClientOptions, create_client
 
 from mcontrol.settings import get_settings
@@ -23,24 +24,34 @@ def _client() -> Client:
     global _client_singleton
     if _client_singleton is None:
         settings = get_settings()
-        # Bounds every PostgREST round-trip. healthz abandons its probe
-        # thread after its own budget, but without a client timeout that
-        # thread would linger for the OS TCP timeout (~2 min) per probe
-        # during an outage.
+        # One PostgREST client + keepalive httpx session. `.schema()` on
+        # the installed postgrest constructs a new client (and a new
+        # TLS handshake) per call; ClientOptions.schema is honoured by
+        # `.table()` via Accept-Profile / Content-Profile.
         _client_singleton = create_client(
             settings.supabase_url,
             settings.supabase_service_role_key,
-            options=ClientOptions(postgrest_client_timeout=5),
+            options=ClientOptions(
+                schema=_SCHEMA,
+                httpx_client=httpx.Client(
+                    http2=True,
+                    timeout=5,
+                    follow_redirects=True,
+                    limits=httpx.Limits(
+                        max_keepalive_connections=4, keepalive_expiry=60
+                    ),
+                ),
+            ),
         )
     return _client_singleton
 
 
 def _table():
-    return _client().schema(_SCHEMA).table(_TABLE)
+    return _client().table(_TABLE)
 
 
 def _players_table():
-    return _client().schema(_SCHEMA).table(_PLAYERS_TABLE)
+    return _client().table(_PLAYERS_TABLE)
 
 
 def list_servers() -> list[dict[str, Any]]:

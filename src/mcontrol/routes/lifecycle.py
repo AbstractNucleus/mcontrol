@@ -1,4 +1,4 @@
-"""HTMX-driven Start / Stop / Restart for a server.
+"""HTMX-driven Start / Stop / Restart / Recreate for a server.
 
 Each handler delegates to ``services.lifecycle_service`` for the
 Docker + DB + RCON-password-cache side; the route is responsible for
@@ -15,22 +15,49 @@ carrying two HTMX swap targets:
   lock-step with the freshly-updated state.
 """
 
+import logging
+
 import aiodocker
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
 from mcontrol.domain import lifecycle_state
+from mcontrol.infra.compose import ComposeError
 from mcontrol.routes._dependencies import get_docker, get_server_or_404
 from mcontrol.services import lifecycle_service
 from mcontrol.templates import templates
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _TIMEOUT_MSG = "Docker timed out; the container may still be starting. Try again."
 
 
 def _docker_error_msg(exc: aiodocker.DockerError) -> str:
-    return f"Docker error: {exc.message}. Check Bindings or run docker compose up."
+    raw = getattr(exc, "message", None)
+    if isinstance(raw, dict):
+        inner = raw.get("message")
+        text = inner if isinstance(inner, str) and inner else None
+    elif isinstance(raw, str) and raw:
+        text = raw
+    else:
+        text = None
+    if not text:
+        text = str(exc)
+    return f"Docker error: {text}. Check Bindings or run docker compose up."
+
+
+def _action_failure(
+    request: Request, server: dict, name: str, action: str, exc: BaseException
+) -> HTMLResponse:
+    logger.warning("lifecycle %s failed for %s: %s", action, name, exc)
+    if isinstance(exc, ComposeError):
+        flash = str(exc)
+    elif isinstance(exc, aiodocker.DockerError):
+        flash = _docker_error_msg(exc)
+    else:
+        flash = _TIMEOUT_MSG
+    return _respond(request, server, server.get("state") or "unknown", flash=flash)
 
 
 def _pill_and_buttons(server: dict, state: str, *, flash: str | None = None) -> HTMLResponse:
@@ -84,12 +111,8 @@ async def start(
 ) -> HTMLResponse:
     try:
         new_state = await lifecycle_service.start_server(docker, server, name)
-    except TimeoutError:
-        return _respond(request, server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
-    except aiodocker.DockerError as exc:
-        return _respond(
-            request, server, server.get("state") or "unknown", flash=_docker_error_msg(exc)
-        )
+    except (TimeoutError, ComposeError, aiodocker.DockerError) as exc:
+        return _action_failure(request, server, name, "start", exc)
     return _respond(request, server, new_state)
 
 
@@ -102,12 +125,8 @@ async def stop(
 ) -> HTMLResponse:
     try:
         new_state = await lifecycle_service.stop_server(docker, server, name)
-    except TimeoutError:
-        return _respond(request, server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
-    except aiodocker.DockerError as exc:
-        return _respond(
-            request, server, server.get("state") or "unknown", flash=_docker_error_msg(exc)
-        )
+    except (TimeoutError, ComposeError, aiodocker.DockerError) as exc:
+        return _action_failure(request, server, name, "stop", exc)
     return _respond(request, server, new_state)
 
 
@@ -120,10 +139,19 @@ async def restart(
 ) -> HTMLResponse:
     try:
         new_state = await lifecycle_service.restart_server(docker, server, name)
-    except TimeoutError:
-        return _respond(request, server, server.get("state") or "unknown", flash=_TIMEOUT_MSG)
-    except aiodocker.DockerError as exc:
-        return _respond(
-            request, server, server.get("state") or "unknown", flash=_docker_error_msg(exc)
-        )
+    except (TimeoutError, ComposeError, aiodocker.DockerError) as exc:
+        return _action_failure(request, server, name, "restart", exc)
+    return _respond(request, server, new_state)
+
+
+@router.post("/servers/{name}/lifecycle/recreate", response_class=HTMLResponse)
+async def recreate(
+    request: Request,
+    name: str,
+    server: dict = Depends(get_server_or_404),
+) -> HTMLResponse:
+    try:
+        new_state = await lifecycle_service.recreate_server(server, name)
+    except (TimeoutError, ComposeError, aiodocker.DockerError) as exc:
+        return _action_failure(request, server, name, "recreate", exc)
     return _respond(request, server, new_state)

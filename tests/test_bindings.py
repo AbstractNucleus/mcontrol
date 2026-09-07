@@ -28,6 +28,7 @@ def fake_db(monkeypatch):
     from mcontrol.infra import db
 
     monkeypatch.setattr(db, "get_server", lambda n: rows.get(n))
+    monkeypatch.setattr(db, "list_servers", lambda: list(rows.values()))
     monkeypatch.setattr(db, "update_bindings", lambda **kw: updates.append(kw))
 
     return {"rows": rows, "updates": updates}
@@ -146,3 +147,68 @@ async def test_bindings_post_rejects_nonexistent_dir(bindings_client, fake_db):
     assert "Directory does not exist" in response.text
     assert "bindings-form__error" in response.text
     assert "nope" in response.text
+
+
+async def test_bindings_post_stores_resolved_path(bindings_client, fake_db):
+    client, base = bindings_client
+    target = base / "atm10-moved"
+    target.mkdir()
+    fake_db["rows"]["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": str(base / "atm10"),
+    }
+    messy = str(target / ".." / "atm10-moved")
+
+    response = await client.post(
+        "/servers/atm10/bindings",
+        data={"container_name": "atm10-prod", "dir": messy},
+    )
+
+    assert response.status_code == 200
+    assert fake_db["updates"] == [{
+        "name": "atm10",
+        "container_name": "atm10-prod",
+        "dir": str(target.resolve()),
+    }]
+
+
+async def test_bindings_post_rejects_dir_bound_to_another_server(
+    bindings_client, fake_db
+):
+    client, base = bindings_client
+    shared = base / "shared"
+    shared.mkdir()
+    (base / "atm10").mkdir()
+    fake_db["rows"]["kobra"] = {
+        "name": "kobra", "container_name": None, "dir": str(shared),
+    }
+    fake_db["rows"]["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": str(base / "atm10"),
+    }
+
+    response = await client.post(
+        "/servers/atm10/bindings",
+        data={"container_name": "", "dir": str(shared)},
+    )
+
+    assert response.status_code == 422
+    assert fake_db["updates"] == []
+    assert "kobra" in response.text
+
+
+async def test_bindings_post_empty_dir_renders_form_error(bindings_client, fake_db):
+    client, base = bindings_client
+    fake_db["rows"]["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": str(base / "atm10"),
+    }
+
+    response = await client.post(
+        "/servers/atm10/bindings",
+        data={"container_name": "", "dir": ""},
+    )
+
+    assert response.status_code == 422
+    assert fake_db["updates"] == []
+    assert "application/json" not in response.headers.get("content-type", "")
+    assert "bindings-form__error" in response.text
+    assert "Directory must be under" in response.text
+    assert "Field required" not in response.text

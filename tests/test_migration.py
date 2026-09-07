@@ -103,6 +103,7 @@ def test_parse_legacy_variables_extracts_full_atm10_shape(tmp_path):
     assert parsed["server_jar"] == "neoforge-21.1.86-server.jar"
     assert parsed["jvm_extra_args"] == "-XX:+UseG1GC"
     assert parsed["port"] == 25571
+    assert parsed["java_version"] == 17
 
 
 def test_parse_legacy_variables_omits_jvm_extra_args_when_none_present(tmp_path):
@@ -139,7 +140,10 @@ def test_parse_legacy_variables_yields_partial_on_parse_failure(tmp_path):
         "#!/usr/bin/env bash\necho garbled\n", encoding="utf-8"
     )
     parsed = migration.parse_legacy_variables(server_dir)
-    assert parsed == {"port": 25571}
+    assert parsed["port"] == 25571
+    assert parsed["java_version"] == 17
+    assert "memory_budget_gb" not in parsed
+    assert "server_jar" not in parsed
 
 
 # ---- migrate ------------------------------------------------------
@@ -154,11 +158,11 @@ _VARS = {
 
 
 def test_migrate_writes_scaffold_files_with_expected_contents(tmp_path):
-    _legacy_layout(tmp_path)
-    migration.migrate("atm10", _VARS, tmp_path)
+    server_dir = _legacy_layout(tmp_path)
+    migration.migrate("atm10", _VARS, server_dir)
 
-    compose = (tmp_path / "atm10" / "docker-compose.yml").read_text(encoding="utf-8")
-    start = (tmp_path / "atm10" / "server" / "start_server.sh").read_text(encoding="utf-8")
+    compose = (server_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    start = (server_dir / "server" / "start_server.sh").read_text(encoding="utf-8")
 
     # Compose converges on slice-6 shape.
     assert "image: eclipse-temurin:21-jre" in compose
@@ -168,13 +172,13 @@ def test_migrate_writes_scaffold_files_with_expected_contents(tmp_path):
     assert "build:" not in compose
     # Heap preserved: 14 GB budget − 2 GB headroom = -Xmx12g.
     assert "-Xmx12g" in start
-    assert "-jar neoforge-21.1.86-server.jar" in start
+    assert '-jar "neoforge-21.1.86-server.jar"' in start
     assert "-XX:+UseG1GC" in start
 
 
 def test_migrate_unlinks_all_four_legacy_files(tmp_path):
     server_dir = _legacy_layout(tmp_path)
-    migration.migrate("atm10", _VARS, tmp_path)
+    migration.migrate("atm10", _VARS, server_dir)
 
     assert not (server_dir / "Dockerfile").exists()
     assert not (server_dir / "entrypoint.sh").exists()
@@ -189,7 +193,7 @@ def test_migrate_leaves_world_data_untouched(tmp_path):
     (world / "level.dat").write_bytes(b"level-bytes")
     (server_dir / "server" / "ops.json").write_text("[]\n", encoding="utf-8")
 
-    migration.migrate("atm10", _VARS, tmp_path)
+    migration.migrate("atm10", _VARS, server_dir)
 
     assert (world / "level.dat").read_bytes() == b"level-bytes"
     assert (server_dir / "server" / "ops.json").read_text(encoding="utf-8") == "[]\n"
@@ -197,12 +201,12 @@ def test_migrate_leaves_world_data_untouched(tmp_path):
 
 def test_migrate_is_idempotent_on_re_run(tmp_path):
     """Second call after success: no files left to unlink, files re-rendered."""
-    _legacy_layout(tmp_path)
-    migration.migrate("atm10", _VARS, tmp_path)
-    migration.migrate("atm10", _VARS, tmp_path)
+    server_dir = _legacy_layout(tmp_path)
+    migration.migrate("atm10", _VARS, server_dir)
+    migration.migrate("atm10", _VARS, server_dir)
 
-    compose = tmp_path / "atm10" / "docker-compose.yml"
-    start = tmp_path / "atm10" / "server" / "start_server.sh"
+    compose = server_dir / "docker-compose.yml"
+    start = server_dir / "server" / "start_server.sh"
     assert compose.exists() and start.exists()
     assert "image: eclipse-temurin:21-jre" in compose.read_text(encoding="utf-8")
 
@@ -214,7 +218,7 @@ def test_migrate_tolerates_missing_legacy_files(tmp_path):
     (server_dir / "Dockerfile").unlink()
     (server_dir / ".env").unlink()
 
-    migration.migrate("atm10", _VARS, tmp_path)
+    migration.migrate("atm10", _VARS, server_dir)
 
     assert not (server_dir / "entrypoint.sh").exists()
     assert not (server_dir / ".dockerignore").exists()
@@ -227,7 +231,7 @@ def test_migrate_raises_before_any_io_when_variables_incomplete(tmp_path):
     incomplete = {"memory_budget_gb": 14, "port": 25571}  # no server_jar
 
     with pytest.raises(KeyError):
-        migration.migrate("atm10", incomplete, tmp_path)
+        migration.migrate("atm10", incomplete, server_dir)
 
     # Legacy files still present; render failed before any unlink.
     assert (server_dir / "Dockerfile").exists()
@@ -238,7 +242,114 @@ def test_migrate_raises_before_any_io_when_variables_incomplete(tmp_path):
 
 @pytest.mark.skipif(os.name == "nt", reason="chmod exec bit is a no-op on Windows")
 def test_migrate_marks_start_script_executable(tmp_path):
-    _legacy_layout(tmp_path)
-    migration.migrate("atm10", _VARS, tmp_path)
-    start = tmp_path / "atm10" / "server" / "start_server.sh"
+    server_dir = _legacy_layout(tmp_path)
+    migration.migrate("atm10", _VARS, server_dir)
+    start = server_dir / "server" / "start_server.sh"
     assert start.stat().st_mode & 0o100
+
+
+def test_parse_legacy_variables_falls_back_to_entrypoint_sh(tmp_path):
+    server_dir = _legacy_layout(tmp_path)
+    (server_dir / "server" / "start_server.sh").unlink()
+    (server_dir / "entrypoint.sh").write_text(
+        "#!/usr/bin/env bash\n"
+        "exec java -Xmx10G -jar server.jar nogui\n",
+        encoding="utf-8",
+    )
+
+    parsed = migration.parse_legacy_variables(server_dir)
+    assert parsed["memory_budget_gb"] == 12
+    assert parsed["server_jar"] == "server.jar"
+
+
+def test_parse_legacy_variables_falls_back_to_mem_limit(tmp_path):
+    server_dir = _legacy_layout(tmp_path)
+    (server_dir / "server" / "start_server.sh").write_text(
+        "#!/usr/bin/env bash\necho garbled\n", encoding="utf-8"
+    )
+    (server_dir / "entrypoint.sh").write_text(
+        "#!/usr/bin/env bash\nexec ./start_server.sh\n", encoding="utf-8"
+    )
+    compose = (server_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    (server_dir / "docker-compose.yml").write_text(
+        compose.replace("restart: unless-stopped\n", "mem_limit: 12g\n"),
+        encoding="utf-8",
+    )
+
+    parsed = migration.parse_legacy_variables(server_dir)
+    assert parsed["memory_budget_gb"] == 12
+
+
+def test_parse_compose_port_reads_first_25565_mapping(tmp_path):
+    server_dir = _legacy_layout(tmp_path, host_port=25567)
+    assert migration.parse_compose_port(server_dir) == 25567
+
+
+def test_migrate_uses_bound_server_dir_not_base_name(tmp_path):
+    """Bindings may repoint the row away from <base>/<name>."""
+    server_dir = tmp_path / "repointed"
+    _legacy_layout(tmp_path, name="repointed")
+
+    migration.migrate("loading", _VARS, server_dir)
+
+    assert (server_dir / "docker-compose.yml").exists()
+    assert "image: eclipse-temurin:21-jre" in (
+        server_dir / "docker-compose.yml"
+    ).read_text(encoding="utf-8")
+    assert not (tmp_path / "loading").exists()
+
+
+def test_migrate_loading_legacy_compose_shape(tmp_path):
+    """Real production shape: build, mem_limit, extra UDP port, env_file, labels."""
+    server_dir = tmp_path / "loading"
+    inner = server_dir / "server"
+    inner.mkdir(parents=True)
+    (server_dir / "Dockerfile").write_text(
+        "FROM eclipse-temurin:21-jre\n", encoding="utf-8"
+    )
+    (server_dir / "entrypoint.sh").write_text(
+        "#!/usr/bin/env bash\n"
+        "exec java -Xmx10G -jar server.jar nogui\n",
+        encoding="utf-8",
+    )
+    (server_dir / ".dockerignore").write_text("server/world\n", encoding="utf-8")
+    (server_dir / ".env").write_text("RCON_PASSWORD=secret\n", encoding="utf-8")
+    (server_dir / "docker-compose.yml").write_text(
+        "services:\n"
+        "  loading:\n"
+        "    build: .\n"
+        "    container_name: loading\n"
+        "    mem_limit: 12g\n"
+        "    ports:\n"
+        '      - "25567:25565"\n'
+        '      - "24467:24467/udp"\n'
+        "    env_file: .env\n"
+        "    volumes:\n"
+        "      - ./server:/data\n"
+        "    labels:\n"
+        "      com.example.keep: leftover\n",
+        encoding="utf-8",
+    )
+
+    parsed = migration.parse_legacy_variables(server_dir)
+    assert parsed["memory_budget_gb"] == 12
+    assert parsed["port"] == 25567
+    assert parsed["server_jar"] == "server.jar"
+    assert parsed["java_version"] == 21
+
+    vars_ = {
+        "memory_budget_gb": 12,
+        "port": 25567,
+        "server_jar": "server.jar",
+        "java_version": 21,
+    }
+    migration.migrate("loading", vars_, server_dir)
+
+    compose = (server_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "image: eclipse-temurin:21-jre" in compose
+    assert "stop_grace_period: 90s" in compose
+    assert "mem_limit: 12g" in compose
+    assert "build:" not in compose
+    assert not (server_dir / "Dockerfile").exists()
+    assert not (server_dir / "entrypoint.sh").exists()
+    assert (inner / "server.properties").exists() is False

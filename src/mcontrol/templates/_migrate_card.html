@@ -1,4 +1,7 @@
-<section class="migrate-card" id="migrate-card">
+<section class="migrate-card" id="migrate-card"
+         hx-get="/servers/{{ server.name }}/migrate"
+         hx-trigger="mc:state-changed from:body"
+         hx-swap="outerHTML">
   <header class="migrate-card__head">
     <span class="state-pill state-pill--unknown">unmigrated</span>
   </header>
@@ -16,6 +19,15 @@
     </p>
   {% endif %}
 
+  <p class="migrate-card__hint">
+    After migrating, the container must be recreated so Docker picks up the new compose file.
+  </p>
+  <button type="button"
+          class="btn btn--sm"
+          hx-post="/servers/{{ server.name }}/lifecycle/recreate"
+          hx-target="#state-pill"
+          hx-swap="outerHTML">Recreate container</button>
+
   {% if error_banner %}
     <p class="migrate-card__error">{{ error_banner }}</p>
   {% endif %}
@@ -29,7 +41,7 @@
       <span class="t-eyebrow">Memory budget (GB)</span>
       <input type="number"
              name="memory_budget_gb"
-             min="2"
+             min="{{ memory_min_gb }}"
              value="{{ form.memory_budget_gb }}"
              required>
       <small class="migrate-card__hint">Drives <code>mem_limit</code> and <code>-Xmx</code> (= budget − 2 GB).</small>
@@ -55,6 +67,17 @@
              autocomplete="off"
              required>
       {% if errors.server_jar %}<small class="migrate-card__error">{{ errors.server_jar }}</small>{% endif %}
+    </label>
+
+    <label>
+      <span class="t-eyebrow">Java version</span>
+      <select name="java_version" required>
+        {% for v in java_versions %}
+          <option value="{{ v }}"{% if (form.java_version or default_java_version) == v %} selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+      <small class="migrate-card__hint">Minecraft 1.20.5–1.21.x need Java 21; 26.x needs Java 25; ≤1.20.4 works with 17</small>
+      {% if errors.java_version %}<small class="migrate-card__error">{{ errors.java_version }}</small>{% endif %}
     </label>
 
     <label>

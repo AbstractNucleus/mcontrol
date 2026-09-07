@@ -19,6 +19,10 @@ from mcontrol.domain import tombstones
         # slug-with-hyphens. backtrack pins the unix-ts to the rightmost run
         (".deleted-kobra-2022-1700000000", ("kobra-2022", 1700000000)),
         (".deleted-monifactory-1234567890", ("monifactory", 1234567890)),
+        (".deleted-kobra_kollektivet-1700000000", ("kobra_kollektivet", 1700000000)),
+        (".deleted-AllTheMons-1700000000", ("AllTheMons", 1700000000)),
+        (".deleted-a-1700000000", ("a", 1700000000)),
+        (".deleted-foo.bar-1700000000", ("foo.bar", 1700000000)),
     ],
 )
 def test_parse_extracts_name_and_unix_ts(name: str, expected: tuple[str, int]):
@@ -31,9 +35,6 @@ def test_parse_extracts_name_and_unix_ts(name: str, expected: tuple[str, int]):
         "atm10",                              # missing prefix
         ".deleted-atm10",                     # missing ts
         ".deleted--1700000000",               # empty slug
-        ".deleted-AB-1700000000",             # uppercase in slug
-        ".deleted-a-1700000000",              # slug too short (1 char)
-        ".deleted-foo_bar-1700000000",        # underscore not allowed
         ".deleted-foo-bar",                   # ts not digits
         "..",                                 # path traversal payload
         "../etc",                             # path traversal
@@ -133,6 +134,15 @@ def test_purge_one_removes_the_tombstone_directory(tmp_path: Path):
 
     assert not tomb.exists()
     assert tmp_path.exists()  # parent untouched
+
+
+def test_purge_one_removes_underscore_name(tmp_path: Path):
+    now = int(time.time())
+    tomb = _make_tombstone(tmp_path, "kobra_kollektivet", now, {"f": b"x"})
+
+    tombstones.purge_one(tmp_path, tomb.name)
+
+    assert not tomb.exists()
 
 
 @pytest.mark.parametrize(

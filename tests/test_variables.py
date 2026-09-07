@@ -66,6 +66,8 @@ async def test_get_card_renders_current_variables(client, fake_db, tmp_path):
     assert "25575" in body
     assert "paper.jar" in body
     assert 'hx-get="/servers/newshire/variables?edit=1"' in body
+    assert "Java version" in body
+    assert 'hx-post="/servers/newshire/lifecycle/recreate"' in body
 
 
 async def test_get_form_renders_editable_inputs(client, fake_db, tmp_path):
@@ -80,6 +82,10 @@ async def test_get_form_renders_editable_inputs(client, fake_db, tmp_path):
     assert 'name="port"' in body
     assert 'name="server_jar"' in body
     assert 'name="jvm_extra_args"' in body
+    assert 'name="java_version"' in body
+    from mcontrol.domain.scaffolding import MEMORY_MIN_GB
+
+    assert f'min="{MEMORY_MIN_GB}"' in body
     assert 'value="8"' in body
     assert 'value="25575"' in body
 
@@ -115,6 +121,7 @@ async def test_post_writes_variables_and_returns_card(client, fake_db, tmp_path)
         "port": 25577,
         "server_jar": "paper-1.21.4.jar",
         "jvm_extra_args": "-XX:+UseG1GC",
+        "java_version": 21,
     }
     # Card re-renders with the new values.
     body = response.text
@@ -268,3 +275,40 @@ async def test_post_returns_404_for_unknown_server(client, fake_db):
               "server_jar": "paper.jar", "jvm_extra_args": ""},
     )
     assert response.status_code == 404
+
+
+async def test_post_rejects_when_not_scaffolded(client, fake_db, tmp_path):
+    fake_db["rows"].append(_row(tmp_path, scaffolded_at=None))
+
+    response = await client.post(
+        "/servers/newshire/variables",
+        data={
+            "memory_budget_gb": "8",
+            "port": "25575",
+            "server_jar": "paper.jar",
+            "jvm_extra_args": "",
+        },
+    )
+
+    assert response.status_code == 409
+    assert fake_db["writes"] == []
+
+
+async def test_post_persists_java_version(client, fake_db, tmp_path):
+    row = _row(tmp_path)
+    scaffolding.scaffold(row["name"], row["variables"], tmp_path)
+    fake_db["rows"].append(row)
+
+    response = await client.post(
+        "/servers/newshire/variables",
+        data={
+            "memory_budget_gb": "8",
+            "port": "25575",
+            "server_jar": "paper.jar",
+            "java_version": "25",
+            "jvm_extra_args": "",
+        },
+    )
+
+    assert response.status_code == 200
+    assert fake_db["writes"][0][1]["variables"]["java_version"] == 25

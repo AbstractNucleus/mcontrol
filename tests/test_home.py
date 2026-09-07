@@ -59,7 +59,7 @@ async def test_home_lists_servers_when_present(client, fake_servers, fake_stats)
     fake_servers.append({"name": "atm10", "state": "running"})
     fake_servers.append({"name": "monifactory", "state": "exited"})
 
-    response = await client.get("/")
+    response = await client.get("/", headers={"Accept": "text/html"})
 
     assert response.status_code == 200
     body = response.text
@@ -77,7 +77,7 @@ async def test_sidebar_lists_servers(client, fake_servers, fake_stats):
     the <aside class="sidebar"> block, not just anywhere on the page."""
     fake_servers.append({"name": "atm10", "state": "running"})
 
-    response = await client.get("/")
+    response = await client.get("/", headers={"Accept": "text/html"})
 
     assert response.status_code == 200
     body = response.text
@@ -200,3 +200,83 @@ async def test_home_resolves_container_name_override(
     assert response.status_code == 200
     block = _row_block(response.text, "atm10")
     assert "1.0 GiB / 2.0 GiB" in block
+
+
+async def test_home_fleet_row_targets_closest_li(
+    client, fake_servers, fake_stats
+):
+    """Names with dots would break `#fleet-row-foo.bar` as a CSS selector."""
+    fake_servers.append({"name": "foo.bar", "state": "running"})
+
+    response = await client.get("/")
+
+    assert response.status_code == 200
+    block = _row_block(response.text, "foo.bar")
+    assert 'hx-target="closest li"' in block
+    assert 'hx-target="#fleet-row-foo.bar"' not in block
+
+
+async def test_home_summary_running_uses_live_stats_not_db(
+    client, fake_servers, fake_stats
+):
+    """DB says ghost is running but Docker has no container; atm10 is
+    live even though the row still says exited."""
+    fake_servers.append({"name": "ghost", "state": "running"})
+    fake_servers.append({"name": "atm10", "state": "exited"})
+    fake_stats["atm10"] = {
+        "status": "ok",
+        "cpu_percent": 1.0,
+        "mem_used": 1024,
+        "mem_limit": 2048,
+    }
+
+    body = (await client.get("/")).text
+
+    assert "2 servers" in body
+    assert "1 running" in body
+
+
+async def test_prime_sidebar_skips_when_accept_lacks_html(
+    client, fake_servers, fake_stats, monkeypatch
+):
+    from mcontrol.infra import db
+
+    calls = {"n": 0}
+
+    def counting():
+        calls["n"] += 1
+        return list(fake_servers)
+
+    monkeypatch.setattr(db, "list_servers", counting)
+
+    # /servers/new does not itself call list_servers, so the counter
+    # isolates the middleware.
+    await client.get("/servers/new", headers={"Accept": "application/json"})
+    assert calls["n"] == 0
+
+    await client.get("/servers/new", headers={"Accept": "text/html"})
+    assert calls["n"] == 1
+
+
+async def test_prime_sidebar_skips_logs_and_download_paths(
+    client, fake_servers, fake_stats, monkeypatch
+):
+    from mcontrol.infra import db
+
+    calls = {"n": 0}
+
+    def counting():
+        calls["n"] += 1
+        return list(fake_servers)
+
+    monkeypatch.setattr(db, "list_servers", counting)
+    monkeypatch.setattr(db, "get_server", lambda _n: None)
+
+    await client.get("/servers/atm10/logs", headers={"Accept": "text/html"})
+    await client.get(
+        "/servers/atm10/files/download",
+        headers={"Accept": "text/html"},
+        params={"path": "x"},
+    )
+    await client.get("/servers/atm10/rcon", headers={"Accept": "text/html"})
+    assert calls["n"] == 0

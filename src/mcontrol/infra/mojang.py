@@ -7,7 +7,7 @@ profile API and upserts into ``app_mcontrol.players``.
 Contract:
 
   - 200  → ``{"uuid": "<dashed>", "name": "<canonical-case>"}``
-  - 204  → ``None`` (no Minecraft account with that name)
+  - 204 / 404 → ``None`` (no Minecraft account with that name)
   - 5xx, network error, timeout → :class:`MojangError`
 
 Other status codes are treated as ``MojangError`` rather than silently
@@ -54,7 +54,7 @@ async def lookup_by_name(name: str) -> dict[str, Any] | None:
             except httpx.RequestError as e:
                 raise MojangError(f"network error looking up {name!r}: {e}") from e
 
-    if response.status_code == 204:
+    if response.status_code in (204, 404):
         return None
     if response.status_code == 200:
         body = response.json()

@@ -11,7 +11,7 @@
       <span class="t-eyebrow">Memory budget (GB)</span>
       <input type="number"
              name="memory_budget_gb"
-             min="2"
+             min="{{ memory_min_gb }}"
              value="{{ vars.memory_budget_gb if vars.memory_budget_gb is not none else '' }}"
              autofocus
              required>
@@ -37,6 +37,17 @@
              autocomplete="off"
              required>
       {% if errors.server_jar %}<small class="variables-form__error">{{ errors.server_jar }}</small>{% endif %}
+    </label>
+
+    <label>
+      <span class="t-eyebrow">Java version</span>
+      <select name="java_version" required>
+        {% for v in java_versions %}
+          <option value="{{ v }}"{% if (vars.java_version or default_java_version) == v %} selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+      <small class="t-muted">Minecraft 1.20.5–1.21.x need Java 21; 26.x needs Java 25; ≤1.20.4 works with 17</small>
+      {% if errors.java_version %}<small class="variables-form__error">{{ errors.java_version }}</small>{% endif %}
     </label>
 
     <label>

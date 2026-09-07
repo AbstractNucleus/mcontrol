@@ -8,6 +8,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- New-server form: Java version picker (17 / 21 / 25, default 21)
+- Start creates the container (`docker compose up`) when it is missing; Recreate / Apply compose on the detail page
+- After delete or trash purge, Home and Trash show a short confirmation toast
+
+### Changed
+
+- New servers get RCON enabled in `server.properties` (password generated once)
+- Memory budget minimum is 3 GB so the JVM is not started with `-Xmx0g`
+- Home "running" count uses live Docker stats, not a stale database flag
+- Deleted servers are renamed `.deleted-<name>-<ts>/` (not `.tombstone-`)
+- Image start command is `/app/.venv/bin/uvicorn` (no `uv run` at boot); compose project name is `mcontrol`
+
+### Fixed
+
+- RCON console: commands no longer drop the connection; two tabs can share one console; errors show in the pane; a stopped server retries instead of spamming stack traces
+- Start no longer sticks on "starting" when the panel is probing the wrong host
+- File rename then Save writes the new path; invalid folder names (e.g. `bad?`) return 400, not 500
+- Resources strip says "container not found" when the container is missing (not "daemon unreachable")
+- 404 pages keep the sidebar server list; missing `/static/*` files stay plain text
+- Memory bar width uses a CSS variable instead of a hardcoded inline width
+
+### Added
+
+
 - File browser: read-only tree view and file viewer on server detail page
 - File browser: CodeMirror editor with atomic save and mtime stale-write check
 - File browser: multi-file upload with drag-drop and confirm-overwrite modal
@@ -44,6 +68,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Live log stream via SSE
 - Claude-flavoured theme with tri-state dark / light / system toggle persisted to `localStorage`
 - GitHub Action for automated issue implementation via Claude Code
+- New-server form: Java version picker (17 / 21 / 25, default 21)
+- Start creates the container (`docker compose up`) when it is missing; Recreate / Apply compose on the detail page
+- After delete or trash purge, Home and Trash show a short confirmation toast
 
 ### Changed
 
@@ -53,6 +80,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - TLS termination moved to the upstream reverse proxy; in-repo Caddy service removed
 - Docker image references pinned to specific patch-level tags (no floating `:latest`)
 - aiodocker client is now lifespan-scoped (constructed once at startup, closed at shutdown) and injected into routes via `Depends(get_docker)`; per-call construction removed from ~10 sites
+- New servers get RCON enabled in `server.properties` (password generated once)
+- Memory budget minimum is 3 GB so the JVM is not started with `-Xmx0g`
+- Home "running" count uses live Docker stats, not a stale database flag
+- Deleted servers are renamed `.deleted-<name>-<ts>/` (not `.tombstone-`)
+- Image start command is `/app/.venv/bin/uvicorn` (no `uv run` at boot); compose project name is `mcontrol`
 
 ### Removed
 
@@ -69,3 +101,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Native `confirm()` replaced with HTMX modal on save-conflict Reload
 - Backend error detail surfaced in file-browser action responses
 - `/healthz` probe uses `docker.version()` (the `system.ping` method does not exist in aiodocker)
+- RCON console: commands no longer drop the connection; two tabs can share one console; errors show in the pane; a stopped server retries instead of spamming stack traces
+- Start no longer sticks on "starting" when the panel is probing the wrong host
+- File rename then Save writes the new path; invalid folder names (e.g. `bad?`) return 400, not 500
+- Resources strip says "container not found" when the container is missing (not "daemon unreachable")
+- 404 pages keep the sidebar server list; missing `/static/*` files stay plain text
+- Memory bar width uses a CSS variable instead of a hardcoded inline width

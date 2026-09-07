@@ -130,6 +130,10 @@ async def test_get_returns_form_prefilled_from_legacy_files(
     assert 'value="25571"' in body
     assert 'value="neoforge-21.1.86-server.jar"' in body
     assert 'value="-XX:+UseG1GC"' in body
+    assert 'name="java_version"' in body
+    assert 'value="17" selected' in body
+    assert "container must be recreated" in body
+    assert 'hx-post="/servers/atm10/lifecycle/recreate"' in body
     # Card explains what gets clobbered.
     assert "Dockerfile" in body
     assert "entrypoint.sh" in body
@@ -233,6 +237,7 @@ async def test_post_writes_scaffold_files_and_stamps_row(
                 "port": 25571,
                 "server_jar": "neoforge-21.1.86-server.jar",
                 "jvm_extra_args": "-XX:+UseG1GC",
+                "java_version": 21,
             },
         )
     ]
@@ -322,7 +327,7 @@ async def test_post_validation_returns_form_with_errors(
 
     assert response.status_code == 422
     body = response.text
-    assert "Minimum 2 GB" in body
+    assert "Minimum 3 GB" in body
     assert "Port must be between" in body
     assert "Required" in body
     # No DB writes on validation failure.
@@ -401,6 +406,40 @@ async def test_post_accepts_legacy_name_with_underscore(
     assert response.status_code == 200
     assert response.headers.get("HX-Redirect") == "/servers/kobra_kollektivet"
     assert fake_db["scaffolded_marks"] == ["kobra_kollektivet"]
+
+
+async def test_post_migrates_bound_dir_not_base_name(
+    app_client, fake_db, base_dir
+):
+    """A Bindings-repointed row must migrate the bound directory."""
+    server_dir = _legacy_layout(base_dir, name="repointed")
+    fake_db["rows"].append(
+        {
+            "name": "loading",
+            "container_name": None,
+            "dir": str(server_dir),
+            "state": "exited",
+            "scaffolded_at": None,
+            "variables": None,
+        }
+    )
+
+    response = await app_client.post(
+        "/servers/loading/migrate",
+        data={
+            "memory_budget_gb": "14",
+            "port": "25571",
+            "server_jar": "server.jar",
+            "jvm_extra_args": "",
+            "java_version": "21",
+        },
+    )
+
+    assert response.status_code == 200
+    compose = (server_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "image: eclipse-temurin:21-jre" in compose
+    assert not (base_dir / "loading").exists()
+    assert fake_db["scaffolded_marks"] == ["loading"]
 
 
 # ---- detail page wires the card shell -----------------------------

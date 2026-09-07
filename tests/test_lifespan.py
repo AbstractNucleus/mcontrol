@@ -113,3 +113,93 @@ async def test_lifespan_closes_docker_client_on_shutdown(
         pass
 
     fake_docker_factory.close.assert_awaited()
+
+
+async def test_lifespan_prunes_stale_networks_and_resolves_probe_host(
+    env, monkeypatch, tmp_path, fake_docker_factory
+):
+    monkeypatch.setenv("SERVER_BASE_PATH", str(tmp_path))
+
+    from mcontrol import main
+    from mcontrol.domain import discovery
+    from mcontrol.infra import docker_client, probe_host
+
+    pruned: list = []
+    resolved: list = []
+
+    async def fake_prune(docker):
+        pruned.append(docker)
+
+    async def fake_resolve(docker):
+        resolved.append(docker)
+        return "127.0.0.1"
+
+    async def _noop(_docker, _base_path):
+        return 0
+
+    monkeypatch.setattr(docker_client, "prune_stale_self_networks", fake_prune)
+    monkeypatch.setattr(probe_host, "resolve", fake_resolve)
+    monkeypatch.setattr(discovery, "run_discovery", _noop)
+
+    app = main.create_app()
+    async with app.router.lifespan_context(app):
+        pass
+
+    assert pruned == [fake_docker_factory]
+    assert resolved == [fake_docker_factory]
+
+
+async def test_lifespan_disconnects_refcount_networks_on_shutdown(
+    env, monkeypatch, tmp_path, fake_docker_factory
+):
+    monkeypatch.setenv("SERVER_BASE_PATH", str(tmp_path))
+
+    from mcontrol import main
+    from mcontrol.domain import discovery
+    from mcontrol.infra import docker_client
+
+    seen: list = []
+
+    async def fake_disc(docker):
+        seen.append(docker)
+
+    async def _noop(_docker, _base_path):
+        return 0
+
+    monkeypatch.setattr(docker_client, "disconnect_refcount_networks", fake_disc)
+    monkeypatch.setattr(discovery, "run_discovery", _noop)
+
+    app = main.create_app()
+    async with app.router.lifespan_context(app):
+        pass
+
+    assert seen == [fake_docker_factory]
+
+
+def test_healthz_access_filter_drops_healthz_lines():
+    import logging
+
+    from mcontrol.main import _HealthzAccessFilter
+
+    filt = _HealthzAccessFilter()
+    rec = logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg='%s - "%s %s HTTP/%s" %d',
+        args=("127.0.0.1", "GET", "/healthz", "1.1", 200),
+        exc_info=None,
+    )
+    assert filt.filter(rec) is False
+
+    rec2 = logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg='%s - "%s %s HTTP/%s" %d',
+        args=("127.0.0.1", "GET", "/", "1.1", 200),
+        exc_info=None,
+    )
+    assert filt.filter(rec2) is True

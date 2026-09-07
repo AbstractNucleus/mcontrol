@@ -13,6 +13,7 @@ Three units under test:
 import os
 import sys
 
+import aiodocker
 import pytest
 
 from mcontrol.infra import resources
@@ -99,8 +100,24 @@ class _FakeContainer:
 
 
 async def test_read_stats_returns_unreachable_when_container_missing(env):
+    """Generic get() failure (not a Docker 404) stays unreachable."""
     docker = _fake_docker(get_raises=True)
     assert await resources.read_container_stats(docker, "atm10") == {"status": "unreachable"}
+
+
+async def test_read_stats_returns_missing_on_docker_404(env):
+    class _Containers:
+        async def get(self, name):  # noqa: ARG002
+            raise aiodocker.DockerError(404, {"message": "No such container"})
+
+    class _Docker:
+        def __init__(self):
+            self.containers = _Containers()
+
+    assert await resources.read_container_stats(_Docker(), "atm10") == {
+        "status": "missing",
+        "container_state": "missing",
+    }
 
 
 async def test_read_stats_returns_not_running_when_state_is_stopped(env):
@@ -273,6 +290,22 @@ def test_read_disk_usage_cache_hit_avoids_walk(tmp_path, monkeypatch):
 
     assert resources.read_disk_usage(tmp_path) == 50
     assert walk_count["n"] == 0
+
+
+def test_read_disk_usage_ttl_refreshes_nested_changes(tmp_path, monkeypatch):
+    """Nested world-file writes do not touch the root mtime; TTL forces a re-walk."""
+    resources._disk_cache.clear()
+    world = tmp_path / "server" / "world"
+    world.mkdir(parents=True)
+    (world / "level.dat").write_bytes(b"x" * 10)
+
+    assert resources.read_disk_usage(tmp_path) == 10
+
+    (world / "region.mca").write_bytes(b"y" * 20)
+    assert resources.read_disk_usage(tmp_path) == 10
+
+    monkeypatch.setattr(resources, "_DISK_CACHE_TTL_S", 0)
+    assert resources.read_disk_usage(tmp_path) == 30
 
 
 def test_read_disk_usage_cache_invalidated_on_root_mtime_change(tmp_path):

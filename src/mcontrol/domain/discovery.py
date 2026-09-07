@@ -11,11 +11,15 @@ Designed to run once on app startup via FastAPI's lifespan context
 manager.
 """
 
+import logging
 from pathlib import Path
 
 import aiodocker
 
+from mcontrol.domain.server_variables_form import RESERVED_NAMES
 from mcontrol.infra import db, db_async, docker_client
+
+logger = logging.getLogger("mcontrol.discovery")
 
 
 async def run_discovery(docker: aiodocker.Docker, base_path: Path) -> int:
@@ -38,6 +42,13 @@ async def run_discovery(docker: aiodocker.Docker, base_path: Path) -> int:
         # resurrect on the next scan. Same filter handles .git,
         # lost+found, and any other operator-introduced non-server dir.
         if entry.name.startswith("."):
+            continue
+        if entry.name in RESERVED_NAMES:
+            logger.warning(
+                "skipping reserved directory name %r under %s",
+                entry.name,
+                base_path,
+            )
             continue
 
         existing = await db_async.get_server(entry.name)

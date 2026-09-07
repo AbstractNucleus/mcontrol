@@ -45,3 +45,25 @@ def test_settings_docker_host_override(monkeypatch):
     settings = Settings()
 
     assert settings.docker_host == "tcp://localhost:2375"
+
+
+def test_settings_probe_host_default_none(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
+    monkeypatch.setenv("SERVER_BASE_PATH", "/srv/minecraft")
+    monkeypatch.delenv("PROBE_HOST", raising=False)
+
+    settings = Settings()
+
+    assert settings.probe_host is None
+
+
+def test_settings_probe_host_override(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
+    monkeypatch.setenv("SERVER_BASE_PATH", "/srv/minecraft")
+    monkeypatch.setenv("PROBE_HOST", "172.18.0.1")
+
+    settings = Settings()
+
+    assert settings.probe_host == "172.18.0.1"

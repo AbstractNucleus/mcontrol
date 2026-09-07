@@ -5,10 +5,10 @@ Three pure-ish functions feeding the detail-page Resources card:
   - read_container_stats(docker, container_name) -> dict
         Tagged dict: {"status": "ok", cpu_percent, mem_used, mem_limit}
         on success; {"status": "not-running"} when the container exists
-        but isn't running; {"status": "unreachable"} when the daemon is
-        unreachable or the container is missing entirely. Three states
-        so the card caption can be specific without the route having to
-        call back into docker_client to disambiguate.
+        but isn't running; {"status": "missing"} when the daemon answers
+        404; {"status": "unreachable"} when the daemon itself cannot be
+        reached. Four states so the card caption can be specific without
+        the route having to call back into docker_client to disambiguate.
   - read_disk_usage(server_dir) -> int
         Recursive byte total of server_dir, walked with
         follow_symlinks=False so an operator-introduced symlink can't
@@ -25,6 +25,7 @@ container via db.container_name_for(row)).
 
 import asyncio
 import os
+import time
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,10 @@ async def read_container_stats(
 ) -> dict[str, Any]:
     try:
         container = await docker.containers.get(container_name)
+    except aiodocker.DockerError as exc:
+        if exc.status == 404:
+            return {"status": "missing", "container_state": "missing"}
+        return {"status": "unreachable"}
     except Exception:
         return {"status": "unreachable"}
 
@@ -104,8 +109,11 @@ def _mem_used(snapshot: dict[str, Any]) -> int:
     return usage
 
 
-# Cache: resolved path → (mtime, total_bytes). Invalidated when root mtime changes.
-_disk_cache: dict[Path, tuple[float, int]] = {}
+# Cache: resolved path → (mtime, cached_at_monotonic, total_bytes).
+# Invalidated when root mtime changes OR the TTL elapses (world files
+# under server/ never touch the root mtime).
+_DISK_CACHE_TTL_S = 60.0
+_disk_cache: dict[Path, tuple[float, float, int]] = {}
 
 
 def read_disk_usage(server_dir: Path) -> int:
@@ -116,11 +124,13 @@ def read_disk_usage(server_dir: Path) -> int:
     link-inode bytes, and a symlink to a directory is not recursed
     into. Missing root returns 0.
 
-    Result is cached by (resolved path, root mtime). A cache hit skips
-    the full-tree walk; the cache entry is replaced when the root mtime
-    advances (e.g. a file was added or removed directly under the root).
+    Result is cached by (resolved path, root mtime) plus a TTL. A cache
+    hit skips the full-tree walk; the entry is replaced when the root
+    mtime advances or the TTL elapses (nested world-file writes do not
+    touch the server dir's own mtime).
     """
     root = Path(server_dir).resolve()
+    now = time.monotonic()
 
     try:
         mtime = root.stat().st_mtime
@@ -129,8 +139,12 @@ def read_disk_usage(server_dir: Path) -> int:
 
     if mtime is not None:
         cached = _disk_cache.get(root)
-        if cached is not None and cached[0] == mtime:
-            return cached[1]
+        if (
+            cached is not None
+            and cached[0] == mtime
+            and (now - cached[1]) < _DISK_CACHE_TTL_S
+        ):
+            return cached[2]
 
     total = 0
     stack: list[Path] = [root]
@@ -156,7 +170,7 @@ def read_disk_usage(server_dir: Path) -> int:
                     continue
 
     if mtime is not None:
-        _disk_cache[root] = (mtime, total)
+        _disk_cache[root] = (mtime, now, total)
     return total
 
 

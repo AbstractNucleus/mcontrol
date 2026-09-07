@@ -74,7 +74,11 @@ async def home(
     mem_limit = sum(r["mem_limit"] for r in rows)
     summary = {
         "total": len(rows),
-        "running": sum(1 for r in rows if r.get("state") == "running"),
+        "running": sum(
+            1
+            for stats in stats_results
+            if isinstance(stats, dict) and stats.get("status") == "ok"
+        ),
         "memory": (
             f"{resources.format_bytes(sum(r['mem_used'] for r in rows))}"
             f" / {resources.format_bytes(mem_limit)}"

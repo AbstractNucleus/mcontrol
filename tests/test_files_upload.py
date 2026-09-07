@@ -1,4 +1,5 @@
 import os
+import stat
 import sys
 from pathlib import Path
 
@@ -283,3 +284,110 @@ async def test_upload_conflict_lists_only_conflicting_files(
     # Non-conflicting filenames must not be advertised in the modal.
     assert "b.txt" not in body
     assert "c.txt" not in body
+
+
+async def test_upload_new_file_mode_is_0644(
+    client, fake_server, server_dir: Path
+) -> None:
+    """F-2: a newly uploaded file is 0644 (mode bits are POSIX-only)."""
+    response = await client.post(
+        "/servers/atm10/files/upload",
+        data={"path": ""},
+        files=[("files", ("note.txt", b"hello"))],
+    )
+
+    assert response.status_code == 200
+    target = server_dir / "note.txt"
+    assert target.read_bytes() == b"hello"
+    if sys.platform != "win32":
+        assert stat.S_IMODE(target.stat().st_mode) == 0o644
+
+
+async def test_upload_force_preserves_existing_mode(
+    client, fake_server, server_dir: Path
+) -> None:
+    """F-2: overwriting an existing file keeps its mode."""
+    target = server_dir / "existing.txt"
+    target.write_bytes(b"original")
+    os.chmod(target, 0o664)
+
+    response = await client.post(
+        "/servers/atm10/files/upload",
+        data={"path": "", "force": "true"},
+        files=[("files", ("existing.txt", b"replaced"))],
+    )
+
+    assert response.status_code == 200
+    assert target.read_bytes() == b"replaced"
+    if sys.platform != "win32":
+        assert stat.S_IMODE(target.stat().st_mode) == 0o664
+
+
+async def test_upload_413_when_content_length_exceeds_cap(
+    client, fake_server, server_dir: Path, monkeypatch
+) -> None:
+    """F-21: Content-Length above the cap 413s as JSON before form parsing."""
+    from starlette.requests import Request
+
+    from mcontrol.routes.files import write as write_mod
+
+    monkeypatch.setattr(write_mod, "MAX_UPLOAD_BYTES", 64)
+
+    def boom(self, *args, **kwargs):
+        raise AssertionError("request.form() must not run when over the cap")
+
+    monkeypatch.setattr(Request, "form", boom)
+
+    response = await client.post(
+        "/servers/atm10/files/upload",
+        data={"path": ""},
+        files=[("files", ("note.txt", b"hello world"))],
+    )
+
+    assert response.status_code == 413
+    payload = response.json()
+    assert "detail" in payload
+    assert "limit" in payload["detail"]
+    assert not (server_dir / "note.txt").exists()
+
+
+async def test_upload_below_cap_uses_normal_path(
+    client, fake_server, server_dir: Path, monkeypatch
+) -> None:
+    """F-21: a Content-Length under the cap follows the normal upload path."""
+    from mcontrol.routes.files import write as write_mod
+
+    monkeypatch.setattr(write_mod, "MAX_UPLOAD_BYTES", 1024 * 1024)
+
+    response = await client.post(
+        "/servers/atm10/files/upload",
+        data={"path": ""},
+        files=[("files", ("note.txt", b"hello"))],
+    )
+
+    assert response.status_code == 200
+    assert (server_dir / "note.txt").read_bytes() == b"hello"
+
+
+async def test_upload_invalid_content_length_is_ignored(
+    client, fake_server, server_dir: Path, monkeypatch
+) -> None:
+    """F-21: a missing/non-numeric Content-Length must not 413; parse the body."""
+    from starlette.datastructures import Headers
+    from starlette.requests import Request
+
+    def _headers(self) -> Headers:
+        mapping = {k.decode(): v.decode() for k, v in self.scope["headers"]}
+        mapping["content-length"] = "not-a-number"
+        return Headers(mapping)
+
+    monkeypatch.setattr(Request, "headers", property(_headers))
+
+    response = await client.post(
+        "/servers/atm10/files/upload",
+        data={"path": ""},
+        files=[("files", ("note.txt", b"hello"))],
+    )
+
+    assert response.status_code == 200
+    assert (server_dir / "note.txt").read_bytes() == b"hello"

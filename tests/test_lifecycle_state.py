@@ -5,7 +5,7 @@ import pytest
 from mcontrol.domain import lifecycle_state
 
 
-@pytest.mark.parametrize("state", ["created", "exited", "dead"])
+@pytest.mark.parametrize("state", ["created", "exited", "dead", "missing"])
 def test_stopped_states_accent_start_disable_others(state):
     view = lifecycle_state.view(state)
     assert view["start_disabled"] is False
@@ -50,3 +50,17 @@ def test_unrecognised_state_enables_all_no_accent(state):
     assert view["stop_disabled"] is False
     assert view["restart_disabled"] is False
     assert view["accent"] is None
+
+
+def test_compose_label_for_created_and_missing():
+    assert lifecycle_state.view("created")["compose_label"] == "Create container"
+    assert lifecycle_state.view("missing")["compose_label"] == "Create container"
+
+
+def test_compose_label_for_exited():
+    assert lifecycle_state.view("exited")["compose_label"] == "Apply compose"
+
+
+@pytest.mark.parametrize("state", ["running", "starting", "dead", None])
+def test_compose_label_absent_for_other_states(state):
+    assert lifecycle_state.view(state)["compose_label"] is None

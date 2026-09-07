@@ -63,11 +63,11 @@
     const last = items[items.length - 1];
     const active = document.activeElement;
     if (evt.shiftKey) {
-      if (active === first || !root.contains(active)) {
+      if (active === first || active === root || !root.contains(active)) {
         evt.preventDefault();
         last.focus();
       }
-    } else if (active === last) {
+    } else if (active === last || active === root) {
       evt.preventDefault();
       first.focus();
     }
@@ -121,6 +121,23 @@
     focusFirst(root);
   }
 
+  document.addEventListener("keydown", (evt) => {
+    if (evt.key !== "Escape") return;
+    const root = document.querySelector("[data-modal-root]");
+    if (!root) return;
+    evt.preventDefault();
+    closeModal(root);
+  });
+
+  document.body.addEventListener("htmx:afterRequest", (evt) => {
+    const root = document.querySelector("[data-modal-root]");
+    if (!root) return;
+    const elt = evt.detail && evt.detail.elt;
+    if (elt && root.contains(elt)) {
+      if (!root.contains(document.activeElement)) focusFirst(root);
+    }
+  });
+
   // Capture the element that opened a modal at request-issue time, before
   // htmx fires the request. Works for any trigger whose target points at
   // a known modal slot.
@@ -160,6 +177,8 @@
     const item = evt.target.closest && evt.target.closest(".detail-menu__item");
     if (!item) return;
     const menu = item.closest("details.detail-menu");
-    if (menu) menu.open = false;
+    if (!menu) return;
+    if (menu.hasAttribute("data-panels-menu")) return;
+    menu.open = false;
   });
 })();

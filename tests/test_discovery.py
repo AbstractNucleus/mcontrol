@@ -163,6 +163,27 @@ async def test_run_discovery_skips_dot_prefixed_directories(
     assert seen == ["atm10"]
 
 
+async def test_run_discovery_skips_reserved_name_new(
+    tmp_path, db_calls, monkeypatch, caplog
+):
+    import logging
+
+    _make_dirs(tmp_path, ["atm10", "new"])
+    monkeypatch.setattr(
+        discovery.docker_client,
+        "container_states_by_name",
+        AsyncMock(return_value={}),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="mcontrol.discovery"):
+        count = await discovery.run_discovery(object(), tmp_path)
+
+    assert count == 1
+    seen = [c[1]["name"] for c in db_calls["calls"]]
+    assert seen == ["atm10"]
+    assert "new" in caplog.text
+
+
 async def test_run_discovery_state_lookup_uses_container_name_override(
     tmp_path, db_calls, monkeypatch
 ):

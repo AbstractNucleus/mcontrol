@@ -46,6 +46,8 @@ async def test_lifecycle_js_is_served(client):
     assert "lifecycle-status" in body
     assert "lifecycle-buttons" in body
     assert "aria-busy" in body
+    assert "mc:state-changed" in body
+    assert "evt.target" in body
 
 
 async def test_modals_js_is_served(client):
@@ -63,3 +65,5 @@ async def test_modals_js_is_served(client):
     assert "data-modal-close" in body
     assert "player-modal" in body
     assert "trash-modal" in body
+    assert "data-panels-menu" in body
+    assert 'evt.key !== "Escape"' in body

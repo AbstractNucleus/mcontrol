@@ -1,8 +1,9 @@
 services:
   {{ name }}:
-    image: eclipse-temurin:21-jre
+    image: eclipse-temurin:{{ java_version }}-jre
     container_name: {{ name }}
     restart: unless-stopped
+    stop_grace_period: 90s
     mem_limit: {{ memory_budget_gb }}g
     ports:
       - "{{ port }}:25565"

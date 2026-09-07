@@ -93,6 +93,7 @@ async def test_ok_render_shows_cpu_memory_disk(client, fake_db, fake_stats, tmp_
     assert "12.4 %" in body                    # CPU
     assert "8.1 GiB / 12.0 GiB" in body         # memory used / limit
     assert "(67 %)" in body                     # memory percent. 8.097/12 ≈ 67.48 → 67
+    assert 'style="--fill: 67.5%"' in body
     assert "4.0 KiB" in body                    # disk
     assert "every 5 s" in body                  # ok caption
 
@@ -106,7 +107,8 @@ async def test_ok_render_includes_polling_attributes_for_continued_swap(
 
     assert 'id="server-resources"' in body
     assert 'hx-get="/servers/atm10/resources"' in body
-    assert 'hx-trigger="load, every 5s"' in body
+    assert 'hx-trigger="every 5s"' in body
+    assert "load" not in body.split("hx-trigger")[1].split(">")[0]
     assert 'hx-swap="outerHTML"' in body
 
 
@@ -346,3 +348,29 @@ async def test_unreachable_daemon_never_reconciles(
     assert response.status_code == 200
     assert "hx-swap-oob" not in response.text
     assert capture_state_writes == []
+
+
+async def test_missing_uses_distinct_caption(
+    client, fake_db, fake_stats, capture_state_writes, tmp_path
+):
+    fake_db["servers"]["atm10"] = _row(tmp_path)
+    fake_stats["override"] = {"status": "missing", "container_state": "missing"}
+
+    body = (await client.get("/servers/atm10/resources")).text
+
+    assert "container not found" in body
+    assert "Docker daemon unreachable" not in body
+
+
+async def test_missing_container_heals_pill_to_missing(
+    client, fake_db, fake_stats, capture_state_writes, tmp_path
+):
+    row = _row(tmp_path)
+    fake_db["servers"]["atm10"] = row
+    fake_stats["override"] = {"status": "missing", "container_state": "missing"}
+
+    response = await client.get("/servers/atm10/resources")
+
+    assert "state-pill--created" in response.text
+    assert ">missing<" in response.text
+    assert capture_state_writes == [{"name": "atm10", "state": "missing"}]
