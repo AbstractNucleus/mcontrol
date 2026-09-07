@@ -18,7 +18,9 @@ The RCON password is read from `<dir>/server/server.properties`. If
 stream yields a friendly info message and ends. lifecycle, logs, and
 the rest of the panel stay working when RCON is disabled.
 
-If no console is connected for a server, POST returns 409.
+If no console is connected yet, POST waits briefly for an in-progress
+SSE open. If none is coming, it falls back to a one-shot RCON client
+so Send still runs the command.
 """
 
 import asyncio
@@ -44,12 +46,20 @@ _log = logging.getLogger(__name__)
 _RCON_PORT = 25575
 _KEEPALIVE_S = 2.0
 _RETRY_INTERVAL_S = 5.0
+_SSE_OPEN_WAIT_S = 5.0
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
 # Server name → live RconConnection shared by that server's subscribers.
 _active_connections: dict[str, rcon._RconConnection] = {}
 # Server name → one output queue per open SSE stream.
 _subscribers: defaultdict[str, set[asyncio.Queue]] = defaultdict(set)
 # Server name → Lock around opening/closing the shared connection.
 _connection_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+# Server name → SSE streams still attaching / waiting on the first subscribe.
+_connecting: defaultdict[str, int] = defaultdict(int)
 # Server name → Lock serialising commands: concurrent submits on one
 # RCON connection interleave protocol packets and desync it.
 _submit_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -71,6 +81,15 @@ _AUTH_FAILED_MSG = (
 # cleanly instead of auto-reconnecting and replaying the error forever.
 _CLOSED = b"event: closed\ndata: \n\n"
 _KEEPALIVE = b": keepalive\n\n"
+# Named event: the command form waits for this, not EventSource.onopen
+# (headers arrive before docker-attach + RCON auth finish).
+_READY = b"event: ready\ndata: \n\n"
+
+
+def _release_connecting(name: str) -> None:
+    _connecting[name] -= 1
+    if _connecting[name] <= 0:
+        _connecting.pop(name, None)
 
 
 def _payload(line: str) -> str:
@@ -183,7 +202,11 @@ async def _wait_for_retry(request: Request) -> bool:
 
 
 async def _console(
-    request: Request, name: str, container_name: str, props_path: Path
+    request: Request,
+    name: str,
+    container_name: str,
+    props_path: Path,
+    on_open=None,
 ) -> AsyncIterator[bytes]:
     unreachable = False
     while True:
@@ -194,6 +217,9 @@ async def _console(
             return
         try:
             queue = await _subscribe(name, container_name, password)
+            if on_open is not None:
+                on_open()
+                on_open = None
         except rcon.AuthenticationError:
             yield _message(_AUTH_FAILED_MSG)
             yield _CLOSED
@@ -216,7 +242,7 @@ async def _console(
             return
 
         unreachable = False
-        yield _message("[info] rcon connected")
+        yield _message("[info] rcon connected") + _READY
         lost = False
         try:
             while not lost:
@@ -250,24 +276,47 @@ async def _stream(
         yield _CLOSED
         return
 
+    # Comment-frame first so nginx / EventSource see a body before docker
+    # attach + RCON auth (those can take seconds on a fresh container).
+    opened = False
+    network_name = None
+
+    def mark_open() -> None:
+        nonlocal opened
+        if opened:
+            return
+        opened = True
+        _release_connecting(name)
+
+    _connecting[name] += 1
     try:
-        network_name = await docker_client.find_network_name(docker, container_name)
-        if network_name is None:
-            yield _message("[error] no docker network found for container")
+        yield _KEEPALIVE
+        try:
+            network_name = await docker_client.find_network_name(docker, container_name)
+            if network_name is None:
+                yield _message("[error] no docker network found for container")
+                yield _CLOSED
+                return
+            await docker_client.attach_self_to_network(docker, network_name)
+        except aiodocker.DockerError as exc:
+            yield _message(f"[error] docker: {exc.message}")
             yield _CLOSED
             return
-        await docker_client.attach_self_to_network(docker, network_name)
-    except aiodocker.DockerError as exc:
-        yield _message(f"[error] docker: {exc.message}")
-        yield _CLOSED
-        return
 
-    try:
-        async with aclosing(_console(request, name, container_name, props_path)) as chunks:
-            async for chunk in chunks:
-                yield chunk
+        try:
+            async with aclosing(
+                _console(
+                    request, name, container_name, props_path, on_open=mark_open
+                )
+            ) as chunks:
+                async for chunk in chunks:
+                    yield chunk
+        finally:
+            if network_name is not None:
+                await _shielded(_detach_quietly(docker, network_name))
     finally:
-        await _shielded(_detach_quietly(docker, network_name))
+        if not opened:
+            _release_connecting(name)
 
 
 async def run_on_active(server_name: str, command: str) -> str | None:
@@ -296,9 +345,27 @@ async def run_on_active(server_name: str, command: str) -> str | None:
         return response
 
 
+async def _wait_for_console(server_name: str, command: str) -> str | None:
+    """Run on the shared socket, waiting if the SSE stream is still opening."""
+    result = await run_on_active(server_name, command)
+    if result is not None or not console_owns_rcon(server_name):
+        return result
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _SSE_OPEN_WAIT_S
+    while True:
+        result = await run_on_active(server_name, command)
+        if result is not None:
+            return result
+        if not console_owns_rcon(server_name):
+            return None
+        if loop.time() >= deadline:
+            return None
+        await asyncio.sleep(0.05)
+
+
 def console_owns_rcon(server_name: str) -> bool:
-    """True while a detail-page SSE is opening or closing the shared connection."""
-    return _connection_locks[server_name].locked()
+    """True while a detail-page SSE is attaching, opening, or closing RCON."""
+    return _connection_locks[server_name].locked() or _connecting[server_name] > 0
 
 
 @router.get("/servers/{name}/rcon")
@@ -317,13 +384,26 @@ async def stream(
             Path(server["dir"]),
         ),
         media_type="text/event-stream",
+        headers=_SSE_HEADERS,
     )
 
 
 @router.post("/servers/{name}/rcon", response_class=HTMLResponse)
-async def submit(name: str, command: str = Form(...)) -> HTMLResponse:
+async def submit(
+    name: str,
+    command: str = Form(...),
+    server: dict = Depends(get_server_or_404),
+    docker: aiodocker.Docker = Depends(get_docker),
+) -> HTMLResponse:
     try:
-        response = await run_on_active(name, command)
+        response = await _wait_for_console(name, command)
+        if response is None and console_owns_rcon(name):
+            raise HTTPException(
+                status_code=409,
+                detail="RCON console is still connecting; try again in a moment",
+            )
+        if response is None:
+            response = await server_rcon.run_command(docker, server, command)
     except TimeoutError:
         raise HTTPException(
             status_code=504, detail="RCON command timed out"
@@ -337,6 +417,6 @@ async def submit(name: str, command: str = Form(...)) -> HTMLResponse:
         raise HTTPException(
             status_code=502, detail=f"RCON protocol error: {exc}"
         ) from None
-    if response is None:
-        raise HTTPException(status_code=409, detail="RCON console is not connected")
+    except server_rcon.RconUnavailable as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
     return HTMLResponse("", status_code=204)

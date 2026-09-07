@@ -12,9 +12,11 @@ from mcontrol.routes import console
 def _clear_console_state():
     console._active_connections.clear()
     console._subscribers.clear()
+    console._connecting.clear()
     yield
     console._active_connections.clear()
     console._subscribers.clear()
+    console._connecting.clear()
 
 
 @pytest.fixture
@@ -113,6 +115,14 @@ async def _collect(gen) -> bytes:
     return b"".join(chunks)
 
 
+async def _next_payload(gen) -> bytes:
+    """Skip SSE comment keepalives so assertions land on real events."""
+    while True:
+        chunk = await gen.__anext__()
+        if chunk != console._KEEPALIVE:
+            return chunk
+
+
 async def test_rcon_get_returns_404_for_unknown_server(
     client, fake_get_server, fake_docker_network
 ):
@@ -134,6 +144,7 @@ async def test_stream_attaches_then_detaches_network(
     )
 
     assert b"rcon connected" in body
+    assert b"event: ready" in body
     assert fake_docker_network["attaches"] == ["atm10_default"]
     assert fake_docker_network["detaches"] == ["atm10_default"]
     assert fake_rcon["password"] == "hunter2"
@@ -141,6 +152,7 @@ async def test_stream_attaches_then_detaches_network(
     assert fake_rcon["conn"].closed
     assert "atm10" not in console._active_connections
     assert not console._subscribers["atm10"]
+    assert "atm10" not in console._connecting
 
 
 async def test_stream_yields_friendly_message_when_rcon_disabled(
@@ -225,12 +237,13 @@ async def test_stream_retries_until_rcon_is_reachable(
 
     gen = console._stream(request, object(), "atm10", "atm10", tmp_path)
     async with asyncio.timeout(5):
-        first = await gen.__anext__()
+        first = await _next_payload(gen)
         assert b"RCON unreachable (connection refused" in first
         second = await gen.__anext__()
         assert second == console._KEEPALIVE  # second failed attempt stays quiet
-        third = await gen.__anext__()
+        third = await _next_payload(gen)
         assert b"rcon connected" in third
+        assert b"event: ready" in third
         request.disconnected = True
         with pytest.raises(StopAsyncIteration):
             await gen.__anext__()
@@ -250,15 +263,15 @@ async def test_stream_shares_one_connection_between_subscribers(
     gen1 = console._stream(_Request(), object(), "atm10", "atm10", tmp_path)
     gen2 = console._stream(_Request(), object(), "atm10", "atm10", tmp_path)
     async with asyncio.timeout(5):
-        assert b"rcon connected" in await gen1.__anext__()
-        assert b"rcon connected" in await gen2.__anext__()
+        assert b"rcon connected" in await _next_payload(gen1)
+        assert b"rcon connected" in await _next_payload(gen2)
         assert fake_rcon["connects"] == 1
         assert len(console._subscribers["atm10"]) == 2
 
         assert await console.run_on_active("atm10", "list") == "ack: list"
         for gen in (gen1, gen2):
-            assert b"&gt; list" in await gen.__anext__()
-            assert b"ack: list" in await gen.__anext__()
+            assert b"&gt; list" in await _next_payload(gen)
+            assert b"ack: list" in await _next_payload(gen)
 
         await gen1.aclose()
         assert not fake_rcon["conn"].closed
@@ -281,7 +294,7 @@ async def test_dead_connection_is_dropped_and_streams_reconnect(
 
     gen = console._stream(request, object(), "atm10", "atm10", tmp_path)
     async with asyncio.timeout(5):
-        assert b"rcon connected" in await gen.__anext__()
+        assert b"rcon connected" in await _next_payload(gen)
         first_conn = fake_rcon["conn"]
         first_conn.fail_with = rcon.RconClosedError("connection closed by peer")
 
@@ -290,9 +303,9 @@ async def test_dead_connection_is_dropped_and_streams_reconnect(
         assert first_conn.closed
         assert "atm10" not in console._active_connections
 
-        assert b"&gt; list" in await gen.__anext__()
-        assert b"rcon connection lost; reconnecting" in await gen.__anext__()
-        assert b"rcon connected" in await gen.__anext__()
+        assert b"&gt; list" in await _next_payload(gen)
+        assert b"rcon connection lost; reconnecting" in await _next_payload(gen)
+        assert b"rcon connected" in await _next_payload(gen)
         assert fake_rcon["connects"] == 2
         assert console._active_connections["atm10"] is fake_rcon["conn"]
         assert await console.run_on_active("atm10", "seed") == "ack: seed"
@@ -327,7 +340,23 @@ async def test_rcon_post_finds_active_session_and_runs_command(
     assert queued == ["> list", "ack: list"]
 
 
-async def test_rcon_post_returns_409_when_no_open_session(
+async def test_rcon_post_oneshot_when_no_console(
+    client, fake_get_server, fake_docker_network, fake_rcon, tmp_path
+):
+    """Send with no SSE subscriber still runs the command (one-shot client)."""
+    _write_props(tmp_path, enable_rcon=True, password="hunter2")
+    fake_get_server["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": str(tmp_path),
+    }
+    response = await client.post("/servers/atm10/rcon", data={"command": "list"})
+    assert response.status_code == 204
+    assert fake_rcon["connects"] == 1
+    assert fake_rcon["conn"].commands == ["list"]
+    assert fake_rcon["conn"].closed
+    assert "atm10" not in console._active_connections
+
+
+async def test_rcon_post_returns_409_when_rcon_unavailable(
     client, fake_get_server, fake_docker_network, fake_rcon, tmp_path
 ):
     fake_get_server["atm10"] = {
@@ -335,7 +364,38 @@ async def test_rcon_post_returns_409_when_no_open_session(
     }
     response = await client.post("/servers/atm10/rcon", data={"command": "list"})
     assert response.status_code == 409
-    assert "not connected" in response.json()["detail"]
+    assert "not enabled" in response.json()["detail"]
+
+
+async def test_rcon_post_waits_for_in_progress_sse(
+    client, fake_get_server, fake_docker_network, fake_rcon, tmp_path
+):
+    """Page-load race: POST while SSE is still attaching must not 409."""
+    fake_get_server["atm10"] = {
+        "name": "atm10", "container_name": None, "dir": str(tmp_path),
+    }
+    _write_props(tmp_path, enable_rcon=True, password="hunter2")
+    console._connecting["atm10"] = 1
+    fake_conn = _FakeRconConnection()
+
+    async def register_later():
+        await asyncio.sleep(0.05)
+        console._active_connections["atm10"] = fake_conn
+        console._subscribers["atm10"].add(asyncio.Queue())
+        console._connecting.pop("atm10", None)
+
+    asyncio.create_task(register_later())
+    response = await client.post("/servers/atm10/rcon", data={"command": "list"})
+
+    assert response.status_code == 204
+    assert fake_conn.commands == ["list"]
+    assert fake_rcon["connects"] == 0
+
+
+def test_rcon_sse_headers_disable_proxy_buffering():
+    assert console._SSE_HEADERS["Cache-Control"] == "no-cache"
+    assert console._SSE_HEADERS["X-Accel-Buffering"] == "no"
+    assert console._SSE_HEADERS["Connection"] == "keep-alive"
 
 
 async def test_rcon_post_returns_409_and_tells_streams_when_socket_died(

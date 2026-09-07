@@ -85,4 +85,9 @@ async def stream(
     return StreamingResponse(
         _sse(docker, container_name, skip_tail=skip_tail),
         media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )

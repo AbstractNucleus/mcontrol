@@ -68,13 +68,18 @@
     if (text) text.textContent = label;
   }
 
+  // Logs and RCON share #console-output. The pane status is RCON (Send
+  // needs the socket); logs opening must not flip it to "live" early.
   document.body.addEventListener("htmx:sseOpen", function (evt) {
+    if (evt.target && evt.target.getAttribute("data-rcon-src")) return;
     setStatus(evt.target, "live", "live");
   });
   document.body.addEventListener("htmx:sseError", function (evt) {
+    if (evt.target && evt.target.getAttribute("data-rcon-src")) return;
     setStatus(evt.target, "reconnecting", "reconnecting…");
   });
   document.body.addEventListener("htmx:sseClose", function (evt) {
+    if (evt.target && evt.target.getAttribute("data-rcon-src")) return;
     setStatus(evt.target, "closed", "stream ended");
   });
 
@@ -85,14 +90,32 @@
   // also what registers the server's RCON connection, so POSTed commands
   // resolve against it. `closed` is the endpoint's terminal event (RCON
   // disabled / gone) — shut the source instead of auto-reconnecting.
+  // `ready` fires after auth; EventSource.onopen is only response headers
+  // and is too early to POST.
   var consoleOut = document.getElementById("console-output");
   var rconSrc = consoleOut && consoleOut.getAttribute("data-rcon-src");
+  var rconReady = false;
+
+  function markRconReady(ready) {
+    rconReady = !!ready;
+    if (ready) setStatus(consoleOut, "live", "live");
+  }
+
   if (consoleOut && rconSrc && typeof EventSource !== "undefined") {
     var rcon = new EventSource(rconSrc);
     rcon.onmessage = function (evt) {
       consoleOut.insertAdjacentHTML("beforeend", evt.data);
     };
-    rcon.addEventListener("closed", function () { rcon.close(); });
+    rcon.addEventListener("ready", function () { markRconReady(true); });
+    rcon.addEventListener("closed", function () {
+      markRconReady(false);
+      rcon.close();
+      setStatus(consoleOut, "closed", "stream ended");
+    });
+    rcon.onerror = function () {
+      markRconReady(false);
+      setStatus(consoleOut, "reconnecting", "reconnecting…");
+    };
   }
 
   function appendErrorLine(text) {
@@ -137,18 +160,52 @@
     try { sessionStorage.setItem(histKey, JSON.stringify(h)); } catch (_) {}
   }
 
+  var holdTimer = null;
+  var forceSend = false;
+  var retried409 = false;
+
+  form.addEventListener("htmx:beforeRequest", function (evt) {
+    if (evt.detail.elt !== form) return;
+    if (rconReady || forceSend) {
+      forceSend = false;
+      return;
+    }
+    evt.preventDefault();
+    if (holdTimer) return;
+    var start = Date.now();
+    holdTimer = window.setInterval(function () {
+      if (rconReady || Date.now() - start > 5000) {
+        window.clearInterval(holdTimer);
+        holdTimer = null;
+        if (!rconReady) forceSend = true;
+        if (window.htmx) window.htmx.trigger(form, "submit");
+      }
+    }, 50);
+  });
+
   form.addEventListener("htmx:afterRequest", function (evt) {
     if (evt.detail.elt !== form) return;
     if (evt.detail.xhr && evt.detail.xhr.status === 204) {
+      retried409 = false;
       if (input && input.value) pushHistory(input.value);
       form.reset();
       histIndex = -1;
       if (input) input.focus();
       return;
     }
+    var status = evt.detail.xhr && evt.detail.xhr.status;
+    var detail = describeFailure(evt.detail.xhr);
+    if (status === 409 && !retried409 && /not connected|still connecting/i.test(detail)) {
+      retried409 = true;
+      window.setTimeout(function () {
+        if (window.htmx) window.htmx.trigger(form, "submit");
+      }, 400);
+      return;
+    }
+    retried409 = false;
     // Rejected commands (409 no console, 504 timeout, …) have hx-swap="none",
     // so without this the pane would just sit there.
-    appendErrorLine(describeFailure(evt.detail.xhr));
+    appendErrorLine(detail);
   });
 
   if (!input) return;

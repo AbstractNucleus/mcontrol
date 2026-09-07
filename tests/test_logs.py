@@ -33,6 +33,8 @@ async def _stream_text(client, url, headers=None):
     async with client.stream("GET", url, headers=headers or {}) as response:
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/event-stream")
+        assert response.headers["cache-control"] == "no-cache"
+        assert response.headers["x-accel-buffering"] == "no"
         body = b""
         async for chunk in response.aiter_bytes():
             body += chunk

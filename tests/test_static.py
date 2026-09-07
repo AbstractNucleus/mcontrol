@@ -67,3 +67,17 @@ async def test_modals_js_is_served(client):
     assert "trash-modal" in body
     assert "data-panels-menu" in body
     assert 'evt.key !== "Escape"' in body
+
+
+async def test_streams_js_waits_for_rcon_ready_before_send(client):
+    """Send is gated on the RCON `ready` event, not EventSource.onopen, and
+    logs SSE must not mark the shared console pane live."""
+    response = await client.get("/static/streams.js")
+    assert response.status_code == 200
+    body = response.text
+    assert 'addEventListener("ready"' in body
+    assert "htmx:beforeRequest" in body
+    assert "rconReady" in body
+    assert "still connecting" in body
+    assert 'getAttribute("data-rcon-src")' in body
+    assert "EventSource.onopen is only response headers" in body
