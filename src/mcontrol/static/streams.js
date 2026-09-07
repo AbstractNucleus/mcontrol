@@ -92,31 +92,18 @@
   // disabled / gone) — shut the source instead of auto-reconnecting.
   // `ready` fires after auth; EventSource.onopen is only response headers
   // and is too early to POST.
+  // Default EventSource reconnect is ~3s with no backoff; each retry
+  // attach/detach/RCON-connects. Close + backoff, and if `ready` never
+  // arrives (keepalive-only hang) surface an error instead of
+  // "connecting…" forever.
   var consoleOut = document.getElementById("console-output");
   var rconSrc = consoleOut && consoleOut.getAttribute("data-rcon-src");
   var rconReady = false;
-
-  function markRconReady(ready) {
-    rconReady = !!ready;
-    if (ready) setStatus(consoleOut, "live", "live");
-  }
-
-  if (consoleOut && rconSrc && typeof EventSource !== "undefined") {
-    var rcon = new EventSource(rconSrc);
-    rcon.onmessage = function (evt) {
-      consoleOut.insertAdjacentHTML("beforeend", evt.data);
-    };
-    rcon.addEventListener("ready", function () { markRconReady(true); });
-    rcon.addEventListener("closed", function () {
-      markRconReady(false);
-      rcon.close();
-      setStatus(consoleOut, "closed", "stream ended");
-    });
-    rcon.onerror = function () {
-      markRconReady(false);
-      setStatus(consoleOut, "reconnecting", "reconnecting…");
-    };
-  }
+  var rconSource = null;
+  var rconTimer = null;
+  var rconRetry = 0;
+  var RCON_READY_MS = 12000;
+  var RCON_RETRY_MAX_MS = 15000;
 
   function appendErrorLine(text) {
     if (!consoleOut) return;
@@ -125,6 +112,75 @@
     span.textContent = "[error] " + text;
     consoleOut.appendChild(span);
     consoleOut.appendChild(document.createTextNode("\n"));
+  }
+
+  function markRconReady(ready) {
+    rconReady = !!ready;
+    if (ready) setStatus(consoleOut, "live", "live");
+  }
+
+  function clearRconTimer() {
+    if (rconTimer) {
+      window.clearTimeout(rconTimer);
+      rconTimer = null;
+    }
+  }
+
+  function scheduleRconReconnect() {
+    var wait = Math.min(RCON_RETRY_MAX_MS, 1000 * Math.pow(2, rconRetry));
+    rconRetry += 1;
+    window.setTimeout(openRcon, wait);
+  }
+
+  function openRcon() {
+    if (!consoleOut || !rconSrc || typeof EventSource === "undefined") return;
+    if (rconSource) {
+      rconSource.close();
+      rconSource = null;
+    }
+    clearRconTimer();
+    if (!rconReady) setStatus(consoleOut, "connecting", "connecting…");
+    var rcon = new EventSource(rconSrc);
+    rconSource = rcon;
+    rconTimer = window.setTimeout(function () {
+      if (rconReady || rconSource !== rcon) return;
+      appendErrorLine("RCON console still connecting; retrying");
+      setStatus(consoleOut, "reconnecting", "retrying…");
+      rconSource = null;
+      rcon.close();
+      markRconReady(false);
+      scheduleRconReconnect();
+    }, RCON_READY_MS);
+    rcon.onmessage = function (evt) {
+      consoleOut.insertAdjacentHTML("beforeend", evt.data);
+    };
+    rcon.addEventListener("ready", function () {
+      if (rconSource !== rcon) return;
+      clearRconTimer();
+      rconRetry = 0;
+      markRconReady(true);
+    });
+    rcon.addEventListener("closed", function () {
+      if (rconSource !== rcon) return;
+      clearRconTimer();
+      markRconReady(false);
+      rconSource = null;
+      rcon.close();
+      setStatus(consoleOut, "closed", "stream ended");
+    });
+    rcon.onerror = function () {
+      if (rconSource !== rcon) return;
+      clearRconTimer();
+      markRconReady(false);
+      rconSource = null;
+      rcon.close();
+      setStatus(consoleOut, "reconnecting", "reconnecting…");
+      scheduleRconReconnect();
+    };
+  }
+
+  if (consoleOut && rconSrc && typeof EventSource !== "undefined") {
+    openRcon();
   }
 
   function describeFailure(xhr) {

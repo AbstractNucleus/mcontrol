@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import aiodocker
@@ -7,11 +8,24 @@ from mcontrol.infra import docker_client
 
 
 @pytest.fixture(autouse=True)
-def _reset_network_refcounts():
+def _reset_network_refcounts(monkeypatch):
     """The attach/detach refcounts are module state; keep tests isolated."""
+    monkeypatch.setattr(docker_client, "_DETACH_COOLDOWN_S", 0)
     docker_client._network_refcounts.clear()
     docker_client._network_attach_locks.clear()
+    for task in list(docker_client._inflight_connects.values()):
+        task.cancel()
+    docker_client._inflight_connects.clear()
+    for task in list(docker_client._pending_detaches.values()):
+        task.cancel()
+    docker_client._pending_detaches.clear()
     yield
+    for task in list(docker_client._inflight_connects.values()):
+        task.cancel()
+    docker_client._inflight_connects.clear()
+    for task in list(docker_client._pending_detaches.values()):
+        task.cancel()
+    docker_client._pending_detaches.clear()
     docker_client._network_refcounts.clear()
     docker_client._network_attach_locks.clear()
 
@@ -344,6 +358,71 @@ async def test_attach_timeout_raises_when_still_disconnected(env, monkeypatch):
         await docker_client.attach_self_to_network(docker, "atm10_default")
 
     assert "atm10_default" not in docker_client._network_refcounts
+
+
+async def test_attach_timeout_returns_even_if_connect_ignores_cancel(
+    env, monkeypatch
+):
+    """wait_for() on an un-cancellable NetworkConnect used to block past 8s
+    (aiohttp sock_read). Shield so the 8s bound actually returns."""
+    monkeypatch.setattr(docker_client, "_ATTACH_TIMEOUT_S", 0.05)
+    stop = asyncio.Event()
+    started = {"n": 0}
+
+    class _Network:
+        async def connect(self, config):  # noqa: ARG002
+            started["n"] += 1
+            while not stop.is_set():
+                try:
+                    await asyncio.sleep(0.05)
+                except asyncio.CancelledError:
+                    continue
+
+    class _Container:
+        async def show(self):
+            return {"NetworkSettings": {"Networks": {}}}
+
+    docker = MagicMock()
+    docker.networks = MagicMock()
+    docker.networks.get = AsyncMock(return_value=_Network())
+    docker.containers = MagicMock()
+    docker.containers.get = AsyncMock(return_value=_Container())
+    monkeypatch.setenv("HOSTNAME", "selfid")
+
+    try:
+        async with asyncio.timeout(1):
+            with pytest.raises(TimeoutError):
+                await docker_client.attach_self_to_network(docker, "atm10_default")
+    finally:
+        stop.set()
+        inflight = docker_client._inflight_connects.get("atm10_default")
+        if inflight is not None:
+            await asyncio.wait_for(inflight, timeout=1)
+
+    assert started["n"] == 1
+    assert "atm10_default" not in docker_client._network_refcounts
+
+
+async def test_detach_cooldown_cancelled_by_reattach(env, monkeypatch):
+    """Last subscriber leaving must not NetworkDisconnect immediately:
+    a reconnecting EventSource would flap our netns and kill the new SSE."""
+    monkeypatch.setattr(docker_client, "_DETACH_COOLDOWN_S", 0.15)
+    connects: list = []
+    disconnects: list = []
+    docker = _refcount_docker(connects, disconnects)
+    monkeypatch.setenv("HOSTNAME", "selfid")
+
+    await docker_client.attach_self_to_network(docker, "atm10_default")
+    await docker_client.detach_self_from_network(docker, "atm10_default")
+    assert disconnects == []
+
+    await docker_client.attach_self_to_network(docker, "atm10_default")
+    await asyncio.sleep(0.25)
+    assert disconnects == []
+
+    await docker_client.detach_self_from_network(docker, "atm10_default")
+    await asyncio.sleep(0.25)
+    assert disconnects == [("atm10_default", {"Container": "selfid"})]
 
 
 async def test_detach_self_from_network_calls_disconnect(env, monkeypatch):

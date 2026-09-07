@@ -134,22 +134,18 @@ async def test_stream_attaches_then_detaches_network(
     fake_docker_network, fake_rcon, tmp_path
 ):
     """Drive console._stream directly (bypassing httpx/ASGI) with a request
-    that reports disconnected immediately. With a valid server.properties
-    in place, the generator should attach the network on entry, yield the
-    connected banner, observe disconnect, and detach on exit."""
+    that reports disconnected immediately. Attach still runs so a retry can
+    skip-if-already-connected, but RCON is not opened for a gone client."""
     _write_props(tmp_path, enable_rcon=True, password="hunter2")
 
     body = await _collect(
         console._stream(_Request(disconnected=True), object(), "atm10", "atm10", tmp_path)
     )
 
-    assert b"rcon connected" in body
-    assert b"event: ready" in body
+    assert b"rcon connected" not in body
     assert fake_docker_network["attaches"] == ["atm10_default"]
     assert fake_docker_network["detaches"] == ["atm10_default"]
-    assert fake_rcon["password"] == "hunter2"
-    # Last subscriber out closes the shared connection and forgets it.
-    assert fake_rcon["conn"].closed
+    assert fake_rcon["connects"] == 0
     assert "atm10" not in console._active_connections
     assert not console._subscribers["atm10"]
     assert "atm10" not in console._connecting
@@ -287,6 +283,41 @@ async def test_stream_retries_when_network_attach_times_out(
     assert fake_rcon["connects"] == 1
 
 
+async def test_stream_yields_timeout_when_attach_never_returns(
+    fake_docker_network, fake_rcon, tmp_path, monkeypatch
+):
+    """A NetworkConnect that ignores cancellation must still produce an SSE
+    event within _ATTACH_WAIT_S, not sit on the first keepalive forever."""
+    from mcontrol.infra import docker_client
+
+    monkeypatch.setattr(console, "_KEEPALIVE_S", 0.02)
+    monkeypatch.setattr(console, "_ATTACH_WAIT_S", 0.08)
+    monkeypatch.setattr(console, "_RETRY_INTERVAL_S", 0.01)
+    stop = asyncio.Event()
+
+    async def hang(_docker, _network):
+        await stop.wait()
+
+    monkeypatch.setattr(docker_client, "attach_self_to_network", hang)
+    _write_props(tmp_path, enable_rcon=True, password="hunter2")
+    request = _Request()
+    gen = console._stream(request, object(), "atm10", "atm10", tmp_path)
+    try:
+        async with asyncio.timeout(1):
+            first = await _next_payload(gen)
+            assert b"docker attach timed out" in first
+        request.disconnected = True
+        async with asyncio.timeout(1):
+            with pytest.raises(StopAsyncIteration):
+                await gen.__anext__()
+    finally:
+        stop.set()
+        await gen.aclose()
+
+    assert fake_rcon["connects"] == 0
+    assert fake_docker_network["detaches"] == []
+
+
 async def test_stream_shares_one_connection_between_subscribers(
     fake_docker_network, fake_rcon, tmp_path
 ):
@@ -347,6 +378,17 @@ async def test_dead_connection_is_dropped_and_streams_reconnect(
         request.disconnected = True
         with pytest.raises(StopAsyncIteration):
             await gen.__anext__()
+
+
+async def test_run_on_active_echo_false_does_not_broadcast():
+    conn = _FakeRconConnection()
+    queue: asyncio.Queue = asyncio.Queue()
+    console._active_connections["atm10"] = conn
+    console._subscribers["atm10"].add(queue)
+
+    assert await console.run_on_active("atm10", "list", echo=False) == "ack: list"
+    assert conn.commands == ["list"]
+    assert queue.empty()
 
 
 async def test_rcon_post_finds_active_session_and_runs_command(

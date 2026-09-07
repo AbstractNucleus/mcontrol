@@ -28,7 +28,7 @@ import logging
 import socket
 from collections import defaultdict
 from collections.abc import AsyncIterator, Coroutine
-from contextlib import aclosing
+from contextlib import aclosing, suppress
 from pathlib import Path
 
 import aiodocker
@@ -46,6 +46,9 @@ _log = logging.getLogger(__name__)
 _RCON_PORT = 25575
 _KEEPALIVE_S = 2.0
 _RETRY_INTERVAL_S = 5.0
+# Must match docker_client._ATTACH_TIMEOUT_S so a hung NetworkConnect
+# still yields an SSE event instead of keepalive-only silence.
+_ATTACH_WAIT_S = 8.0
 _SSE_OPEN_WAIT_S = 5.0
 _SSE_HEADERS = {
     "Cache-Control": "no-cache",
@@ -288,9 +291,12 @@ async def _stream(
         opened = True
         _release_connecting(name)
 
+    attached = False
+    attach_task: asyncio.Task | None = None
     _connecting[name] += 1
     try:
         yield _KEEPALIVE
+        announced_timeout = False
         while True:
             try:
                 network_name = await docker_client.find_network_name(
@@ -300,13 +306,58 @@ async def _stream(
                     yield _message("[error] no docker network found for container")
                     yield _CLOSED
                     return
-                await docker_client.attach_self_to_network(docker, network_name)
+                if attach_task is None or attach_task.done():
+                    attach_task = asyncio.ensure_future(
+                        docker_client.attach_self_to_network(docker, network_name)
+                    )
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + _ATTACH_WAIT_S
+                announced_timeout = False
+                while not attach_task.done():
+                    if await request.is_disconnected():
+                        with suppress(Exception):
+                            await asyncio.wait_for(
+                                asyncio.shield(attach_task),
+                                timeout=_ATTACH_WAIT_S,
+                            )
+                        if (
+                            attach_task.done()
+                            and not attach_task.cancelled()
+                            and attach_task.exception() is None
+                        ):
+                            attached = True
+                        return
+                    remaining = deadline - loop.time()
+                    if remaining <= 0:
+                        if not announced_timeout:
+                            announced_timeout = True
+                            yield _message(
+                                "[info] docker attach timed out; retrying while "
+                                "this page stays open"
+                            )
+                        if await _wait_for_retry(request):
+                            return
+                        deadline = loop.time() + _ATTACH_WAIT_S
+                        continue
+                    done, _ = await asyncio.wait(
+                        {attach_task},
+                        timeout=min(_KEEPALIVE_S, remaining),
+                    )
+                    if not done:
+                        yield _KEEPALIVE
+                if attach_task.cancelled():
+                    return
+                exc = attach_task.exception()
+                if exc is not None:
+                    raise exc
+                attached = True
                 break
             except TimeoutError:
-                yield _message(
-                    "[info] docker attach timed out; retrying while "
-                    "this page stays open"
-                )
+                if not announced_timeout:
+                    yield _message(
+                        "[info] docker attach timed out; retrying while "
+                        "this page stays open"
+                    )
                 if await _wait_for_retry(request):
                     return
             except aiodocker.DockerError as exc:
@@ -314,27 +365,31 @@ async def _stream(
                 yield _CLOSED
                 return
 
-        try:
-            async with aclosing(
-                _console(
-                    request, name, container_name, props_path, on_open=mark_open
-                )
-            ) as chunks:
-                async for chunk in chunks:
-                    yield chunk
-        finally:
-            if network_name is not None:
-                await _shielded(_detach_quietly(docker, network_name))
+        if await request.is_disconnected():
+            return
+
+        async with aclosing(
+            _console(
+                request, name, container_name, props_path, on_open=mark_open
+            )
+        ) as chunks:
+            async for chunk in chunks:
+                yield chunk
     finally:
+        if attached and network_name is not None:
+            await _shielded(_detach_quietly(docker, network_name))
         if not opened:
             _release_connecting(name)
 
 
-async def run_on_active(server_name: str, command: str) -> str | None:
+async def run_on_active(
+    server_name: str, command: str, *, echo: bool = True
+) -> str | None:
     """Run ``command`` on the shared console RCON connection, if any.
 
-    Whitelist/ops flips and the online chip reuse it so their commands
-    show up in the console like typed ones. Returns ``None`` when no
+    Whitelist/ops flips reuse it so the command shows up in the console
+    like a typed one. The online chip passes ``echo=False`` so the 60s
+    ``list`` poll does not spam the pane. Returns ``None`` when no
     console is connected.
     """
     if server_name not in _active_connections:
@@ -343,7 +398,8 @@ async def run_on_active(server_name: str, command: str) -> str | None:
         conn = _active_connections.get(server_name)
         if conn is None:
             return None
-        _broadcast(server_name, f"> {command}")
+        if echo:
+            _broadcast(server_name, f"> {command}")
         try:
             response = await conn.run(command)
         except (TimeoutError, rcon.RconError):
@@ -351,8 +407,9 @@ async def run_on_active(server_name: str, command: str) -> str | None:
             # reconnect, later callers fall back to a one-shot client.
             await _drop_connection(server_name, conn)
             raise
-        for line in (response or "").splitlines():
-            _broadcast(server_name, line)
+        if echo:
+            for line in (response or "").splitlines():
+                _broadcast(server_name, line)
         return response
 
 

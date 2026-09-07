@@ -81,3 +81,7 @@ async def test_streams_js_waits_for_rcon_ready_before_send(client):
     assert "still connecting" in body
     assert 'getAttribute("data-rcon-src")' in body
     assert "EventSource.onopen is only response headers" in body
+    assert "RCON console still connecting; retrying" in body
+    assert "scheduleRconReconnect" in body
+    assert "retrying…" in body
+    assert "RCON_READY_MS" in body
