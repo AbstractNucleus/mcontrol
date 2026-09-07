@@ -427,9 +427,10 @@ async def test_online_chip_renders_count_and_names(
         "dir": str(server_dir), "state": "running",
     }
 
-    async def fake_run(server_name, command):
+    async def fake_run(server_name, command, *, echo=True):
         assert server_name == "atm10"
         assert command == "list"
+        assert echo is False
         return "There are 2 of a max of 20 players online: Steve, Alex"
 
     monkeypatch.setattr(console, "run_on_active", fake_run)

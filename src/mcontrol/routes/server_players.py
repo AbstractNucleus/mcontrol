@@ -126,7 +126,9 @@ async def online_chip(
         from mcontrol.routes import console
 
         try:
-            response = await console.run_on_active(server["name"], "list")
+            response = await console.run_on_active(
+                server["name"], "list", echo=False
+            )
         except (TimeoutError, Exception):
             response = None
         match = _ONLINE_RE.search(response or "")
