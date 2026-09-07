@@ -1,12 +1,12 @@
 /* =========================================================================
    mcontrol: design tokens
-   Graphite and blue theme. Two-layer system:
+   Neutral surfaces and quiet blue details, inspired by Beautiful UI.
+   Two-layer system:
    primitives (raw hex) and semantic tokens (consumed by components).
    Components MUST consume the semantic layer only.
 
-   Light is the default. Dark applies via [data-theme="dark"] on <html>.
-   Without an explicit data-theme, prefers-color-scheme drives the JS-off
-   fallback so first paint is correct even if theme.js fails to load.
+   Dark is the only appearance. CSS applies it directly, independent of
+   JavaScript, saved preferences, and the operating system color scheme.
 
    Blue actions, cool neutral surfaces, and independent semantic statuses.
    ========================================================================= */
@@ -57,246 +57,93 @@
 
 /* ---- Primitives (do not consume directly from components) -------------- */
 :root {
-  /* Graphite and blue primitives */
-  --hex-cream:        #F4F7FC;
-  --hex-paper:        #FFFFFF;
-  --hex-stone:        #EAF0F8;
-  --hex-clay:         #D5DFEC;
-  --hex-gravel:       #98A6BA;
-  --hex-ink:          #111827;
-  --hex-ink-soft:     #334155;
-  --hex-ink-mute:     #52627A;
-
-  --hex-near-black:   #111827;
-  --hex-coal:         #1B2535;
-  --hex-coal-deep:    #141E2D;
-  --hex-coal-pit:     #0E1522;
-
-  --hex-bone:         #F4F7FC;
-  --hex-bone-soft:    #CED8E8;
-  --hex-bone-mute:    #9BAEC7;
-
-  --hex-blue:       #2469DD;
-  --hex-blue-deep:  #2365D7;
-  --hex-blue-soft:  #DCE9FF;
-  --hex-blue-light: #6B9FFF;
-  --hex-blue-pit:   #192F50;
-  /* Darker blues for accent-as-TEXT on light surfaces; the brand
-     blue itself only reaches ~2.8-3.1:1 there (WCAG AA fail). */
-  --hex-blue-text:  #185FC5;
-  --hex-blue-ember: #134EAB;
-
-  --hex-info-bg-l:     #D6E4F6;  --hex-info-fg-l:     #2C5C9E;  --hex-info-br-l:     #4682D5;
-  --hex-info-bg-d:     #253E5F;  --hex-info-fg-d:     #80AADD;
-  --hex-success-bg-l:  #E1F4EB;  --hex-success-fg-l:  #176245;  --hex-success-br-l:  #33805C;
-  --hex-success-bg-d:  #12392D;  --hex-success-fg-d:  #71D6A6;  --hex-success-br-d:  #398B69;
-  --hex-warning-bg-l:  #FFF1D8;  --hex-warning-fg-l:  #74510B;  --hex-warning-br-l:  #9B741E;
-  --hex-warning-bg-d:  #392D17;  --hex-warning-fg-d:  #EAC16A;  --hex-warning-br-d:  #AE8939;
-  --hex-danger-bg-l:   #FBE7E9;  --hex-danger-fg-l:   #A62E42;  --hex-danger-br-l:   #B95060;
-  --hex-danger-bg-d:   #41202B;  --hex-danger-fg-d:   #F399A6;  --hex-danger-br-d:   #C56879;
+  --hex-paper: #FFFFFF;
+  --hex-ink: #252529;
+  --hex-near-black: #18181B;
+  --hex-coal: #202023;
+  --hex-coal-deep: #28282D;
+  --hex-coal-pit: #171719;
+  --hex-bone: #F1F1F3;
+  --hex-bone-soft: #C4C4CC;
+  --hex-bone-mute: #A0A0AA;
+  --hex-blue: #2469DD;
+  --hex-blue-deep: #2365D7;
+  --hex-blue-light: #A2ADFF;
+  --hex-blue-pit: #2A2D46;
+  --hex-info-br-l: #4682D5;
+  --hex-info-bg-d: #253E5F;
+  --hex-info-fg-d: #80AADD;
+  --hex-success-bg-d: #12392D;
+  --hex-success-fg-d: #71D6A6;
+  --hex-success-br-d: #398B69;
+  --hex-warning-bg-d: #392D17;
+  --hex-warning-fg-d: #EAC16A;
+  --hex-warning-br-d: #AE8939;
+  --hex-danger-bg-d: #41202B;
+  --hex-danger-fg-d: #F399A6;
+  --hex-danger-br-d: #C56879;
 }
 
 
-/* ---- Semantic tokens: light (default) --------------------------------- */
+/* ---- Semantic tokens: the fixed dark interface ------------------------ */
 :root {
-  /* Surface */
-  --bg-page:        var(--hex-cream);
-  --bg-surface:     var(--hex-paper);
-  --bg-sunken:      var(--hex-stone);
-
-  /* Text */
-  --fg-primary:     var(--hex-ink);
-  --fg-secondary:   var(--hex-ink-soft);
-  --fg-muted:       var(--hex-ink-mute);
-  --fg-inverse:     var(--hex-paper);
-
-  /* Borders: translucent so they pick up surface tint */
-  --border-soft:    rgba(31, 30, 29, 0.15);
-  --border-medium:  rgba(31, 30, 29, 0.30);
-  --border-strong:  rgba(31, 30, 29, 0.40);
-
-  /* Brand accent */
-  --accent:         var(--hex-blue);
-  --accent-hover:   var(--hex-blue-deep);
-  --accent-soft:    var(--hex-blue-soft);
-  --accent-fg:      var(--hex-paper);
-  /* Accent when used as text on page/surface backgrounds (AA-safe) */
-  --accent-text:    var(--hex-blue-text);
-  /* Accent when used as text on --accent-soft chips (AA-safe) */
-  --accent-on-soft: var(--hex-blue-ember);
-
-  /* Semantic: info, success, warning, danger */
-  --info-bg:        var(--hex-info-bg-l);
-  --info-fg:        var(--hex-info-fg-l);
-  --info-border:    var(--hex-info-br-l);
-
-  --success-bg:     var(--hex-success-bg-l);
-  --success-fg:     var(--hex-success-fg-l);
-  --success-border: var(--hex-success-br-l);
-
-  --warning-bg:     var(--hex-warning-bg-l);
-  --warning-fg:     var(--hex-warning-fg-l);
-  --warning-border: var(--hex-warning-br-l);
-
-  --danger-bg:      var(--hex-danger-bg-l);
-  --danger-fg:      var(--hex-danger-fg-l);
-  --danger-border:  var(--hex-danger-br-l);
-
-  /* Terminal surfaces (log + console panes): a deliberate dark island in
-     BOTH themes, mirroring an embedded terminal. Defined once here; the
-     dark blocks don't override them, so the values hold everywhere. */
-  --bg-terminal:     var(--hex-coal-pit);
-  --fg-terminal:     var(--hex-bone);
+  --bg-page: var(--hex-coal-pit);
+  --bg-surface: var(--hex-coal);
+  --bg-sunken: var(--hex-coal-deep);
+  --fg-primary: var(--hex-bone);
+  --fg-secondary: var(--hex-bone-soft);
+  --fg-muted: var(--hex-bone-mute);
+  --fg-inverse: var(--hex-near-black);
+  --border-soft: rgba(222, 220, 209, 0.10);
+  --border-medium: rgba(222, 220, 209, 0.22);
+  --border-strong: rgba(222, 220, 209, 0.35);
+  --bg-sidebar: #1B1B1E;
+  --bg-primary-action: var(--hex-bone);
+  --bg-primary-action-hover: var(--hex-bone-soft);
+  --fg-primary-action: var(--hex-ink);
+  --brand-bg: #5F6ADE;
+  --brand-fg: var(--hex-paper);
+  --surface-highlight: rgba(255, 255, 255, 0.025);
+  --accent: var(--hex-blue);
+  --accent-hover: var(--hex-blue-deep);
+  --accent-soft: var(--hex-blue-pit);
+  --accent-fg: var(--hex-paper);
+  --accent-text: var(--hex-blue-light);
+  --accent-on-soft: var(--hex-blue-light);
+  --info-bg: var(--hex-info-bg-d);
+  --info-fg: var(--hex-info-fg-d);
+  --info-border: var(--hex-info-br-l);
+  --success-bg: var(--hex-success-bg-d);
+  --success-fg: var(--hex-success-fg-d);
+  --success-border: var(--hex-success-br-d);
+  --warning-bg: var(--hex-warning-bg-d);
+  --warning-fg: var(--hex-warning-fg-d);
+  --warning-border: var(--hex-warning-br-d);
+  --danger-bg: var(--hex-danger-bg-d);
+  --danger-fg: var(--hex-danger-fg-d);
+  --danger-border: var(--hex-danger-br-d);
+  --bg-terminal: var(--hex-coal-pit);
+  --fg-terminal: var(--hex-bone);
   --fg-terminal-dim: var(--hex-bone-mute);
   --border-terminal: rgba(222, 220, 209, 0.14);
-  --log-warn:        var(--hex-warning-fg-d);
-  --log-error:       var(--hex-danger-fg-d);
-  --log-cmd:         var(--hex-blue-light);
-
-  /* Syntax highlighting (file editor) */
-  --code-string:      var(--hex-success-fg-l);
-  --code-number:      var(--hex-info-fg-l);
-  --code-keyword:     var(--hex-warning-fg-l);
-  --code-property:    var(--hex-blue-text);
-  --code-comment:     var(--hex-ink-mute);
-  --code-punctuation: var(--hex-ink-soft);
-  /* Active-line tint: translucent so the selection layer beneath stays
-     visible (mirrors the border-alpha idiom). */
-  --code-active-line: rgba(31, 30, 29, 0.06);
-
-  /* Skeleton shimmer highlight (loading placeholders) */
-  --skeleton-sheen: rgba(31, 30, 29, 0.05);
-
-  /* Focus ring: neutral, never orange */
-  --ring:           rgba(20, 20, 19, 0.70);
-
-  /* Shadows: reserved for popovers / dialogs only */
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.10), 0 1px 2px -1px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 10px 20px -4px rgba(0, 0, 0, 0.15), 0 4px 8px -4px rgba(0, 0, 0, 0.10);
-
-  /* Modal / dialog backdrop scrim (theme-independent. dark over any page) */
-  --overlay-scrim:        rgba(20, 20, 19, 0.40);
-  --overlay-scrim-strong: rgba(20, 20, 19, 0.65);
-
-  /* Tells the UA that form controls / scrollbars should match */
-  color-scheme: light;
-}
-
-
-/* ---- Semantic tokens: dark (explicit) --------------------------------- */
-/* Dark workspace: flat coal-pit page, narrowly-lifted
-   surfaces (~7-unit step from page), neutral bone-alpha hairline borders,
-   blue accent used scarcely. No glow, no texture, no glass. */
-[data-theme="dark"] {
-  --bg-page:        var(--hex-coal-pit);
-  --bg-surface:     var(--hex-coal);
-  --bg-sunken:      var(--hex-coal-deep);
-
-  --fg-primary:     var(--hex-bone);
-  --fg-secondary:   var(--hex-bone-soft);
-  --fg-muted:       var(--hex-bone-mute);
-  --fg-inverse:     var(--hex-near-black);
-
-  --border-soft:    rgba(222, 220, 209, 0.10);
-  --border-medium:  rgba(222, 220, 209, 0.22);
-  --border-strong:  rgba(222, 220, 209, 0.35);
-
-  --accent:         var(--hex-blue);
-  --accent-hover:   var(--hex-blue-deep);
-  --accent-soft:    var(--hex-blue-pit);
-  --accent-fg:      var(--hex-paper);
-  --accent-text:    var(--hex-blue-light);
-  --accent-on-soft: var(--hex-blue-light);
-
-  --info-bg:        var(--hex-info-bg-d);
-  --info-fg:        var(--hex-info-fg-d);
-  --info-border:    var(--hex-info-br-l);
-
-  --success-bg:     var(--hex-success-bg-d);
-  --success-fg:     var(--hex-success-fg-d);
-  --success-border: var(--hex-success-br-d);
-
-  --warning-bg:     var(--hex-warning-bg-d);
-  --warning-fg:     var(--hex-warning-fg-d);
-  --warning-border: var(--hex-warning-br-d);
-
-  --danger-bg:      var(--hex-danger-bg-d);
-  --danger-fg:      var(--hex-danger-fg-d);
-  --danger-border:  var(--hex-danger-br-d);
-
-  --code-string:      var(--hex-success-fg-d);
-  --code-number:      var(--hex-info-fg-d);
-  --code-keyword:     var(--hex-warning-fg-d);
-  --code-property:    var(--hex-blue-light);
-  --code-comment:     var(--hex-bone-mute);
+  --log-warn: var(--hex-warning-fg-d);
+  --log-error: var(--hex-danger-fg-d);
+  --log-cmd: var(--hex-blue-light);
+  --code-string: var(--hex-success-fg-d);
+  --code-number: var(--hex-info-fg-d);
+  --code-keyword: var(--hex-warning-fg-d);
+  --code-property: var(--hex-blue-light);
+  --code-comment: var(--hex-bone-mute);
   --code-punctuation: var(--hex-bone-soft);
   --code-active-line: rgba(222, 220, 209, 0.07);
-
   --skeleton-sheen: rgba(222, 220, 209, 0.06);
-
-  --ring:           rgba(250, 249, 245, 0.70);
-
+  --ring: rgba(250, 249, 245, 0.70);
+  --shadow-sm: 0 1px 2px rgba(24, 24, 32, 0.05), 0 2px 6px rgba(24, 24, 32, 0.03);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 10px 20px -4px rgba(0, 0, 0, 0.15), 0 4px 8px -4px rgba(0, 0, 0, 0.10);
+  --overlay-scrim: rgba(20, 20, 19, 0.40);
+  --overlay-scrim-strong: rgba(20, 20, 19, 0.65);
   color-scheme: dark;
-}
-
-
-/* ---- JS-off fallback: prefers-color-scheme dark ------------------------ */
-/* Applies the dark token set when no explicit data-theme has been set
-   (e.g. JS disabled, localStorage blocked, first paint racing the
-   inline bootstrap). The :not([data-theme]) selector is load-bearing;
-   without it, an explicit data-theme="light" would be overridden by an
-   OS-level dark preference. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --bg-page:        var(--hex-coal-pit);
-    --bg-surface:     var(--hex-coal);
-    --bg-sunken:      var(--hex-coal-deep);
-
-    --fg-primary:     var(--hex-bone);
-    --fg-secondary:   var(--hex-bone-soft);
-    --fg-muted:       var(--hex-bone-mute);
-    --fg-inverse:     var(--hex-near-black);
-
-    --border-soft:    rgba(222, 220, 209, 0.10);
-    --border-medium:  rgba(222, 220, 209, 0.22);
-    --border-strong:  rgba(222, 220, 209, 0.35);
-
-    --accent-hover:   var(--hex-blue-deep);
-    --accent-soft:    var(--hex-blue-pit);
-    --accent-fg:      var(--hex-paper);
-    --accent-text:    var(--hex-blue-light);
-    --accent-on-soft: var(--hex-blue-light);
-
-    --info-bg:        var(--hex-info-bg-d);
-    --info-fg:        var(--hex-info-fg-d);
-
-    --success-bg:     var(--hex-success-bg-d);
-    --success-fg:     var(--hex-success-fg-d);
-    --success-border: var(--hex-success-br-d);
-
-    --warning-bg:     var(--hex-warning-bg-d);
-    --warning-fg:     var(--hex-warning-fg-d);
-    --warning-border: var(--hex-warning-br-d);
-
-    --danger-bg:      var(--hex-danger-bg-d);
-    --danger-fg:      var(--hex-danger-fg-d);
-    --danger-border:  var(--hex-danger-br-d);
-
-    --code-string:      var(--hex-success-fg-d);
-    --code-number:      var(--hex-info-fg-d);
-    --code-keyword:     var(--hex-warning-fg-d);
-    --code-property:    var(--hex-blue-light);
-    --code-comment:     var(--hex-bone-mute);
-    --code-punctuation: var(--hex-bone-soft);
-    --code-active-line: rgba(222, 220, 209, 0.07);
-
-    --skeleton-sheen: rgba(222, 220, 209, 0.06);
-
-    --ring:           rgba(250, 249, 245, 0.70);
-
-    color-scheme: dark;
-  }
 }
 
 
@@ -317,13 +164,13 @@
 
   --lh-tight: 1.1;
   --lh-snug:  1.25;
-  --lh-base:  1.4;
+  --lh-base:  1.5;
 
   --radius-xs:   4px;
-  --radius-sm:   6px;
-  --radius-md:   8px;
-  --radius-lg:   10px;
-  --radius-xl:   12px;
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   16px;
+  --radius-xl:   20px;
   --radius-full: 9999px;
 
   --space-1:  4px;

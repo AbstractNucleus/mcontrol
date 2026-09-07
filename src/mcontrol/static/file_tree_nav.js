@@ -453,6 +453,50 @@ document.body.addEventListener("htmx:afterSwap", () => {
 // case; this also covers cases where the JS runs after the initial swap.
 document.addEventListener("DOMContentLoaded", () => syncTreeTabindex());
 
+function syncCurrentFile() {
+  const path = document.querySelector("#file-view [data-file-path]")?.dataset.filePath;
+  document.querySelectorAll("#file-tree .file-tree__entry--file").forEach((row) => {
+    const link = rowLink(row);
+    if (row.dataset.treePath === path) link.setAttribute("aria-current", "true");
+    else link.removeAttribute("aria-current");
+  });
+}
+
+document.body.addEventListener("htmx:afterSwap", syncCurrentFile);
+document.addEventListener("DOMContentLoaded", syncCurrentFile);
+
+// The top layer lets actions extend beyond a narrow, scrollable explorer.
+document.addEventListener("toggle", (evt) => {
+  const menu = evt.target;
+  if (!menu.matches?.("details.file-tree__menu")) return;
+  const panel = menu.querySelector(".file-tree__menu-panel");
+  if (!panel.showPopover) return;
+  panel.setAttribute("popover", "manual");
+  if (!menu.open) {
+    if (panel.matches(":popover-open")) panel.hidePopover();
+    return;
+  }
+  document.querySelectorAll("details.file-tree__menu[open]").forEach((other) => {
+    if (other !== menu) other.open = false;
+  });
+  panel.showPopover();
+  const trigger = menu.querySelector("summary").getBoundingClientRect();
+  const bounds = panel.getBoundingClientRect();
+  const left = Math.max(8, Math.min(trigger.right - bounds.width, innerWidth - bounds.width - 8));
+  const top = trigger.bottom + bounds.height + 4 <= innerHeight - 8
+    ? trigger.bottom + 4
+    : Math.max(8, trigger.top - bounds.height - 4);
+  panel.style.setProperty("--file-menu-left", left + "px");
+  panel.style.setProperty("--file-menu-top", top + "px");
+}, true);
+
+function closeFileMenus(evt) {
+  if (evt.target.closest?.(".file-tree__menu-panel")) return;
+  document.querySelectorAll("details.file-tree__menu[open]").forEach(menu => { menu.open = false; });
+}
+document.addEventListener("scroll", closeFileMenus, true);
+window.addEventListener("resize", closeFileMenus);
+
 document.body.addEventListener("htmx:afterRequest", (evt) => {
   if (evt.detail && evt.detail.successful === false) clearPreSwapFocus();
 });

@@ -4,10 +4,10 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: 8px 14px;
-  min-height: 36px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-medium);
+  padding: 10px 16px;
+  min-height: 40px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-soft);
   background: var(--bg-surface);
   color: var(--fg-primary);
   font-family: var(--font-sans);
@@ -17,6 +17,7 @@
   cursor: pointer;
   user-select: none;
   text-decoration: none;
+  box-shadow: var(--shadow-sm);
   transition: background var(--motion-fast) var(--ease),
               color var(--motion-fast) var(--ease),
               border-color var(--motion-fast) var(--ease),
@@ -40,18 +41,19 @@
 }
 
 .btn--primary {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-color: var(--accent);
+  background: var(--bg-primary-action);
+  color: var(--fg-primary-action);
+  border-color: var(--bg-primary-action);
 }
 
 .btn--primary:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: var(--accent-fg);
+  background: var(--bg-primary-action-hover);
+  border-color: var(--bg-primary-action-hover);
+  color: var(--fg-primary-action);
 }
 
 .btn--ghost {
+  box-shadow: none;
   background: transparent;
   border-color: transparent;
   color: var(--fg-secondary);
@@ -78,18 +80,18 @@
 .btn--danger-solid {
   background: var(--danger-border);
   border-color: var(--danger-border);
-  color: var(--fg-inverse);
+  color: var(--accent-fg);
 }
 
 .btn--danger-solid:hover {
   background: var(--danger-fg);
   border-color: var(--danger-fg);
-  color: var(--fg-inverse);
+  color: var(--accent-fg);
 }
 
 .btn--sm {
-  padding: 5px 10px;
-  min-height: 28px;
+  padding: 7px 12px;
+  min-height: 32px;
   font-size: var(--fs-sm);
 }
 
@@ -146,7 +148,7 @@ select {
   color: var(--fg-primary);
   background: var(--bg-surface);
   border: 1px solid var(--border-medium);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   transition: border-color var(--motion-fast) var(--ease);
 }
 

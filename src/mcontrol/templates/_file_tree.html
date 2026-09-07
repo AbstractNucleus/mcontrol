@@ -4,6 +4,7 @@
    the next click doesn't have to first dismiss it. The checkbox + name
    stay inline; they're the primary tap targets.
 #}
+{% from "_icons.html" import icon %}
 {% if not entries %}
   <li class="file-tree__status file-tree__status--empty">This folder is empty.</li>
 {% endif %}
@@ -27,12 +28,14 @@
       <button class="file-tree__toggle"
               type="button"
               tabindex="-1"
+              aria-label="{{ entry.name }}/"
+              title="{{ entry.path }}/"
               hx-get="/servers/{{ server_name }}/files/tree?path={{ entry.path|urlencode }}"
               hx-target="next .file-tree__children"
               hx-swap="innerHTML"
-              hx-trigger="click once">{{ entry.name }}/</button>
+              hx-trigger="click once"><span class="file-tree__chevron">{{ icon('chevron-right', 12) }}</span><span class="file-tree__icon file-tree__icon--folder">{{ icon('folder', 16) }}</span><span class="file-tree__label">{{ entry.name }}</span></button>
       <details class="file-tree__menu">
-        <summary class="file-tree__menu-trigger" tabindex="-1" title="Actions for {{ entry.name }}/" aria-label="Actions for {{ entry.name }}/">⋯</summary>
+        <summary class="file-tree__menu-trigger" tabindex="-1" title="Actions for {{ entry.name }}/" aria-label="Actions for {{ entry.name }}/">{{ icon('more', 16) }}</summary>
         <div class="file-tree__menu-panel">
           <button class="file-tree__menu-item"
                   type="button"
@@ -75,9 +78,9 @@
              data-select-path="{{ entry.path }}"
              data-select-kind="symlink"
              data-select-name="{{ entry.name }}">
-      <span class="file-tree__name">{{ entry.name }} →</span>
+      <span class="file-tree__name" title="{{ entry.path }} (symlink)"><span class="file-tree__icon">{{ icon('link', 16) }}</span><span class="file-tree__label">{{ entry.name }} →</span></span>
       <details class="file-tree__menu">
-        <summary class="file-tree__menu-trigger" tabindex="-1" title="Actions for {{ entry.name }}" aria-label="Actions for {{ entry.name }}">⋯</summary>
+        <summary class="file-tree__menu-trigger" tabindex="-1" title="Actions for {{ entry.name }}" aria-label="Actions for {{ entry.name }}">{{ icon('more', 16) }}</summary>
         <div class="file-tree__menu-panel">
           <button class="file-tree__menu-item"
                   type="button"
@@ -113,11 +116,12 @@
              data-select-name="{{ entry.name }}">
       <a href="#"
          tabindex="-1"
+         title="{{ entry.path }}"
          hx-get="/servers/{{ server_name }}/files/view?path={{ entry.path|urlencode }}"
          hx-target="#file-view"
-         hx-swap="innerHTML">{{ entry.name }}</a>
+         hx-swap="innerHTML"><span class="file-tree__icon{% if entry.name.rsplit('.', 1)[-1] in ['json', 'yaml', 'yml', 'toml', 'xml', 'properties', 'sh', 'env'] %} file-tree__icon--code{% endif %}">{{ icon('file-code' if entry.name.rsplit('.', 1)[-1] in ['json', 'yaml', 'yml', 'toml', 'xml', 'properties', 'sh', 'env'] else 'file', 16) }}</span><span class="file-tree__label">{{ entry.name }}</span></a>
       <details class="file-tree__menu">
-        <summary class="file-tree__menu-trigger" tabindex="-1" title="Actions for {{ entry.name }}" aria-label="Actions for {{ entry.name }}">⋯</summary>
+        <summary class="file-tree__menu-trigger" tabindex="-1" title="Actions for {{ entry.name }}" aria-label="Actions for {{ entry.name }}">{{ icon('more', 16) }}</summary>
         <div class="file-tree__menu-panel">
           <a class="file-tree__menu-item"
              href="/servers/{{ server_name }}/files/download?path={{ entry.path|urlencode }}"

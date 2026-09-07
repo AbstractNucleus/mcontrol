@@ -1,110 +1,128 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 
 {% block title %}New server | mcontrol{% endblock %}
 
 {% block main %}
 <section class="new-server">
-  <div>
-    <p class="t-eyebrow">Servers</p>
-    <h1 class="t-h1">Create a server</h1>
-  </div>
+  <header class="page-heading">
+    <div class="new-server__title">
+      <h1 class="t-h1">Create a server</h1>
+    </div>
+    <a class="btn btn--ghost" href="/">{{ icon('arrow-left') }} Back to servers</a>
+  </header>
 
   <form class="new-server__form" method="post" action="/servers/new">
-    <fieldset><legend>Basics</legend>
-    <label>
-      <span class="t-eyebrow">Name</span>
-      <input type="text"
-             name="name"
-             value="{{ form.name or '' }}"
-             autocomplete="off"
-             required>
-      <small class="new-server__hint">3-32 chars; lowercase letters, digits, hyphens; must start with a letter.</small>
-      {% if errors.name %}<small class="new-server__error">{{ errors.name }}</small>{% endif %}
-    </label>
+    <fieldset>
+      <legend>{{ icon('server', size=18) }} Basics</legend>
+      <div class="new-server__fields">
+        <label class="new-server__wide" for="new-server-name">
+          <span>Name</span>
+          <input id="new-server-name" type="text"
+                 name="name"
+                 value="{{ form.name or '' }}"
+                 placeholder="my-minecraft-server"
+                 autocomplete="off"
+                 aria-describedby="new-server-name-hint{% if errors.name %} new-server-name-error{% endif %}"
+                 {% if errors.name %}aria-invalid="true"{% endif %}
+                 required>
+          <small class="new-server__hint" id="new-server-name-hint">3-32 chars; lowercase letters, digits, hyphens; must start with a letter.</small>
+          {% if errors.name %}<small class="new-server__error" id="new-server-name-error">{{ errors.name }}</small>{% endif %}
+        </label>
 
-    <label>
-      <span class="t-eyebrow">Memory budget (GB)</span>
-      <input type="number"
-             name="memory_budget_gb"
-             min="{{ memory_min_gb }}"
-             value="{{ form.memory_budget_gb or '' }}"
-             required>
-      <small class="new-server__hint">Total container memory. Reserves 2 GB outside the Java heap.</small>
-      {% if errors.memory_budget_gb %}<small class="new-server__error">{{ errors.memory_budget_gb }}</small>{% endif %}
-    </label>
+        <label for="new-server-memory">
+          <span>Memory budget (GB)</span>
+          <input id="new-server-memory" type="number"
+                 name="memory_budget_gb"
+                 min="{{ memory_min_gb }}"
+                 value="{{ form.memory_budget_gb or '' }}"
+                 {% if errors.memory_budget_gb %}aria-invalid="true"{% endif %}
+                 required>
+          <small class="new-server__hint">Includes 2 GB reserved outside the Java heap.</small>
+          {% if errors.memory_budget_gb %}<small class="new-server__error">{{ errors.memory_budget_gb }}</small>{% endif %}
+        </label>
 
-    <label>
-      <span class="t-eyebrow">Port</span>
-      <input type="number"
-             name="port"
-             min="1024"
-             max="65535"
-             value="{{ form.port or '' }}"
-             required>
-      <small class="new-server__hint">Host-side TCP port for Minecraft (1024-65535).</small>
-      {% if errors.port %}<small class="new-server__error">{{ errors.port }}</small>{% endif %}
-    </label>
+        <label for="new-server-port">
+          <span>Port</span>
+          <input id="new-server-port" type="number"
+                 name="port"
+                 min="1024"
+                 max="65535"
+                 value="{{ form.port or '' }}"
+                 {% if errors.port %}aria-invalid="true"{% endif %}
+                 required>
+          <small class="new-server__hint">Host TCP port: 1024-65535.</small>
+          {% if errors.port %}<small class="new-server__error">{{ errors.port }}</small>{% endif %}
+        </label>
+      </div>
+    </fieldset>
 
-    </fieldset><fieldset><legend>Runtime</legend>
-    <label>
-      <span class="t-eyebrow">Server jar filename</span>
-      <input type="text"
-             name="server_jar"
-             value="{{ form.server_jar or '' }}"
-             placeholder="paper-1.21.4.jar"
-             autocomplete="off"
-             required>
-      <small class="new-server__hint">Use the exact filename you will upload into the server/ folder after creation.</small>
-      {% if errors.server_jar %}<small class="new-server__error">{{ errors.server_jar }}</small>{% endif %}
-    </label>
+    <fieldset>
+      <legend>{{ icon('settings', size=18) }} Runtime</legend>
+      <div class="new-server__fields">
+        <label class="new-server__wide" for="new-server-jar">
+          <span>Server jar filename</span>
+          <input id="new-server-jar" type="text"
+                 name="server_jar"
+                 value="{{ form.server_jar or '' }}"
+                 placeholder="paper-1.21.4.jar"
+                 autocomplete="off"
+                 {% if errors.server_jar %}aria-invalid="true"{% endif %}
+                 required>
+          <small class="new-server__hint">Upload this file to server/ after creation.</small>
+          {% if errors.server_jar %}<small class="new-server__error">{{ errors.server_jar }}</small>{% endif %}
+        </label>
 
-    <label>
-      <span class="t-eyebrow">Java version</span>
-      <select name="java_version" required>
-        {% for v in java_versions %}
-          <option value="{{ v }}"{% if (form.java_version or default_java_version) == v %} selected{% endif %}>{{ v }}</option>
-        {% endfor %}
-      </select>
-      <small class="new-server__hint">Minecraft 1.20.5–1.21.x need Java 21; 26.x needs Java 25; ≤1.20.4 works with 17</small>
-      {% if errors.java_version %}<small class="new-server__error">{{ errors.java_version }}</small>{% endif %}
-    </label>
+        <label for="new-server-java">
+          <span>Java version</span>
+          <select id="new-server-java" name="java_version" required>
+            {% for v in java_versions %}
+              <option value="{{ v }}"{% if (form.java_version or default_java_version) == v %} selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+          <small class="new-server__hint">Minecraft 1.20.5–1.21.x need Java 21; 26.x needs Java 25; ≤1.20.4 works with 17</small>
+          {% if errors.java_version %}<small class="new-server__error">{{ errors.java_version }}</small>{% endif %}
+        </label>
 
-    <label>
-      <span class="t-eyebrow">Loader</span>
-      <select name="loader" required>
-        {% for opt in loaders %}
-          <option value="{{ opt }}"{% if (form.loader or 'vanilla') == opt %} selected{% endif %}>{{ opt }}</option>
-        {% endfor %}
-      </select>
-      <small class="new-server__hint">Describes your server type. Upload its matching JAR and supporting files yourself.</small>
-      {% if errors.loader %}<small class="new-server__error">{{ errors.loader }}</small>{% endif %}
-    </label>
+        <label for="new-server-loader">
+          <span>Loader</span>
+          <select id="new-server-loader" name="loader" required>
+            {% for opt in loaders %}
+              <option value="{{ opt }}"{% if (form.loader or 'vanilla') == opt %} selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+          {% if errors.loader %}<small class="new-server__error">{{ errors.loader }}</small>{% endif %}
+        </label>
+      </div>
+    </fieldset>
 
-    </fieldset><details class="advanced-form"{% if errors.jvm_extra_args %} open{% endif %}><summary>Advanced</summary>
-    <label>
-      <span class="t-eyebrow">JVM extra args (optional)</span>
-      <input type="text"
-             name="jvm_extra_args"
-             value="{{ form.jvm_extra_args or '' }}"
-             placeholder="-XX:+UseG1GC ..."
-             autocomplete="off">
-      {% if errors.jvm_extra_args %}<small class="new-server__error">{{ errors.jvm_extra_args }}</small>{% endif %}
-    </label>
-
+    <details class="advanced-form"{% if errors.jvm_extra_args %} open{% endif %}>
+      <summary>Advanced</summary>
+      <label for="new-server-jvm">
+        <span>JVM extra args (optional)</span>
+        <input id="new-server-jvm" type="text"
+               name="jvm_extra_args"
+               value="{{ form.jvm_extra_args or '' }}"
+               placeholder="-XX:+UseG1GC ..."
+               autocomplete="off"
+               {% if errors.jvm_extra_args %}aria-invalid="true"{% endif %}>
+        {% if errors.jvm_extra_args %}<small class="new-server__error">{{ errors.jvm_extra_args }}</small>{% endif %}
+      </label>
     </details>
-    <p class="t-caption">Next: upload your server JAR and supporting files, then start your server from its workspace.</p>
-    <label class="new-server__eula">
-      <input type="checkbox"
-             name="accept_eula"
-             {% if form.accept_eula %}checked{% endif %}
-             required>
-      <span>I accept the <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noopener noreferrer">Minecraft EULA</a></span>
-      {% if errors.accept_eula %}<small class="new-server__error">{{ errors.accept_eula }}</small>{% endif %}
-    </label>
 
-    <div class="new-server__actions">
-      <button type="submit" class="btn btn--primary">Create</button>
-      <a class="btn btn--ghost" href="/">Cancel</a>
+    <div class="new-server__finish">
+      <label class="new-server__eula">
+        <input type="checkbox"
+               name="accept_eula"
+               {% if form.accept_eula %}checked{% endif %}
+               required>
+        <span>I accept the <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noopener noreferrer">Minecraft EULA</a></span>
+      </label>
+      {% if errors.accept_eula %}<small class="new-server__error">{{ errors.accept_eula }}</small>{% endif %}
+      <div class="new-server__actions">
+        <a class="btn btn--ghost" href="/">Cancel</a>
+        <button type="submit" class="btn btn--primary">{{ icon('plus') }} Create</button>
+      </div>
     </div>
   </form>
 </section>

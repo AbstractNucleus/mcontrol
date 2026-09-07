@@ -214,7 +214,7 @@ def capture_state_writes(monkeypatch):
     return seen
 
 
-async def test_no_divergence_emits_no_oob_fragments(
+async def test_no_divergence_emits_only_freshness_oob_fragment(
     client, fake_db, fake_stats, capture_state_writes, tmp_path
 ):
     row = _row(tmp_path)
@@ -230,7 +230,10 @@ async def test_no_divergence_emits_no_oob_fragments(
     response = await client.get("/servers/atm10/resources")
 
     assert response.status_code == 200
-    assert "hx-swap-oob" not in response.text
+    assert response.text.count("hx-swap-oob") == 1
+    assert 'id="resources-freshness" class="freshness" hx-swap-oob="outerHTML"' in response.text
+    assert 'id="state-pill"' not in response.text
+    assert 'id="lifecycle-buttons"' not in response.text
     assert capture_state_writes == []
 
 
@@ -304,7 +307,8 @@ async def test_starting_stays_starting_while_port_unbound(
 
     response = await client.get("/servers/atm10/resources")
 
-    assert "hx-swap-oob" not in response.text
+    assert 'id="state-pill"' not in response.text
+    assert 'id="lifecycle-buttons"' not in response.text
     assert capture_state_writes == []
 
 
@@ -335,7 +339,8 @@ async def test_stale_exited_not_promoted_while_port_unbound(
 
     response = await client.get("/servers/atm10/resources")
 
-    assert "hx-swap-oob" not in response.text
+    assert 'id="state-pill"' not in response.text
+    assert 'id="lifecycle-buttons"' not in response.text
     assert capture_state_writes == []
 
 

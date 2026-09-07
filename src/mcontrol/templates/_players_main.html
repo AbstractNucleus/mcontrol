@@ -1,8 +1,12 @@
+{% from "_icons.html" import icon %}
 <section class="players-page" id="players-main">
-  <div class="players-page__title">
-    <p class="t-eyebrow">Roster</p>
-    <h1 class="t-h1">Players</h1><p class="t-caption">Your roster is an address book. Server access is managed separately.</p>
-  </div>
+  <header class="page-heading">
+    <div class="players-page__title">
+      <h1 class="t-h1">Players</h1>
+      <p class="page-description">Adding to the roster does not grant server access.</p>
+    </div>
+    <span class="page-count">{{ icon('users') }} {{ roster|length }} player{% if roster|length != 1 %}s{% endif %}</span>
+  </header>
 
   {% if flash %}
   <div hx-swap-oob="beforeend:#flash-stack">
@@ -17,7 +21,8 @@
           hx-swap="outerHTML"
           hx-disabled-elt="find button[type='submit']">
       <button class="players-page__import-btn" type="submit" id="players-page-import">
-        {{ unknown_count }} membership(s) on disk for unknown UUID(s). Click to Import{% include "_spinner.html" %}
+        {{ icon('refresh') }}
+        <span>{{ unknown_count }} membership(s) on disk for unknown UUID(s). Click to Import</span>{% include "_spinner.html" %}
       </button>
     </form>
   {% endif %}
@@ -27,81 +32,80 @@
         hx-target="#players-main"
         hx-swap="outerHTML"
         hx-disabled-elt="find button[type='submit']">
-    <label for="players-page-name">Add by Minecraft name</label>
-    <input id="players-page-name"
-           name="name"
-           type="text"
-           required
-           autocomplete="off"
-           placeholder="e.g. Notch"
-           value="{{ form.name }}"
-           {% if errors.name %}autofocus{% endif %}>
-    <button type="submit" class="btn btn--primary" id="players-page-add">Look up + add{% include "_spinner.html" %}</button>
+    <div class="players-page__add-field">
+      <label for="players-page-name">Add by Minecraft name</label>
+      <input id="players-page-name"
+             name="name"
+             type="text"
+             required
+             autocomplete="off"
+             placeholder="e.g. Notch"
+             value="{{ form.name }}"
+             {% if errors.name %}autofocus aria-invalid="true" aria-describedby="players-name-error"{% endif %}>
+    </div>
+    <button type="submit" class="btn btn--primary" id="players-page-add">{{ icon('plus') }} Look up + add{% include "_spinner.html" %}</button>
     {% if errors.name %}
-      <p class="players-page__error">{{ errors.name }}</p>
+      <p class="players-page__error" id="players-name-error">{{ errors.name }}</p>
     {% endif %}
   </form>
 
-  <div class="filter-bar" data-roster-filters>
-    <label>Find a player<input type="search" data-roster-search placeholder="Search roster"></label>
-    <label>Server access<select data-roster-server><option value="">All servers</option></select></label>
-    <p data-roster-empty hidden>No players match these filters.</p>
-  </div>
-  {% if roster %}
-    <div class="players-page__table-wrap">
-    <table class="players-page__table">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Allowed to join</th>
-          <th>Operator on</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in roster %}
-          <tr data-roster-name="{{ p.name }}">
-            <td><strong>{{ p.name }}</strong></td>
-            <td>
-              {% if p.whitelist_servers %}
-                {% for s in p.whitelist_servers %}<a href="/servers/{{ s.name }}">{{ s.name }}</a>{% if s.whitelist_disabled %} <span class="t-muted players-page__wl-off">(whitelist disabled)</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
-              {% else %}
-                <span class="t-muted">-</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if p.op_servers %}
-                {% for s in p.op_servers %}<a href="/servers/{{ s }}">{{ s }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
-              {% else %}
-                <span class="t-muted">-</span>
-              {% endif %}
-            </td>
-            <td>
-              <a class="players-page__remove"
-                 href="#"
-                 hx-get="/players/{{ p.uuid }}/remove"
-                 hx-target="#player-modal"
-                 hx-swap="innerHTML">Remove</a>
-            </td>
+  <section class="roster-card" aria-label="Player roster">
+    <div class="filter-bar roster-card__filters" data-roster-filters>
+      <label>Find a player<input type="search" data-roster-search placeholder="Search roster"></label>
+      <label>Server access<select data-roster-server><option value="">All servers</option></select></label>
+      <p data-roster-empty hidden>No players match these filters.</p>
+    </div>
+    {% if roster %}
+      <div class="players-page__table-wrap">
+      <table class="players-page__table">
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Allowed to join</th>
+            <th scope="col">Operator on</th>
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    </div>
-  {% else %}
-    <div class="empty-state">
-      <svg class="empty-state__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-        <circle cx="9" cy="7" r="4"></circle>
-        <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path>
-      </svg>
-      <h3 class="empty-state__title">Roster is empty</h3>
-      <p class="empty-state__body">
-        Add a player by Minecraft name above, or, if any servers already have
-        whitelist/ops entries on disk, use Import.
-      </p>
-    </div>
-  {% endif %}
+        </thead>
+        <tbody>
+          {% for p in roster %}
+            <tr data-roster-name="{{ p.name }}">
+              <td><div class="roster-player"><span class="roster-player__avatar" aria-hidden="true">{{ p.name[:1]|upper }}</span><strong>{{ p.name }}</strong></div></td>
+              <td>
+                {% if p.whitelist_servers %}
+                  {% for s in p.whitelist_servers %}<a href="/servers/{{ s.name }}">{{ s.name }}</a>{% if s.whitelist_disabled %} <span class="t-muted players-page__wl-off">(whitelist disabled)</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+                {% else %}
+                  <span class="t-muted">-</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if p.op_servers %}
+                  {% for s in p.op_servers %}<a href="/servers/{{ s }}">{{ s }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+                {% else %}
+                  <span class="t-muted">-</span>
+                {% endif %}
+              </td>
+              <td>
+                <a class="players-page__remove"
+                   href="#"
+                   hx-get="/players/{{ p.uuid }}/remove"
+                   hx-target="#player-modal"
+                   hx-swap="innerHTML">Remove</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <span class="page-symbol page-symbol--large">{{ icon('users', size=24) }}</span>
+        <h3 class="empty-state__title">Roster is empty</h3>
+        <p class="empty-state__body">
+          Add a Minecraft name above, or import existing server memberships.
+        </p>
+      </div>
+    {% endif %}
+  </section>
 
   <div id="player-modal"></div>
 </section>

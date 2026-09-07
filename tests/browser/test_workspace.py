@@ -79,13 +79,14 @@ async def page():
 
 
 @pytest.mark.parametrize("width", [390, 768, 1280, 1920])
-@pytest.mark.parametrize("theme", ["light", "dark"])
-async def test_responsive_workspace(page, mock_url, width, theme):
+@pytest.mark.parametrize("system_scheme", ["light", "dark"])
+async def test_responsive_workspace(page, mock_url, width, system_scheme):
     await page.set_viewport_size({"width": width, "height": 1000})
-    await page.emulate_media(color_scheme=theme)
+    await page.emulate_media(color_scheme=system_scheme)
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     await page.goto(mock_url + "/servers/atm10")
+    await expect(page.locator("html")).to_have_attribute("data-theme", "dark")
     await expect(page.locator("#server-resources")).to_contain_text("CPU")
     await expect(page.locator("#file-tree")).to_contain_text("docker-compose.yml")
     await page.get_by_role("link", name="docker-compose.yml", exact=True).click()
@@ -105,12 +106,12 @@ async def test_responsive_workspace(page, mock_url, width, theme):
     screenshots = ROOT / ".localdev" / "ui-review"
     screenshots.mkdir(parents=True, exist_ok=True)
     await page.evaluate("window.scrollTo(0, 0)")
-    await page.screenshot(path=str(screenshots / f"workspace-{width}-{theme}.png"), full_page=True)
+    await page.screenshot(path=str(screenshots / f"workspace-{width}-dark.png"), full_page=True)
     await page.goto(mock_url + "/")
     await expect(page.locator("#fleet")).to_contain_text("atm10")
     assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-    await page.locator("[data-fleet-search]").fill("vault")
-    await expect(page.locator(".server-card:visible")).to_have_count(1)
+    await page.locator("[data-fleet-state]").select_option("Stopped")
+    await expect(page.locator(".server-card:visible")).to_have_count(2)
     await page.goto(mock_url + "/players")
     await expect(page.locator("[data-roster-name]").first).to_be_visible()
     assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
@@ -344,9 +345,9 @@ async def test_visible_refresh_does_not_overlap_and_hidden_streams_pause(page, m
     assert len(requests) > count
 
 
-@pytest.mark.parametrize("theme", ["light", "dark"])
-async def test_keyboard_settings_touch_targets_and_contrast(page, mock_url, theme):
-    await page.emulate_media(color_scheme=theme, reduced_motion="reduce")
+@pytest.mark.parametrize("system_scheme", ["light", "dark"])
+async def test_keyboard_settings_touch_targets_and_contrast(page, mock_url, system_scheme):
+    await page.emulate_media(color_scheme=system_scheme, reduced_motion="reduce")
     await page.set_viewport_size({"width": 390, "height": 844})
     await page.goto(mock_url + "/servers/atm10")
     await page.get_by_role("button", name="Settings", exact=True).click()
@@ -386,3 +387,271 @@ async def test_keyboard_settings_touch_targets_and_contrast(page, mock_url, them
       }); sample.remove(); return results;
     }""")
     assert all(result["ratio"] >= 4.5 for result in ratios), ratios
+
+
+@pytest.mark.parametrize("width", [320, 390, 768, 1280, 1920])
+async def test_workspace_telemetry_and_settings_alignment(page, mock_url, width):
+    await page.set_viewport_size({"width": width, "height": 1000})
+    await page.goto(mock_url + "/servers/atm10")
+    await expect(page.locator("#server-resources")).to_contain_text("CPU")
+    await expect(page.locator("#server-disk")).to_contain_text("Disk")
+    await expect(page.locator("#file-tree")).to_contain_text("docker-compose.yml")
+    geometry = await page.evaluate("""() => {
+      const rect = selector => document.querySelector(selector).getBoundingClientRect();
+      const cards = Array.from(document.querySelectorAll(
+        '#server-resources > .resources-strip__item, #server-disk'
+      )).map(el => el.getBoundingClientRect());
+      const fresh = rect('#resources-freshness');
+      const customize = rect('[data-customize]');
+      return {
+        tops: cards.map(r => r.top), bottoms: cards.map(r => r.bottom),
+        widths: cards.map(r => r.width),
+        freshnessGap: fresh.top - Math.max(...cards.map(r => r.bottom)),
+        footerCenterDelta: Math.abs((fresh.top + fresh.bottom) / 2
+          - (customize.top + customize.bottom) / 2),
+        footerItemGap: customize.left - fresh.right,
+        footerRightDelta: Math.abs(customize.right - rect('.detail-header__status').right),
+        flashDisplay: getComputedStyle(document.querySelector('#lifecycle-flash')).display,
+        overflows: document.documentElement.scrollWidth > innerWidth
+      };
+    }""")
+    assert not geometry["overflows"]
+    assert geometry["flashDisplay"] == "none"
+    assert 8 <= geometry["freshnessGap"] <= 28, geometry
+    assert geometry["footerCenterDelta"] <= 1, geometry
+    assert geometry["footerItemGap"] >= 8, geometry
+    assert geometry["footerRightDelta"] <= 1, geometry
+    await expect(page.locator("#resources-freshness")).to_have_count(1)
+    async with page.expect_response("**/servers/atm10/resources"):
+        await page.evaluate(
+            "htmx.trigger(document.querySelector('#server-resources'), 'mc:refresh')"
+        )
+    await expect(page.locator(".workspace-toolbar > #resources-freshness")).to_contain_text(
+        "Checked"
+    )
+    await expect(page.locator("#resources-freshness")).to_have_count(1)
+    if width >= 768:
+        assert max(geometry["tops"]) - min(geometry["tops"]) <= 1, geometry
+        assert max(geometry["bottoms"]) - min(geometry["bottoms"]) <= 1, geometry
+        assert abs(geometry["widths"][1] - geometry["widths"][3]) <= 1, geometry
+    await page.get_by_role("button", name="Customize layout").click()
+    await expect(page.get_by_role("button", name="Save layout", exact=True)).to_be_visible()
+    inline = await page.locator(".workspace-toolbar").evaluate("""el => {
+      const row = el.getBoundingClientRect();
+      const fresh = el.querySelector('.freshness').getBoundingClientRect();
+      const controls = Array.from(el.querySelectorAll('.layout-actions button'))
+        .map(button => button.getBoundingClientRect());
+      return {inside: controls.every(r => r.left >= row.left && r.right <= row.right
+          && r.top >= row.top && r.bottom <= row.bottom),
+        centers: controls.map(r => Math.abs((r.top + r.bottom - fresh.top - fresh.bottom) / 2)),
+        overflows: document.documentElement.scrollWidth > innerWidth};
+    }""")
+    assert inline["inside"] and not inline["overflows"], inline
+    if width >= 1280:
+        assert max(inline["centers"]) <= 1, inline
+    async with page.expect_response("**/servers/atm10/resources"):
+        await page.evaluate(
+            "htmx.trigger(document.querySelector('#server-resources'), 'mc:refresh')"
+        )
+    await expect(page.get_by_role("button", name="Save layout", exact=True)).to_be_visible()
+    await expect(page.locator("#resources-freshness")).to_have_count(1)
+    await page.get_by_role("button", name="Cancel", exact=True).click()
+    await expect(page.get_by_role("button", name="Customize layout")).to_be_visible()
+    screenshots = ROOT / ".localdev" / "ui-review"
+    screenshots.mkdir(parents=True, exist_ok=True)
+    await page.screenshot(
+        path=str(screenshots / f"workspace-alignment-{width}.png"), full_page=True
+    )
+    await page.get_by_role("button", name="Settings", exact=True).click()
+    await expect(page.locator("#server-settings")).to_be_visible()
+    settings = await page.locator("#server-settings").evaluate("""el => {
+      const heading = el.querySelector(':scope > header').getBoundingClientRect();
+      const card = el.querySelector('.settings-section').getBoundingClientRect();
+      return {width: el.getBoundingClientRect().width, headingLeft: heading.left,
+        cardLeft: card.left, headingRight: heading.right, cardRight: card.right};
+    }""")
+    assert settings["width"] <= 960, settings
+    assert abs(settings["headingLeft"] - settings["cardLeft"]) <= 1, settings
+    assert abs(settings["headingRight"] - settings["cardRight"]) <= 1, settings
+
+
+@pytest.mark.parametrize("width", [320, 390, 1440, 1920])
+async def test_panel_customization_stays_inside_titlebar(page, mock_url, width):
+    await page.set_viewport_size({"width": width, "height": 1000})
+    await page.goto(mock_url + "/servers/atm10")
+    await expect(page.locator("#server-resources")).to_contain_text("CPU")
+    headers = page.locator(".panel__bar")
+    normal_heights = await headers.evaluate_all(
+        "els => els.map(el => el.getBoundingClientRect().height)"
+    )
+    assert all(height == (52 if width < 768 else 48) for height in normal_heights)
+    await page.get_by_role("button", name="Customize layout").click()
+    geometry = await headers.evaluate_all("""headers => headers.map(header => {
+      const bar = header.getBoundingClientRect();
+      const controls = Array.from(header.querySelectorAll('button, input, select'));
+      const rects = controls.map(el => el.getBoundingClientRect());
+      const layout = header.querySelector('.panel__layout');
+      const hide = header.querySelector('[data-panel-hide]').getBoundingClientRect();
+      const up = header.querySelector('[data-move="-1"]').getBoundingClientRect();
+      return {
+        pane: header.closest('[data-pane]').dataset.pane,
+        width: bar.width,
+        inside: rects.every(r => r.left >= bar.left && r.right <= bar.right
+          && r.top >= bar.top && r.bottom <= bar.bottom),
+        nonoverlapping: rects.every((r, i) => rects.slice(i + 1).every(s =>
+          r.right <= s.left || s.right <= r.left || r.bottom <= s.top || s.bottom <= r.top)),
+        touchTargets: rects.every(r => r.width >= 44 && r.height >= 44),
+        hideRowDelta: Math.abs(hide.top - up.top),
+        layoutBackground: getComputedStyle(layout).backgroundColor,
+        labels: controls.every(el => el.getAttribute('aria-label')),
+        titleContained: header.querySelector('.panel__title').scrollWidth
+          <= header.querySelector('.panel__title').clientWidth
+      };
+    })""")
+    assert all(item["inside"] and item["nonoverlapping"] for item in geometry), geometry
+    assert all(item["labels"] and item["titleContained"] for item in geometry), geometry
+    assert all(item["layoutBackground"] == "rgba(0, 0, 0, 0)" for item in geometry)
+    assert await page.locator(".panel > .panel__layout").count() == 0
+    assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    if width < 768:
+        assert all(item["touchTargets"] for item in geometry), geometry
+    if width == 390:
+        assert all(item["hideRowDelta"] <= 1 for item in geometry), geometry
+    if width == 1440:
+        assert 300 <= next(item["width"] for item in geometry if item["pane"] == "players") <= 400
+    async with page.expect_response("**/servers/atm10/resources"):
+        await page.evaluate("htmx.trigger('#server-resources', 'mc:refresh')")
+    await expect(page.locator(".panel__bar > .panel__layout:visible")).to_have_count(3)
+    screenshots = ROOT / ".localdev" / "ui-review"
+    screenshots.mkdir(parents=True, exist_ok=True)
+    await page.screenshot(
+        path=str(screenshots / f"panel-customization-{width}.png"), full_page=True
+    )
+    await page.get_by_role("button", name="Cancel", exact=True).click()
+    assert await headers.evaluate_all(
+        "els => els.map(el => el.getBoundingClientRect().height)"
+    ) == normal_heights
+
+
+async def test_titlebar_layout_controls_keep_move_resize_hide_and_drag(page, mock_url):
+    await page.goto(mock_url + "/servers/atm10")
+    await page.get_by_role("button", name="Customize layout").click()
+    console = page.locator('[data-pane="console"]')
+    players = page.locator('[data-pane="players"]')
+    first_panel = page.locator("[data-dashboard] > section").first
+    await players.get_by_role("button", name="Move Players up", exact=True).click()
+    await expect(first_panel).to_have_attribute("data-pane", "players")
+    await players.get_by_role("button", name="Move Players down", exact=True).click()
+    await expect(first_panel).to_have_attribute("data-pane", "console")
+    await console.get_by_role("combobox", name="Console width").select_option("12")
+    await expect(console).to_have_attribute("data-span", "12")
+    height = console.get_by_role("slider", name="Console height")
+    await height.focus()
+    await page.keyboard.press("ArrowRight")
+    await expect(console).to_have_attribute("data-height", "440")
+    await players.get_by_role("button", name="Hide Players", exact=True).click()
+    await expect(players).to_be_hidden()
+    await expect(page.locator('[data-show-panel="players"]')).to_be_focused()
+    await page.locator('[data-show-panel="players"]').check()
+    await expect(players).to_be_visible()
+    transfer = await page.evaluate_handle("new DataTransfer()")
+    grip = players.get_by_role("button", name="Move Players", exact=True)
+    await grip.dispatch_event("dragstart", {"dataTransfer": transfer})
+    await expect(players).to_have_class("panel panel--dragging")
+    await console.locator(".panel__bar").dispatch_event("drop", {"dataTransfer": transfer})
+    await expect(first_panel).to_have_attribute("data-pane", "players")
+    await expect(players).to_have_class("panel")
+    await page.get_by_role("button", name="Cancel", exact=True).click()
+    await expect(first_panel).to_have_attribute("data-pane", "console")
+    await expect(console).to_have_attribute("data-span", "8")
+    await expect(console).to_have_attribute("data-height", "420")
+
+
+@pytest.mark.parametrize("width,reduced", [(390, False), (1440, False), (1440, True)])
+async def test_native_panel_drag_targets_settle_and_cancel(page, mock_url, width, reduced):
+    await page.set_viewport_size({"width": width, "height": 1400})
+    await page.emulate_media(reduced_motion="reduce" if reduced else "no-preference")
+    await page.goto(mock_url + "/servers/atm10")
+    await expect(page.locator("#server-resources")).to_contain_text("CPU")
+    await page.get_by_role("button", name="Customize layout").click()
+    panels = page.locator("[data-dashboard] > section")
+    for panel in await panels.all():
+        await panel.locator(".panel__collapse").click()
+    await page.evaluate("""() => {
+      window.fixtureDropAnimations = [];
+      document.addEventListener('drop', () => window.fixtureDropAnimations.push(
+        document.querySelectorAll('.panel--settling').length));
+      const original = DataTransfer.prototype.setDragImage;
+      DataTransfer.prototype.setDragImage = function(el, x, y) {
+        const rect = el.getBoundingClientRect();
+        window.fixtureDragPreview = {width: rect.width, height: rect.height,
+          title: el.textContent.trim(), connected: el.isConnected};
+        return original.call(this, el, x, y);
+      };
+    }""")
+    console = page.locator('[data-pane="console"]')
+    files = page.locator('[data-pane="files"]')
+
+    async def drag_to(panel, target, *, after):
+        grip = await panel.locator(".panel__grip").bounding_box()
+        rect = await target.bounding_box()
+        assert grip and rect
+        x = rect["x"] + (rect["width"] - 8 if after else 8)
+        y = rect["y"] + (rect["height"] - 8 if after else 8)
+        await page.mouse.move(grip["x"] + grip["width"] / 2, grip["y"] + grip["height"] / 2)
+        await page.mouse.down()
+        await page.mouse.move(grip["x"] + grip["width"] / 2 + 10, grip["y"] + 10, steps=3)
+        await page.mouse.move(x, y, steps=12)
+        await page.mouse.move(x + 1, y + 1)
+        await expect(panel).to_have_class("panel panel--dragging")
+
+    await drag_to(console, files, after=True)
+    await expect(files).to_have_attribute("data-drop-edge", "bottom")
+    await expect(page.locator(".is-drop-active")).to_have_count(0)
+    assert await page.evaluate("window.fixtureDragPreview") == {
+        "width": 220, "height": 54, "title": "Console", "connected": True
+    }
+    screenshots = ROOT / ".localdev" / "ui-review"
+    screenshots.mkdir(parents=True, exist_ok=True)
+    await page.screenshot(path=str(screenshots / f"panel-drag-active-{width}-{reduced}.png"))
+    await page.mouse.up()
+    await expect(panels.last).to_have_attribute("data-pane", "console")
+    await expect(page.locator(".panel--settling")).to_have_count(0)
+    counts = await page.evaluate("window.fixtureDropAnimations")
+    assert counts and (counts[-1] == 0 if reduced else counts[-1] > 0), counts
+    assert await panels.evaluate_all(
+        "els => els.every(el => getComputedStyle(el).transform === 'none')"
+    )
+    await page.screenshot(path=str(screenshots / f"panel-drag-settled-{width}-{reduced}.png"))
+    await drag_to(console, panels.first, after=False)
+    await expect(page.locator("[data-drop-edge]")).to_have_count(1)
+    await page.mouse.up()
+    await expect(panels.first).to_have_attribute("data-pane", "console")
+    await expect(page.locator(".panel--settling")).to_have_count(0)
+    await drag_to(console, files, after=True)
+    await page.keyboard.press("Escape")
+    await page.mouse.up()
+    await expect(panels.first).to_have_attribute("data-pane", "console")
+    await expect(
+        page.locator(".panel--dragging, [data-drop-edge], .panel-drag-preview")
+    ).to_have_count(0)
+    await drag_to(console, files, after=True)
+    await page.mouse.move(2, 2, steps=6)
+    await expect(page.locator("[data-drop-edge]")).to_have_count(0)
+    await page.mouse.up()
+    await expect(panels.first).to_have_attribute("data-pane", "console")
+    await expect(page.locator(".panel--dragging, .panel-drag-preview")).to_have_count(0)
+    await page.get_by_role("button", name="Cancel", exact=True).click()
+    await expect(console).to_have_attribute("data-collapsed", "false")
+    if width == 1440 and not reduced:
+        await page.get_by_role("button", name="Customize layout").click()
+        players = page.locator('[data-pane="players"]')
+        await drag_to(console, players, after=True)
+        await expect(players).to_have_attribute("data-drop-edge", "right")
+        await page.screenshot(path=str(screenshots / "panel-drag-expanded-active.png"))
+        await page.mouse.up()
+        await expect(panels.first).to_have_attribute("data-pane", "players")
+        await expect(page.locator(".panel--settling")).to_have_count(0)
+        await page.screenshot(path=str(screenshots / "panel-drag-expanded-settled.png"))
+        await page.get_by_role("button", name="Cancel", exact=True).click()
+        await expect(panels.first).to_have_attribute("data-pane", "console")

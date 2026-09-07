@@ -6,7 +6,7 @@ This change preserves FastAPI, Jinja, HTMX, CodeMirror, mutation URLs, file conf
 
 - Run `uv run pytest -v` and `uv run ruff check .`.
 - Install Chromium with `uv run playwright install chromium`, then run `MCONTROL_BROWSER_TESTS=1 uv run pytest tests/browser -v` (PowerShell: `$env:MCONTROL_BROWSER_TESTS='1'`). These tests launch an isolated mock process and temporary server files.
-- Review `.localdev/ui-review/` screenshots in both themes at 390, 768, 1280, and 1920 pixels. Confirm no horizontal page overflow, readable server names, and an immediately visible editor when selecting a file.
+- Review `.localdev/ui-review/` screenshots of the fixed dark interface at 390, 768, 1280, and 1920 pixels. Confirm no horizontal page overflow, readable server names, and an immediately visible editor when selecting a file.
 - Test lifecycle writes, player mutations, failed saves, conflict handling, and deletion only against fixtures. Browser tests include controlled HTTP 502 responses, a stalled request, reconnection, and stale-content recovery. These reproduce the observed failure symptoms; they do not establish the original upstream 502 cause.
 - Check keyboard navigation, focus restoration, non-drag layout controls, reduced motion, and phone targets. Automated contrast checks sample semantic text/background pairs; they are not a full WCAG certification.
 
@@ -23,7 +23,7 @@ This change preserves FastAPI, Jinja, HTMX, CodeMirror, mutation URLs, file conf
    docker inspect mcontrol-app-1 --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
    ```
 
-4. Check `/healthz` and open https://mcontrol.noelkleen.com. Read-only smoke checks: fleet filtering, a running and stopped server, five-second telemetry, independent disk refresh, existing file viewing, roster, Settings, and both themes. Verify the revision matches the intended commit. Do not run test mutations on live servers.
+4. Check `/healthz` and open https://mcontrol.noelkleen.com. Read-only smoke checks: fleet filtering, a running and stopped server, five-second telemetry, independent disk refresh, existing file viewing, roster, Settings, and fixed dark appearance under either operating-system color scheme. Verify the revision matches the intended commit. Do not run test mutations on live servers.
 
 ## Rollback
 

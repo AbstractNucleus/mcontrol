@@ -1,6 +1,8 @@
+{% from "_icons.html" import icon %}
 <div class="trash-modal" role="dialog" aria-modal="true" aria-labelledby="trash-empty-title" data-modal-root tabindex="-1">
   <div class="trash-modal__panel">
-    <p id="trash-empty-title" class="trash-modal__title">Empty trash</p>
+    <span class="page-symbol page-symbol--danger">{{ icon('trash', size=22) }}</span>
+    <h3 id="trash-empty-title" class="trash-modal__title">Empty trash</h3>
 
     {% if sweepable %}
       <p class="trash-modal__hint">
@@ -18,18 +20,19 @@
             hx-target="#trash-modal"
             hx-swap="innerHTML">
         <label>
-          <span class="t-eyebrow">Type <code>EMPTY</code> to confirm</span>
+          <span>Type <code>EMPTY</code> to confirm</span>
           <input type="text"
                  name="confirm"
                  value="{{ confirm or '' }}"
                  autocomplete="off"
+                 {% if error %}aria-invalid="true"{% endif %}
                  autofocus
                  required>
           {% if error %}<small class="trash-modal__error">{{ error }}</small>{% endif %}
         </label>
         <div class="trash-modal__actions">
-          <button type="submit" class="btn btn--danger-solid">Empty trash</button>
           <button type="button" class="btn btn--ghost" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn--danger-solid">{{ icon('trash') }} Empty trash</button>
         </div>
       </form>
     {% else %}

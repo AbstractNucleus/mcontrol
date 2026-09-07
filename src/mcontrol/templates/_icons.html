@@ -1,0 +1,34 @@
+{% macro icon(name, size=16) -%}
+<svg class="ui-icon" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{%- if name == 'server' %}<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6"/>
+{%- elif name == 'grid' %}<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>
+{%- elif name == 'search' %}<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/>
+{%- elif name == 'plus' %}<path d="M12 5v14M5 12h14"/>
+{%- elif name == 'refresh' %}<path d="M20 7v5h-5M4 17v-5h5M6.1 6.1a8 8 0 0 1 13 2M4.9 15.9a8 8 0 0 0 13 2"/>
+{%- elif name == 'users' %}<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2"/>
+{%- elif name == 'trash' %}<path d="M3 6h18M9 6V3h6v3M5 6l1 14h12l1-14M10 10v6M14 10v6"/>
+{%- elif name == 'terminal' %}<rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3M13 15h4"/>
+{%- elif name == 'folder' %}<path d="M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9H3Z"/>
+{%- elif name == 'file' %}<path d="M14 3H5v18h14V8Z"/><path d="M14 3v5h5M8 13h8M8 17h6"/>
+{%- elif name == 'file-code' %}<path d="M14 3H5v18h14V8Z"/><path d="M14 3v5h5m-9 5-2 2 2 2m4-4 2 2-2 2"/>
+{%- elif name == 'link' %}<path d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/>
+{%- elif name == 'more' %}<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>
+{%- elif name == 'settings' %}<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>
+{%- elif name == 'chevron-right' %}<path d="m9 5 7 7-7 7"/>
+{%- elif name == 'arrow-left' %}<path d="M20 12H4m6-6-6 6 6 6"/>
+{%- elif name == 'arrow-up-right' %}<path d="M6 18 18 6M6 6h12v12"/>
+{%- elif name == 'arrow-up' %}<path d="M12 20V4m-6 6 6-6 6 6"/>
+{%- elif name == 'arrow-down' %}<path d="M12 4v16m-6-6 6 6 6-6"/>
+{%- elif name == 'grip' %}<circle cx="8" cy="5" r="1"/><circle cx="16" cy="5" r="1"/><circle cx="8" cy="12" r="1"/><circle cx="16" cy="12" r="1"/><circle cx="8" cy="19" r="1"/><circle cx="16" cy="19" r="1"/>
+{%- elif name == 'eye-off' %}<path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.2A11 11 0 0 1 21 12a14 14 0 0 1-3 4M6 6a15 15 0 0 0-3 6s3 7 9 7a11 11 0 0 0 5-1.2"/>
+{%- elif name == 'activity' %}<path d="M3 12h4l3-8 4 16 3-8h4"/>
+{%- elif name == 'cpu' %}<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>
+{%- elif name == 'memory' %}<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10v4M11 10v4M15 10v4M7 18v3M12 18v3M17 18v3"/>
+{%- elif name == 'clock' %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+{%- elif name == 'shield' %}<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8 12 3 3 5-6"/>
+{%- elif name == 'chevrons' %}<path d="m9 8 3-3 3 3m-6 8 3 3 3-3"/>
+{%- elif name == 'play' %}<path d="m8 5 11 7-11 7Z"/>
+{%- elif name == 'stop' %}<rect x="6" y="6" width="12" height="12" rx="2"/>
+{%- endif %}
+</svg>
+{%- endmacro %}

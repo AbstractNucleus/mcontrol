@@ -1,32 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
+  <meta name="color-scheme" content="dark">
   {#
-    Theme bootstrap. Synchronous so it runs
-    before stylesheets evaluate, eliminating flash-of-wrong-theme on
-    first paint. Reads "theme" from localStorage; resolves "system" /
-    null via prefers-color-scheme. Sets data-theme on <html>. The CSS
-    @media (prefers-color-scheme: dark) block is the JS-off fallback.
-  #}
-  <script>
-    (function () {
-      try {
-        var stored = localStorage.getItem("theme");
-        if (stored !== "light" && stored !== "dark" && stored !== "system") stored = null;
-        var resolved = stored;
-        if (!stored || stored === "system") {
-          resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        }
-        document.documentElement.setAttribute("data-theme", resolved);
-      } catch (_) { /* localStorage blocked → CSS @media kicks in */ }
-    })();
-  </script>
-  {#
-    Sidebar bootstrap. Same shape as the theme bootstrap above: synchronous,
-    inline, runs before stylesheets so the rail comes up at the user's saved
+    Sidebar bootstrap runs synchronously before stylesheets so the rail uses the saved
     width and collapsed state without a flash. Keys: "sidebar-width" (px
     string with units), "sidebar-collapsed" ("1" when collapsed).
   #}
@@ -59,23 +38,23 @@
   <link rel="stylesheet" href="/static/app.files.css?v={{ version }}">
   <link rel="stylesheet" href="/static/app.misc.css?v={{ version }}">
   <link rel="stylesheet" href="/static/app.workspace.css?v={{ version }}">
+  <link rel="stylesheet" href="/static/app.fleet.css?v={{ version }}">
   <script src="/static/workspace.js?v={{ version }}" defer></script>
   <script src="/static/htmx.min.js?v={{ version }}" defer></script>
   <script src="/static/htmx-ext-sse.js?v={{ version }}" defer></script>
   <script src="/static/errors.js?v={{ version }}" defer></script>
-  <script src="/static/theme.js?v={{ version }}" defer></script>
   <script src="/static/sidebar.js?v={{ version }}" defer></script>
   <script src="/static/flash.js?v={{ version }}" defer></script>
   <script src="/static/modals.js?v={{ version }}" defer></script>
   <script src="/static/focus.js?v={{ version }}" defer></script>
   <script src="/static/lifecycle.js?v={{ version }}" defer></script>
   <script src="/static/streams.js?v={{ version }}" defer></script>
-  <script src="/static/switcher.js?v={{ version }}" defer></script>
   {% block head_scripts %}{% endblock %}
 </head>
 <body>
+  {% from "_icons.html" import icon %}
   <a class="skip-link" href="#main">Skip to content</a>
-  <header class="mobile-header"><a href="/">mcontrol</a><button type="button" class="btn btn--sm" data-mobile-menu aria-controls="primary-sidebar" aria-expanded="false">Menu</button></header>
+  <header class="mobile-header"><button type="button" class="btn btn--sm" data-mobile-menu aria-controls="primary-sidebar" aria-expanded="false">{{ icon('grid') }} Menu</button></header>
   <button class="nav-backdrop" aria-label="Close navigation" data-close-nav hidden></button>
   <div class="app-shell">
     {% include "_sidebar.html" %}

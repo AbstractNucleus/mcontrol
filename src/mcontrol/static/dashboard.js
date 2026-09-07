@@ -11,6 +11,36 @@
   let editing = false, before = null, focused = null, returnFocus = null;
   const status = document.querySelector("[data-layout-status]");
   function announce(text) { status.textContent = text; }
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const moves = new Map();
+  function finishMoves() {
+    moves.forEach((animation, panel) => { animation.cancel(); panel.classList.remove("panel--settling"); });
+    moves.clear();
+  }
+  function reorder(change) {
+    const previous = new Map(panels.filter(p => !p.hidden).map(p => [p, p.getBoundingClientRect()]));
+    finishMoves();
+    change();
+    if (reducedMotion.matches) return;
+    const style = getComputedStyle(board);
+    const duration = parseFloat(style.getPropertyValue("--motion-base")) || 200;
+    previous.forEach((rect, panel) => {
+      const next = panel.getBoundingClientRect(), x = rect.left - next.left, y = rect.top - next.top;
+      if (panel.hidden || (Math.abs(x) < 1 && Math.abs(y) < 1)) return;
+      panel.classList.add("panel--settling");
+      const animation = panel.animate(
+        [{ transform: `translate(${x}px, ${y}px)` }, { transform: "translate(0, 0)" }],
+        { duration, easing: style.getPropertyValue("--ease").trim() || "ease-out" }
+      );
+      moves.set(panel, animation);
+      const finished = () => {
+        if (moves.get(panel) !== animation) return;
+        moves.delete(panel); panel.classList.remove("panel--settling");
+      };
+      animation.finished.then(finished, finished);
+    });
+  }
+  reducedMotion.addEventListener("change", () => { if (reducedMotion.matches) finishMoves(); });
   function read() {
     return { order: Array.from(board.children).map(p => p.dataset.pane),
       hidden: panels.filter(p => p.hidden).map(p => p.dataset.pane),
@@ -64,6 +94,7 @@
     label.append(check, p.querySelector(".panel__title").textContent); visibility.append(label);
   });
   function setEditing(value) {
+    if (!value) { endDrag(); finishMoves(); }
     editing = value; root.dataset.customizing = String(value);
     document.querySelector(".layout-actions").hidden = !value;
     document.querySelector("[data-customize]").hidden = value;
@@ -91,7 +122,13 @@
     panel.dataset.wasHidden = String(panel.hidden); panel.hidden = false;
     root.dataset.focused = panel.dataset.pane; panel.classList.add("panel--focused");
     const button = panel.querySelector("[data-panel-focus]"); button.textContent = "Back to workspace";
-    button.setAttribute("aria-label", "Back to workspace"); button.focus();
+    button.setAttribute("aria-label", "Back to workspace"); button.focus({ preventScroll: true });
+    const offset = Array.from(document.querySelectorAll(".detail-header, .mobile-header")).reduce((height, header) => {
+      const style = getComputedStyle(header);
+      return style.position === "sticky" && header.getClientRects().length
+        ? Math.max(height, header.offsetHeight + (parseFloat(style.top) || 0)) : height;
+    }, 0);
+    window.scrollTo({ top: window.scrollY + panel.getBoundingClientRect().top - offset - 12, behavior: "instant" });
   }
   board.addEventListener("click", e => {
     const panel = e.target.closest("[data-pane]"); if (!panel) return;
@@ -104,7 +141,7 @@
     const move = e.target.closest("[data-move]");
     if (move && editing) {
       const state = read(), index = state.order.indexOf(panel.dataset.pane), next = index + Number(move.dataset.move);
-      if (next >= 0 && next < state.order.length) { [state.order[index], state.order[next]] = [state.order[next], state.order[index]]; apply(state); move.focus(); announce("Panel moved."); }
+      if (next >= 0 && next < state.order.length) { [state.order[index], state.order[next]] = [state.order[next], state.order[index]]; reorder(() => apply(state)); move.focus({ preventScroll: true }); announce("Panel moved."); }
     }
     if (e.target.closest("[data-panel-hide]") && editing) {
       if (panels.filter(p => !p.hidden).length === 1) { announce("Keep at least one panel visible."); return; }
@@ -117,18 +154,74 @@
     if (e.target.matches("[data-panel-width]")) panel.dataset.span = e.target.value;
     if (e.target.matches("[data-panel-height]")) { panel.dataset.height = e.target.value; panel.style.setProperty("--panel-height", e.target.value + "px"); }
   });
-  let dragging = null;
+  let dragging = null, dropTarget = null, dragPreview = null;
+  function clearDropTarget() {
+    if (dropTarget) delete dropTarget.dataset.dropEdge;
+    dropTarget = null;
+  }
+  function endDrag() {
+    clearDropTarget();
+    dragging?.classList.remove("panel--dragging");
+    dragPreview?.remove();
+    dragging = null; dragPreview = null;
+  }
+  function destination(e) {
+    let target = e.target.closest("[data-pane]");
+    if (target === dragging) return null;
+    const visible = panels.filter(p => !p.hidden && p !== dragging);
+    if (!target) {
+      target = visible.reduce((closest, panel) => {
+        const r = panel.getBoundingClientRect();
+        const distance = Math.hypot(Math.max(r.left - e.clientX, 0, e.clientX - r.right), Math.max(r.top - e.clientY, 0, e.clientY - r.bottom));
+        return !closest || distance < closest.distance ? { panel, distance } : closest;
+      }, null)?.panel;
+    }
+    if (!target || !board.contains(target)) return null;
+    const rect = target.getBoundingClientRect();
+    const horizontal = panels.some(p => p !== target && !p.hidden && Math.abs(p.getBoundingClientRect().top - rect.top) < 2);
+    const after = horizontal ? e.clientX > rect.left + rect.width / 2 : e.clientY > rect.top + rect.height / 2;
+    const anchor = after ? target.nextElementSibling : target;
+    if (anchor === dragging || dragging.nextElementSibling === anchor) return null;
+    return { target, anchor, edge: horizontal ? (after ? "right" : "left") : (after ? "bottom" : "top") };
+  }
   board.addEventListener("dragstart", e => {
     if (!editing || !e.target.closest(".panel__grip")) return;
+    finishMoves(); endDrag();
     dragging = e.target.closest("[data-pane]"); e.dataTransfer.setData("text/plain", dragging.dataset.pane); e.dataTransfer.effectAllowed = "move";
+    dragPreview = document.createElement("div"); dragPreview.className = "panel-drag-preview";
+    dragPreview.setAttribute("aria-hidden", "true");
+    dragPreview.append(dragging.querySelector(".panel__icon").cloneNode(true), dragging.querySelector(".panel__title").textContent);
+    document.body.append(dragPreview); e.dataTransfer.setDragImage(dragPreview, 24, 24);
+    dragging.classList.add("panel--dragging");
+    announce("Drag to an insertion marker, or use the move buttons.");
   });
-  board.addEventListener("dragover", e => { if (dragging) e.preventDefault(); });
+  board.addEventListener("dragover", e => {
+    if (!dragging) return;
+    e.preventDefault();
+    const next = destination(e);
+    clearDropTarget();
+    e.dataTransfer.dropEffect = next ? "move" : "none";
+    if (next) { dropTarget = next.target; dropTarget.dataset.dropEdge = next.edge; }
+  });
+  document.addEventListener("dragover", e => {
+    if (dragging && !board.contains(e.target)) clearDropTarget();
+  });
+  board.addEventListener("dragleave", e => {
+    if (dragging && e.relatedTarget && !board.contains(e.relatedTarget)) clearDropTarget();
+  });
   board.addEventListener("drop", e => {
-    if (!dragging) return; e.preventDefault(); const target = e.target.closest("[data-pane]");
-    if (target && target !== dragging) board.insertBefore(dragging, target);
-    dragging = null; announce("Panel moved. Save to keep this layout.");
+    if (!dragging) return;
+    e.preventDefault();
+    const next = destination(e), panel = dragging;
+    endDrag();
+    if (next) {
+      reorder(() => board.insertBefore(panel, next.anchor));
+      panel.querySelector(".panel__grip").focus({ preventScroll: true });
+      announce("Panel moved. Save to keep this layout.");
+    }
   });
-  board.addEventListener("dragend", () => { dragging = null; });
+  document.addEventListener("dragend", endDrag);
+  document.addEventListener("drop", endDrag);
   function settings(open, trigger) {
     endFocus(); root.dataset.settings = String(open); document.getElementById("server-settings").hidden = !open;
     document.querySelectorAll("[data-settings-open]").forEach(b => b.setAttribute("aria-expanded", String(open)));
@@ -143,6 +236,7 @@
   document.querySelectorAll("[data-focus-files]").forEach(button => button.addEventListener("click", e => focusPanel(byId.files, e.target)));
   document.addEventListener("keydown", e => {
     if (e.key !== "Escape" || e.defaultPrevented || e.target.closest(".cm-editor, [data-modal-root]")) return;
+    if (dragging) { endDrag(); announce("Panel move cancelled."); return; }
     if (focused) endFocus(); else if (root.dataset.settings === "true") settings(false);
   });
 })();

@@ -4,7 +4,7 @@
    segment (the file itself) is plain text. #}
 {% set _segments = filename.split('/') %}
 {% set _last_index = _segments|length - 1 %}
-<header class="file-view__head">
+<header class="file-view__head" data-file-path="{{ filename }}">
   <nav class="file-view__breadcrumb" aria-label="file path">
     {% for seg in _segments %}
       {% if loop.index0 == _last_index %}

@@ -114,7 +114,7 @@
    ----------------------------------------------------------------------- */
 
 :root {
-  --sidebar-width: 248px;
+  --sidebar-width: 240px;
   --sidebar-width-collapsed: 56px;
   --sidebar-width-min: 200px;
   --sidebar-width-max: 420px;
@@ -133,7 +133,7 @@
   flex-direction: column;
   padding: var(--space-5) var(--space-3) var(--space-3);
   border-right: 1px solid var(--border-soft);
-  background: var(--bg-page);
+  background: var(--bg-sidebar);
   transition: flex-basis var(--motion-base) var(--ease),
               width var(--motion-base) var(--ease),
               padding var(--motion-base) var(--ease);
@@ -154,65 +154,21 @@
   padding-right: var(--space-2);
 }
 
-.sidebar__brand {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  text-decoration: none;
-  color: var(--fg-primary);
-  font-size: var(--fs-md);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.sidebar__brand:hover {
-  background: var(--bg-sunken);
-  color: var(--fg-primary);
-}
-
-.sidebar__logo-mark {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  border-radius: var(--radius-xs);
-  background: var(--accent);
-  position: relative;
-}
-
-.sidebar__logo-mark::after {
-  content: "";
-  position: absolute;
-  inset: 4px;
-  border-radius: 2px;
-  background: var(--bg-page);
-}
-
-.sidebar__brand-name {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-[data-sidebar="collapsed"] .sidebar__brand-name {
-  display: none;
-}
-
 .sidebar__nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .sidebar__nav-link {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 7px var(--space-3);
-  border-radius: var(--radius-sm);
+  padding: 10px var(--space-3);
+  border-radius: var(--radius-md);
   color: var(--fg-secondary);
   font-size: var(--fs-sm);
   font-weight: 500;
@@ -229,6 +185,7 @@
 .sidebar__nav-link[aria-current="page"] {
   color: var(--fg-primary);
   background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .sidebar__icon {
@@ -276,9 +233,9 @@
    own height and scrolls internally so Players/Trash stay in view. */
 .sidebar__servers {
   list-style: none;
-  margin: 2px 0 var(--space-3) calc(var(--space-3) + 8px);
-  padding: 0 0 0 var(--space-3);
-  border-left: 1px solid var(--border-soft);
+  margin: 0;
+  padding: 0;
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -292,7 +249,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 6px var(--space-3);
+  padding: 9px var(--space-3);
   border-radius: var(--radius-sm);
   color: var(--fg-secondary);
   font-family: var(--font-sans);
@@ -349,13 +306,14 @@
    flex-grows to fill the rail. */
 .sidebar__spacer {
   flex: 1;
-  min-height: var(--space-4);
+  min-height: var(--space-2);
 }
 
 .sidebar__footer {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: var(--space-2);
   padding-top: var(--space-3);
   border-top: 1px solid var(--border-soft);
@@ -365,16 +323,6 @@
   justify-content: center;
   flex-direction: column;
   gap: var(--space-3);
-}
-
-[data-sidebar="collapsed"] .theme-toggle {
-  display: inline-flex;
-  flex-direction: column;
-  border-radius: var(--radius-md);
-}
-
-[data-sidebar="collapsed"] .theme-toggle__option {
-  padding: 6px;
 }
 
 .sidebar__collapse {
@@ -455,8 +403,8 @@
 .page-main {
   flex: 1;
   min-width: 0;
-  max-width: 1100px;
-  padding: var(--space-8) var(--space-10);
+  max-width: none;
+  padding: var(--space-6) var(--space-8) var(--space-10);
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
@@ -503,7 +451,6 @@
   :root:not([data-sidebar="expanded"]) {
     --sidebar-width: var(--sidebar-width-collapsed);
   }
-  :root:not([data-sidebar="expanded"]) .sidebar__brand-name,
   :root:not([data-sidebar="expanded"]) .sidebar__nav-label,
   :root:not([data-sidebar="expanded"]) .sidebar__nav-count,
   :root:not([data-sidebar="expanded"]) .sidebar__servers,
@@ -518,14 +465,6 @@
     justify-content: center;
     flex-direction: column;
     gap: var(--space-3);
-  }
-  :root:not([data-sidebar="expanded"]) .theme-toggle {
-    display: inline-flex;
-    flex-direction: column;
-    border-radius: var(--radius-md);
-  }
-  :root:not([data-sidebar="expanded"]) .theme-toggle__option {
-    padding: 6px;
   }
   .page-main {
     padding-left: var(--space-5);
@@ -582,162 +521,6 @@
 }
 
 
-/* ---- Theme toggle (segmented tri-state) -------------------------------- */
-.theme-toggle {
-  display: inline-flex;
-  padding: 3px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-full);
-  gap: 1px;
-  margin: 0;
-}
-
-.theme-toggle legend {
-  display: none;
-}
-
-.theme-toggle__option {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 9px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  color: var(--fg-muted);
-  transition: color var(--motion-fast) var(--ease),
-              background var(--motion-fast) var(--ease);
-}
-
-.theme-toggle__option:hover {
-  color: var(--fg-primary);
-}
-
-.theme-toggle__option input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  margin: 0;
-  cursor: pointer;
-}
-
-.theme-toggle__option input:focus-visible + svg {
-  outline: 2px solid var(--ring);
-  outline-offset: 3px;
-  border-radius: var(--radius-full);
-}
-
-.theme-toggle__option:has(input:checked) {
-  background: var(--bg-surface);
-  color: var(--fg-primary);
-  box-shadow: var(--shadow-sm);
-}
-
-.theme-toggle__option svg {
-  width: 16px;
-  height: 16px;
-  display: block;
-}
-
-
-/* ---- Ctrl/Cmd+K quick switcher ----------------------------------------- */
-.switcher {
-  position: fixed;
-  inset: 0;
-  z-index: 250;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 12vh var(--space-5) var(--space-5);
-  background: var(--overlay-scrim);
-}
-
-[data-theme="dark"] .switcher {
-  background: var(--overlay-scrim-strong);
-}
-
-.switcher__panel {
-  width: min(30rem, 100%);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-  animation: modal-rise var(--motion-base) var(--ease) both;
-}
-
-.switcher__input,
-input.switcher__input {
-  border: 0;
-  border-bottom: 1px solid var(--border-soft);
-  border-radius: 0;
-  background: transparent;
-  padding: var(--space-4) var(--space-5);
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-}
-
-.switcher__input:focus-visible {
-  outline: none;
-}
-
-.switcher__list {
-  list-style: none;
-  margin: 0;
-  padding: var(--space-2);
-  max-height: 40vh;
-  overflow-y: auto;
-  display: grid;
-  gap: 1px;
-}
-
-.switcher__item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 7px var(--space-3);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-sans);
-  font-size: var(--fs-sm);
-  color: var(--fg-secondary);
-  cursor: pointer;
-}
-
-.switcher__item:hover {
-  background: var(--bg-sunken);
-  color: var(--fg-primary);
-}
-
-.switcher__item.is-selected {
-  background: var(--bg-sunken);
-  color: var(--fg-primary);
-}
-
-.switcher__dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: var(--radius-full);
-  background: transparent;
-}
-
-.switcher__name {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.switcher__empty {
-  padding: var(--space-3);
-  font-size: var(--fs-sm);
-  color: var(--fg-muted);
-  text-align: center;
-}
-
-
 /* ---- Sidebar count badge (kept from the retired topnav so the Trash
    tombstone-count chip in _sidebar.html keeps the same look + tests) -- */
 .topnav__badge {
@@ -759,3 +542,25 @@ input.switcher__input {
 }
 
 
+
+/* Workspace navigation and page hierarchy. */
+.ui-icon { display: inline-block; flex: none; vertical-align: middle; }
+.page-heading { display: flex; justify-content: space-between; align-items: center; gap: var(--space-5); flex-wrap: wrap; margin-bottom: var(--space-8); }
+.page-description { color: var(--fg-muted); font-size: var(--fs-sm); line-height: 1.65; margin: var(--space-2) 0 0; max-width: 65ch; }
+.sidebar__caption { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-weight: 500; color: var(--fg-muted); margin: 0; padding: 0 var(--space-3) var(--space-2); }
+.sidebar__caption--servers { margin-top: var(--space-6); }
+.sidebar__caption a { width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--radius-xs); color: var(--fg-muted); }
+.sidebar__caption a:hover { background: var(--bg-surface); color: var(--fg-primary); }
+.sidebar__nav-link > .ui-icon { color: var(--fg-muted); }
+.sidebar__nav-count { min-width: 21px; text-align: center; background: var(--bg-sunken); border-radius: var(--radius-xs); }
+.sidebar__server-dot--exited, .sidebar__server-dot--created { background: var(--fg-muted); }
+.sidebar__footer { border: 0; padding: 0 var(--space-1); }
+.sidebar__collapse { width: 32px; height: 32px; }
+[data-sidebar="collapsed"] .sidebar__caption { display: none; }
+@media (min-width: 768px) and (max-width: 768px) {
+  :root:not([data-sidebar="expanded"]) .sidebar__caption { display: none; }
+}
+@media (max-width: 767px) {
+  .page-heading { margin-bottom: var(--space-6); }
+  :root[data-mobile-nav="true"] .sidebar__caption { display: flex; }
+}

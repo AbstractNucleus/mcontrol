@@ -16,12 +16,13 @@
     <span data-state="{{ server.state }}" class="state-pill state-pill--{{ server.state }}">{{ status_label(server.state) }}</span>
   </span>
   <span class="server-card__id">
-    <a class="server-card__name" href="/servers/{{ server.name }}">{{ server.name }}</a>
+    <span class="server-avatar server-avatar--{{ server.loader or 'vanilla' }}" aria-hidden="true">{{ server.name[:1] | upper }}</span>
+    <span class="server-card__identity"><a class="server-card__name" href="/servers/{{ server.name }}">{{ server.name }}</a><span class="server-card__loader">{{ server.loader | capitalize if server.loader else 'Minecraft' }}</span></span>
   </span>
-  <span data-label="Port" class="server-card__port t-num">{% if server.port %}:{{ server.port }}{% endif %}</span>
-  <span data-label="CPU" class="server-card__cpu t-num">{{ server.cpu or "" }}</span>
+  <span data-label="Port" class="server-card__port t-num">{% if server.port %}:{{ server.port }}{% else %}—{% endif %}</span>
+  <span data-label="CPU" class="server-card__cpu t-num">{{ server.cpu or "—" }}</span>
   <span data-label="Memory" class="server-card__memory">{{ server.memory or ("Unavailable" if server.state in ["unknown", "unreachable"] else "Not running") }}</span>
-  <span data-label="Uptime" class="server-card__uptime t-num">{{ server.started_at | uptime if server.started_at else "" }}</span>
+  <span data-label="Uptime" class="server-card__uptime t-num">{{ server.started_at | uptime if server.started_at else "—" }}</span>
   <span class="server-card__actions">
     {# Only the applicable action(s) render; transient states get none. #}
     {% if not lc.start_disabled %}

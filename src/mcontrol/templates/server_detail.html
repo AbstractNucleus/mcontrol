@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 
 {% block title %}{{ server.name }} | mcontrol{% endblock %}
 
@@ -54,18 +55,21 @@
 {% macro panel(pane_id, title) %}
 <section class="panel" data-pane="{{ pane_id }}" data-collapsed="false" data-span="{{ 8 if pane_id == 'console' else (4 if pane_id == 'players' else 12) }}">
   <header class="panel__bar">
-    <button type="button" class="panel__grip layout-only" aria-label="Move {{ title }}" title="Drag to rearrange">⠿</button>
+    <button type="button" class="panel__grip layout-only" aria-label="Move {{ title }}" title="Drag {{ title }} to rearrange">{{ icon('grip', 16) }}</button>
+    <span class="panel__icon" aria-hidden="true">{{ icon('terminal' if pane_id == 'console' else ('folder' if pane_id == 'files' else 'users')) }}</span>
     <h2 class="panel__title">{{ title }}</h2>
+    <div class="panel__layout layout-only">
+      <div class="panel__move-controls">
+        <button class="panel__btn" type="button" data-move="-1" aria-label="Move {{ title }} up" title="Move {{ title }} up">{{ icon('arrow-up', 14) }}</button>
+        <button class="panel__btn" type="button" data-move="1" aria-label="Move {{ title }} down" title="Move {{ title }} down">{{ icon('arrow-down', 14) }}</button>
+      </div>
+      <label class="panel__width-control">Width<select data-panel-width aria-label="{{ title }} width" title="{{ title }} panel width"><option value="4">⅓</option><option value="6">½</option><option value="8">⅔</option><option value="12">Full</option></select></label>
+      <label class="panel__height-control">Height<input type="range" min="280" max="900" step="20" data-panel-height aria-label="{{ title }} height" title="Adjust {{ title }} height"></label>
+      <button class="panel__btn" type="button" data-panel-hide aria-label="Hide {{ title }}" title="Hide {{ title }}">{{ icon('eye-off', 15) }}</button>
+    </div>
     <button type="button" class="btn btn--sm btn--ghost" data-panel-focus aria-label="Focus {{ title }}">Focus</button>
     <button type="button" class="panel__btn panel__collapse" aria-expanded="true" aria-label="Collapse {{ title }}">−</button>
   </header>
-  <div class="panel__layout layout-only">
-    <button class="btn btn--sm" type="button" data-move="-1" aria-label="Move {{ title }} up">↑</button>
-    <button class="btn btn--sm" type="button" data-move="1" aria-label="Move {{ title }} down">↓</button>
-    <label>Width<select data-panel-width aria-label="{{ title }} width"><option value="4">One-third</option><option value="6">Half</option><option value="8">Two-thirds</option><option value="12">Full</option></select></label>
-    <label>Height<input type="range" min="280" max="900" step="20" data-panel-height aria-label="{{ title }} height"></label>
-    <button class="btn btn--sm btn--ghost" type="button" data-panel-hide>Hide</button>
-  </div>
   <div class="panel__body">{{ caller() }}</div>
 </section>
 {% endmacro %}
@@ -86,15 +90,20 @@
       All servers
     </a>
     <div class="detail-header__row">
-      <h1 class="detail-title">
-        <span class="detail-title__name">{{ server.name }}</span>
-        {% include "_state_pill.html" %}
-      </h1>
+      <div class="detail-identity">
+        <span class="detail-identity__icon" aria-hidden="true">{{ icon('server', size=24) }}</span>
+        <div class="detail-identity__text">
+          <h1 class="detail-title">
+            <span class="detail-title__name">{{ server.name }}</span>
+            {% include "_state_pill.html" %}
+          </h1>
+        </div>
+      </div>
       <div class="detail-header__actions">
         <div class="lifecycle-row">
           {% include "_lifecycle_buttons.html" %}
         </div>
-        <button type="button" class="btn btn--sm" data-settings-open aria-controls="server-settings" aria-expanded="false">Settings</button>
+        <button type="button" class="btn btn--sm" data-settings-open aria-controls="server-settings" aria-expanded="false">{{ icon('settings') }} Settings</button>
         <details class="detail-menu">
           <summary class="detail-menu__trigger" title="More actions" aria-label="More actions">⋯</summary>
           <div class="detail-menu__panel">
@@ -124,6 +133,17 @@
       </section>
       <section id="server-disk" class="disk-status" data-loading hx-get="/servers/{{ server.name }}/disk"
                hx-trigger="load, every 60s, mc:refresh" hx-swap="outerHTML" data-poll data-async-label="Disk usage">Measuring disk…</section>
+      <div class="workspace-toolbar">
+        <span id="resources-freshness" class="freshness">Checking resources…</span>
+        <button type="button" class="btn btn--sm" data-customize title="Layout is shared across your servers">{{ icon('grid') }} Customize layout</button>
+        <div class="layout-actions" hidden>
+          <fieldset data-panel-visibility><legend class="visually-hidden">Visible panels</legend></fieldset>
+          <button type="button" class="btn btn--primary btn--sm" data-layout-save>Save layout</button>
+          <button type="button" class="btn btn--sm" data-layout-cancel>Cancel</button>
+          <button type="button" class="btn btn--sm btn--ghost" data-layout-reset>Reset</button>
+        </div>
+        <p class="visually-hidden" data-layout-status role="status"></p>
+      </div>
     </div>
     {#
       Visually-hidden aria-live region for lifecycle state announcements
@@ -152,17 +172,6 @@
     restores any saved order on load. Source order (console after
     #server-resources) is load-bearing for tests — keep console first.
   #}
-  <div class="workspace-toolbar">
-    <p class="t-caption">Workspace <span class="t-muted">/ Shared across your servers</span></p>
-    <button type="button" class="btn btn--sm" data-customize>Customize layout</button>
-    <div class="layout-actions" hidden>
-      <fieldset data-panel-visibility><legend>Visible panels</legend></fieldset>
-      <button type="button" class="btn btn--primary btn--sm" data-layout-save>Save layout</button>
-      <button type="button" class="btn btn--sm" data-layout-cancel>Cancel</button>
-      <button type="button" class="btn btn--sm btn--ghost" data-layout-reset>Reset</button>
-    </div>
-    <p class="visually-hidden" data-layout-status role="status"></p>
-  </div>
   {% if server.scaffolded_at and server.state in ['created', 'missing'] %}
     <aside class="setup-next"><strong>Finish setting up {{ server.name }}</strong><p>Upload your server JAR and supporting files into <code>server/</code> in Files, then start the server and check Console.</p><button class="btn btn--sm" type="button" data-focus-files>Open files</button></aside>
   {% endif %}
@@ -188,10 +197,11 @@
           <header class="files-pane__head">
             <button type="button" class="btn btn--sm" data-files-back hidden>← Back to files</button>
             <label class="file-nav-size">Navigation<select data-file-nav-size aria-label="File navigation width"><option value="160">Compact</option><option value="240" selected>Standard</option><option value="360">Wide</option></select></label>
-            <button type="button" class="btn btn--sm" data-upload-trigger data-upload-path="">Upload</button>
-            <button type="button" class="btn btn--sm" data-action-mkdir data-action-path="">New folder</button>
+            <button type="button" class="btn btn--sm" data-upload-trigger data-upload-path="">{{ icon('arrow-up') }} Upload</button>
+            <button type="button" class="btn btn--sm" data-action-mkdir data-action-path="">{{ icon('plus') }} New folder</button>
           </header>
           <div class="file-search">
+      <span class="file-search__icon" aria-hidden="true">{{ icon('search') }}</span>
       <input type="search"
              id="file-search-input"
              class="file-search-input"
@@ -233,7 +243,10 @@
       </ul>
       <button class="file-divider" role="separator" aria-label="Resize file navigation" aria-orientation="vertical" aria-valuemin="160" aria-valuemax="360" aria-valuenow="240" type="button"></button>
       <div class="file-view" id="file-view">
-        <p class="t-muted">Select a file to view its contents.</p>
+        <div class="file-view__empty">
+          <span class="file-view__empty-icon" aria-hidden="true">{{ icon('folder', size=26) }}</span>
+          <p class="t-muted">Select a file to view its contents.</p>
+        </div>
       </div>
     </div>
           <input type="file" id="file-upload-input" class="file-upload-input" multiple hidden>
@@ -245,7 +258,7 @@
   </div>
 
   <section id="server-settings" class="server-settings" hidden tabindex="-1" aria-labelledby="settings-title">
-    <header><div><p class="t-eyebrow">Settings</p><h2 id="settings-title">Server configuration</h2></div><button class="btn btn--sm" type="button" data-settings-close>Back to workspace</button></header>
+    <header><h2 id="settings-title">Server configuration</h2><button class="btn btn--sm" type="button" data-settings-close>{{ icon('arrow-left') }} Back to workspace</button></header>
       {% if not server.scaffolded_at %}
         <section class="settings-section" id="settings-migrate"><h2>Legacy setup</h2>
           <section id="migrate-card"

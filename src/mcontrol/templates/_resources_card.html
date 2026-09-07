@@ -2,6 +2,7 @@
    mini bar that turns amber/red near the limit), CPU, uptime, and freshness. Same
    polling slot as before — keeps id + hx-* so it self-swaps every 5s and
    still doubles as the state reconciler (OOB pill/lifecycle fragments). #}
+{% from "_icons.html" import icon %}
 <div class="resources-strip"
      id="server-resources"
      hx-get="/servers/{{ server.name }}/resources"
@@ -10,7 +11,7 @@
      aria-label="Live resource usage" data-poll data-async-label="Resource usage">
   {% if ok %}
     <span class="resources-strip__item resources-strip__item--mem">
-      <span class="resources-strip__key">Memory</span>
+      <span class="resources-strip__key">{{ icon('memory', size=14) }} Memory</span>
       <span class="resources-strip__val t-num">{{ format_bytes(mem_used) }} / {{ format_bytes(mem_limit) }}</span>
       <span class="resources-strip__bar" aria-hidden="true">
         {% set _bar_class = 'resources-strip__bar-fill--danger' if mem_percent >= 90 else ('resources-strip__bar-fill--warning' if mem_percent >= 75 else '') %}
@@ -20,11 +21,11 @@
       <span class="resources-strip__pct t-num">({{ "%.0f"|format(mem_percent) }} %)</span>
     </span>
     <span class="resources-strip__item">
-      <span class="resources-strip__key">CPU</span>
+      <span class="resources-strip__key">{{ icon('cpu', size=14) }} CPU</span>
       <span class="resources-strip__val t-num">{{ "%.1f"|format(cpu_percent) }} %</span>
     </span>
     <span class="resources-strip__item">
-      <span class="resources-strip__key">Uptime</span>
+      <span class="resources-strip__key">{{ icon('clock', size=14) }} Uptime</span>
       <span class="resources-strip__val t-num">{% if started_at %}{{ started_at | uptime }}{% else %}-{% endif %}</span>
     </span>
 
@@ -33,5 +34,5 @@
     <span class="resources-strip__item resources-strip__item--muted">{{ caption }}</span>
 
   {% endif %}
-  <span class="freshness">Checked <time data-observed-at="{{ updated_at }}">just now</time></span>
 </div>
+<span id="resources-freshness" class="freshness" hx-swap-oob="outerHTML">Checked <time data-observed-at="{{ updated_at }}">just now</time></span>

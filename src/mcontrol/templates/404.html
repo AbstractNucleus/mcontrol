@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 
 {% block title %}Not found | mcontrol{% endblock %}
 
 {% block main %}
 <section class="error-page">
+  <span class="page-symbol page-symbol--large">{{ icon('search', size=24) }}</span>
   <p class="error-page__code">404</p>
   <h1 class="error-page__title">Not found</h1>
   <p class="error-page__body">
@@ -14,7 +16,7 @@
     {% endif %}
   </p>
   <div class="error-page__actions">
-    <a class="btn btn--primary" href="/">Back to servers</a>
+    <a class="btn btn--primary" href="/">{{ icon('arrow-left') }} Back to servers</a>
   </div>
 </section>
 {% endblock %}

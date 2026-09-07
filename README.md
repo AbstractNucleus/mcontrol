@@ -12,12 +12,12 @@ mcontrol sits a thin Minecraft-aware UI over plain `docker compose`. No daemon a
 - **File browser**: read-only tree + CodeMirror editor (JSON / YAML / TOML / XML syntax highlighting), multi-file upload with drag-drop, rename/move with destination picker, single-file download, bulk delete and move, full-text search across `server/` with Ctrl/Cmd+P.
 - **New-server scaffolding**: generate a working `docker-compose.yml` + `start_server.sh` for a fresh server in one form submit; no per-server Dockerfile. The form picks a Java version (17 / 21 / 25) and turns RCON on in `server.properties`.
 - **Player roster**: DB-backed player list with Mojang UUID lookup, per-server whitelist / ops membership, and an Import button to ingest existing `whitelist.json` / `ops.json`.
-- **Resource visibility**: observed status, CPU, memory, uptime, and freshness every five seconds while visible. Disk refreshes independently every minute. Failed requests retain prior content with stale feedback and Retry after a 12-second deadline. The fleet supports name search and status filters.
+- **Resource visibility**: observed status, CPU, memory, uptime, and freshness every five seconds while visible. Disk refreshes independently every minute. Failed requests retain prior content with stale feedback and Retry after a 12-second deadline. The fleet supports status filters.
 - **Discovery**: operator-triggered fleet rescan that picks up new server directories without restarting the panel.
 - **Deleted servers**: deletion renames the directory to `.deleted-<name>-<unix-ts>/`. Recover manually by renaming it back, then rescanning. Empty trash selects directories older than seven days; cleanup only runs when requested and confirmed.
 - **Legacy-server migration**: one-way migrate card for servers that were running before mcontrol existed (itzg-image shape to mcontrol scaffold shape).
 - **Health probe**: `GET /healthz` returns a deep per-subsystem JSON (Supabase + Docker socket + bind-mount); 503 on any subsystem degraded.
-- **Theme and phones**: graphite and blue in light / dark / saved System mode, with a mobile menu drawer, stacked fleet cards, and a single-view file browser/editor on narrow screens.
+- **Interface**: inspired by [Beautiful UI](https://www.beautifului.dev/), with a fixed dark appearance, live fleet summary cards, status filters, and rounded workspace panels. A mobile drawer, stacked fleet cards, and a single-view file browser/editor adapt the workspace to phones.
 
 ## Who it's for
 
@@ -69,7 +69,7 @@ uv run playwright install chromium
 MCONTROL_BROWSER_TESTS=1 uv run pytest tests/browser -v
 ```
 
-PowerShell: set `$env:MCONTROL_BROWSER_TESTS='1'` before the pytest command. Screenshots are saved to `.localdev/ui-review/`. Tests cover both themes at 390, 768, 1280, and 1920 pixels, layout migration/cancellation, dirty editors, failed saves, retry recovery, connection state, and keyboard access.
+PowerShell: set `$env:MCONTROL_BROWSER_TESTS='1'` before the pytest command. Screenshots are saved to `.localdev/ui-review/`. Tests cover the fixed dark interface from 390 to 1920 pixels under either operating-system color scheme, layout migration/cancellation, dirty editors, failed saves, retry recovery, connection state, and keyboard access. Additional cases check dark rendering with saved light preferences, blocked storage, and JavaScript disabled, plus the roster, server creation, trash confirmations, short-screen sidebar controls, static asset loading, and fleet filters during an in-flight refresh.
 
 ## Deployment
 

@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {# Separate EventSource connections share one scroll. streams.js manages
    connection state, visibility suspension, filtering, and command history. #}
 <section class="console-pane">
@@ -10,7 +11,7 @@
     <button type="button" class="btn btn--sm" data-stream-retry hidden>Retry connections</button>
   </header>
   <div class="console-tools">
-    <input type="search" data-console-search aria-label="Search console" placeholder="Search output…">
+    <label class="console-search">{{ icon('search', size=14) }}<input type="search" data-console-search aria-label="Search console" placeholder="Search output…"></label>
     <select data-console-level aria-label="Log severity"><option value="">All levels</option><option value="WARN">Warnings + errors</option><option value="ERROR">Errors</option></select>
     <label><input type="checkbox" data-console-wrap> Wrap</label>
     <label><input type="checkbox" data-console-pause> Pause follow</label>
@@ -34,6 +35,7 @@
         hx-post="/servers/{{ server.name }}/rcon"
         hx-swap="none"
         hx-disabled-elt="find button[type='submit']">
+    <span class="console-pane__prompt" aria-hidden="true">{{ icon('chevron-right') }}</span>
     <input type="text" name="command" aria-label="RCON command" placeholder="type a command, e.g. say hello" autocomplete="off" required>
     <button type="submit" class="btn btn--primary" disabled>Send{% include "_spinner.html" %}</button>
   </form>

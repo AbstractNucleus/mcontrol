@@ -55,7 +55,16 @@ def test_base_flash_stack_is_a_polite_live_region():
     body = templates_module.templates.get_template("base.html").render(version="x")
     assert 'id="flash-stack"' in body
     assert 'aria-live="polite"' in body
-    assert 'stored !== "light"' in body
+
+
+def test_base_is_dark_before_javascript_runs():
+    body = templates_module.templates.get_template("base.html").render(version="x")
+    assert '<html lang="en" data-theme="dark">' in body
+    assert '<meta name="color-scheme" content="dark">' in body
+    assert 'data-theme-toggle' not in body
+    assert '/static/theme.js' not in body
+    assert 'prefers-color-scheme' not in body
+    assert 'localStorage.getItem("theme")' not in body
 
 
 def test_fleet_row_targets_closest_li():

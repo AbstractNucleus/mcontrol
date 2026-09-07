@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 
@@ -233,8 +235,11 @@ async def test_home_summary_running_uses_live_stats_not_db(
 
     body = (await client.get("/")).text
 
-    assert "2 servers" in body
-    assert "1 running" in body
+    metrics = dict(re.findall(
+        r'<span class="fleet-insight__label">(Total servers|Running).*?</span>'
+        r'<strong>(\d+)</strong>', body, re.DOTALL,
+    ))
+    assert metrics == {"Total servers": "2", "Running": "1"}
 
 
 async def test_prime_sidebar_skips_when_accept_lacks_html(

@@ -242,21 +242,15 @@
   gap: var(--space-5);
 }
 
-/* Sticky command header: keeps name, live state, and lifecycle actions
-   reachable while scrolled deep into logs/files. The negative top margin +
-   matching padding covers .page-main's top padding so content doesn't
-   peek above the header while stuck. */
+/* Live controls remain reachable while working in the panels below. */
 .detail-header {
   position: sticky;
   top: 0;
   z-index: 30;
   background: var(--bg-page);
   display: grid;
-  gap: var(--space-2);
-  margin-top: calc(-1 * var(--space-8));
-  padding-top: var(--space-6);
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--border-soft);
+  gap: var(--space-5);
+  padding: var(--space-2) 0;
   min-width: 0;
 }
 
@@ -294,8 +288,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
@@ -390,10 +384,10 @@
   font-family: var(--font-sans);
   font-size: var(--fs-2xl);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.035em;
   margin: 0 0 var(--space-2);
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-3);
   flex-wrap: wrap;
 }
@@ -446,23 +440,61 @@
 /* Panel is the card frame; inner panes shed their own chrome (below). No
    overflow:hidden here — it would clip the files ⋯ popover. */
 .panel {
+  container: panel / inline-size;
+  position: relative;
   background: var(--bg-surface);
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   min-width: 0;
 }
 
 .panel--dragging {
-  opacity: 0.55;
+  opacity: 0.45;
+  border-style: dashed;
   border-color: var(--border-strong);
+}
+
+.panel--settling { z-index: 1; }
+.panel[data-drop-edge]::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.panel[data-drop-edge="top"]::after, .panel[data-drop-edge="bottom"]::after { left: 0; right: 0; height: 3px; }
+.panel[data-drop-edge="top"]::after { top: -12px; }
+.panel[data-drop-edge="bottom"]::after { bottom: -12px; }
+.panel[data-drop-edge="left"]::after, .panel[data-drop-edge="right"]::after { top: 0; bottom: 0; width: 3px; }
+.panel[data-drop-edge="left"]::after { left: -12px; }
+.panel[data-drop-edge="right"]::after { right: -12px; }
+.panel-drag-preview {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 220px;
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
   box-shadow: var(--shadow-md);
+  color: var(--fg-primary);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  pointer-events: none;
 }
 
 .panel__bar {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  min-height: 48px;
   border-bottom: 1px solid var(--border-soft);
   user-select: none;
 }
@@ -481,9 +513,24 @@
   color: var(--fg-muted);
   border-radius: var(--radius-xs);
   cursor: grab;
+  border: 0;
+  background: transparent;
+  font-size: var(--fs-lg);
 }
 
-.panel__grip:hover { color: var(--fg-secondary); }
+.panel__icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--fg-secondary);
+  flex: none;
+}
+
+.panel__grip:hover, .panel__grip:focus-visible { color: var(--fg-primary); background: var(--bg-sunken); }
+.panel__grip:active { cursor: grabbing; background: var(--accent-soft); color: var(--accent-on-soft); }
 .panel--dragging .panel__grip { cursor: grabbing; }
 
 .panel__title {
@@ -492,14 +539,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: var(--lh-base);
+  text-transform: none;
+  letter-spacing: normal;
+  margin: 0;
 }
 
 .panel__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   flex: none;
   border: 0;
@@ -692,56 +745,80 @@
 /* A thin status row under the title: memory (mini bar), CPU, uptime, disk.
    Sits beside "Last seen" and stays visible while the page scrolls. */
 .detail-header__status {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-  margin-top: var(--space-1);
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(100px, 1fr));
+  align-items: start;
+  gap: var(--space-3);
+  margin-top: 0;
   min-width: 0;
+  font-size: var(--fs-xs);
 }
 
 .resources-strip {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
+  display: grid;
+  grid-column: 1 / span 3;
+  grid-template-columns: subgrid;
+  gap: var(--space-3);
   min-width: 0;
   font-size: var(--fs-sm);
   color: var(--fg-secondary);
 }
 
 .resources-strip__item {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
   align-items: center;
   gap: var(--space-2);
-  white-space: nowrap;
+  min-width: 0;
+  min-height: 94px;
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
 }
+
+.resources-strip__item--mem { position: relative; }
+.resources-strip__item--mem .resources-strip__key { padding-right: var(--space-10); }
+.resources-strip__item--mem .resources-strip__val { font-size: var(--fs-md); }
+.resources-strip__item--mem .resources-strip__pct { position: absolute; top: var(--space-4); right: var(--space-4); }
+.resources-strip__item--mem .resources-strip__bar { position: absolute; bottom: var(--space-2); left: var(--space-4); width: calc(100% - var(--space-8)); height: 3px; }
 
 .resources-strip__item--muted {
   color: var(--fg-muted);
+  grid-column: 1 / -1;
 }
 
 .resources-strip__key {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-basis: 100%;
   font-size: var(--fs-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
   color: var(--fg-muted);
 }
 
 .resources-strip__val {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -.02em;
   color: var(--fg-primary);
 }
 
 .resources-strip__pct {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
   color: var(--fg-muted);
 }
 
 .resources-strip__bar {
-  width: 4.5rem;
+  width: 40px;
   height: 5px;
   background: var(--bg-sunken);
   border-radius: var(--radius-full);
@@ -766,6 +843,25 @@
   font-size: var(--fs-xs);
   color: var(--fg-muted);
 }
+
+.lifecycle-flash:not(.lifecycle-flash--error) { display: none; }
+
+.disk-status {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-2);
+  grid-column: 4;
+  min-height: 94px;
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  font-size: var(--fs-xs);
+  margin: 0;
+}
+.disk-status .t-num { color: var(--fg-primary); font-size: var(--fs-lg); font-weight: 600; letter-spacing: -.02em; }
 
 /* Last seen sits at the far end of the status row (no extra top margin
    inside the flex row). */
@@ -825,8 +921,8 @@
 .variables-card__body dt {
   font-family: var(--font-sans);
   font-size: var(--fs-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: normal;
   color: var(--fg-muted);
   font-weight: 600;
   padding-top: 3px;

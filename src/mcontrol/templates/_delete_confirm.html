@@ -3,6 +3,7 @@
    type-name input is the destructive-op friction; POST tombstones the dir,
    deletes the row, then HX-Redirects home. A wrong name re-renders this
    modal (422) with the error and the preserved input. #}
+{% from "_icons.html" import icon %}
 <div class="confirm-modal"
      role="dialog"
      aria-modal="true"
@@ -10,6 +11,7 @@
      data-modal-root
      tabindex="-1">
   <div class="confirm-modal__panel">
+    <span class="page-symbol page-symbol--danger">{{ icon('trash', size=22) }}</span>
     <h3 id="delete-server-title" class="t-h3">Delete {{ server.name }}?</h3>
     <p class="t-body confirm-modal__hint">
       Renames <code>{{ server.dir }}</code> to a deleted-server folder in the same parent and
@@ -22,18 +24,19 @@
           hx-swap="innerHTML"
           hx-disabled-elt="find button[type='submit']">
       <label class="confirm-modal__field">
-        <span class="t-eyebrow">Type <code>{{ server.name }}</code> to confirm</span>
+        <span>Type <code>{{ server.name }}</code> to confirm</span>
         <input type="text"
                name="confirm_name"
                value="{{ typed or '' }}"
                autocomplete="off"
+               {% if error %}aria-invalid="true"{% endif %}
                autofocus
                required>
       </label>
       {% if error %}<small class="confirm-modal__error">{{ error }}</small>{% endif %}
       <div class="confirm-modal__actions">
-        <button type="submit" class="btn btn--danger-solid">Delete{% include "_spinner.html" %}</button>
         <button type="button" class="btn btn--ghost" data-modal-close>Cancel</button>
+        <button type="submit" class="btn btn--danger-solid">{{ icon('trash') }} Delete{% include "_spinner.html" %}</button>
       </div>
     </form>
   </div>

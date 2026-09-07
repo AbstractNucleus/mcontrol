@@ -21,17 +21,25 @@
   });
   matchMedia("(min-width: 768px)").addEventListener("change", e => { if (e.matches && document.documentElement.dataset.mobileNav === "true") nav(false); });
   function fleetFilter() {
-    const q = document.querySelector("[data-fleet-search]")?.value.toLowerCase() || "";
     const state = document.querySelector("[data-fleet-state]")?.value || "";
     let visible = 0;
     document.querySelectorAll("#fleet .server-card").forEach(row => {
-      row.hidden = !row.dataset.name.toLowerCase().includes(q) || (!!state && row.querySelector(".state-pill").textContent.trim() !== state);
+      row.hidden = !!state && row.querySelector(".state-pill").textContent.trim() !== state;
       if (!row.hidden) visible++;
       const link = Array.from(document.querySelectorAll(".sidebar__server")).find(a => a.getAttribute("href") === "/servers/" + row.dataset.name);
       if (link) { link.title = row.dataset.name + " (" + row.querySelector(".state-pill").textContent.trim() + ")"; link.querySelector(".sidebar__server-dot").className = "sidebar__server-dot sidebar__server-dot--" + row.dataset.state; }
     });
-    const empty = document.querySelector("[data-fleet-empty]"); if (empty) empty.hidden = visible > 0 || (!q && !state);
+    const empty = document.querySelector("[data-fleet-empty]"); if (empty) empty.hidden = visible > 0 || !state;
+    document.querySelectorAll("[data-fleet-filter]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.fleetFilter === state)));
   }
+  document.addEventListener("click", e => {
+    const chip = e.target.closest("[data-fleet-filter]"), clear = e.target.closest("[data-fleet-clear]");
+    if (!chip && !clear) return;
+    const select = document.querySelector("[data-fleet-state]");
+    if (!select) return;
+    select.value = chip ? chip.dataset.fleetFilter : "";
+    fleetFilter();
+  });
   let rosterQ = "", rosterServer = "", memberQ = "";
   function rosterFilter() {
     const select = document.querySelector("[data-roster-server]"), rows = Array.from(document.querySelectorAll("[data-roster-name]"));
@@ -54,7 +62,7 @@
     const noMembers = document.querySelector("[data-members-empty]"); if (noMembers) noMembers.hidden = members > 0 || !memberQ;
   }
   document.addEventListener("input", e => {
-    if (e.target.matches("[data-fleet-search], [data-fleet-state]")) fleetFilter();
+    if (e.target.matches("[data-fleet-state]")) fleetFilter();
     if (e.target.matches("[data-roster-search]")) { rosterQ = e.target.value; rosterFilter(); }
     if (e.target.matches("[data-roster-server]")) { rosterServer = e.target.value; rosterFilter(); }
     if (e.target.matches("[data-members-search]")) { memberQ = e.target.value; rosterFilter(); }
