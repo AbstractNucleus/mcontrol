@@ -97,6 +97,23 @@ async def test_run_command_maps_connect_timeout_to_unavailable(
         await server_rcon.run_command(object(), server, "whitelist add Notch")
 
 
+async def test_run_command_maps_attach_timeout_to_unavailable(
+    tmp_path, monkeypatch, rcon_network_ok
+):
+    server = _server_with_props(
+        tmp_path, "enable-rcon=true\nrcon.password=secret\n"
+    )
+    from mcontrol.infra import docker_client
+
+    async def boom(_docker, _network):
+        raise TimeoutError()
+
+    monkeypatch.setattr(docker_client, "attach_self_to_network", boom)
+
+    with pytest.raises(server_rcon.RconUnavailable, match="Timed out attaching"):
+        await server_rcon.run_command(object(), server, "list")
+
+
 async def test_run_command_maps_command_timeout_to_unavailable(
     tmp_path, monkeypatch, rcon_network_ok
 ):

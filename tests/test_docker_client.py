@@ -10,8 +10,10 @@ from mcontrol.infra import docker_client
 def _reset_network_refcounts():
     """The attach/detach refcounts are module state; keep tests isolated."""
     docker_client._network_refcounts.clear()
+    docker_client._network_attach_locks.clear()
     yield
     docker_client._network_refcounts.clear()
+    docker_client._network_attach_locks.clear()
 
 
 class _FakeSummary:
@@ -271,6 +273,76 @@ async def test_attach_unexpected_failure_propagates_without_refcount(
         await docker_client.attach_self_to_network(docker, "atm10_default")
 
     network.connect.assert_awaited_once_with({"Container": "selfid"})
+    assert "atm10_default" not in docker_client._network_refcounts
+
+
+async def test_attach_skips_connect_when_already_on_network(env, monkeypatch):
+    network = MagicMock()
+    network.connect = AsyncMock()
+
+    class _Container:
+        async def show(self):
+            return {"NetworkSettings": {"Networks": {"atm10_default": {}}}}
+
+    docker = MagicMock()
+    docker.networks = MagicMock()
+    docker.networks.get = AsyncMock(return_value=network)
+    docker.containers = MagicMock()
+    docker.containers.get = AsyncMock(return_value=_Container())
+    monkeypatch.setenv("HOSTNAME", "selfid")
+
+    await docker_client.attach_self_to_network(docker, "atm10_default")
+
+    network.connect.assert_not_called()
+    docker.networks.get.assert_not_called()
+    assert docker_client._network_refcounts["atm10_default"] == 1
+
+
+async def test_attach_timeout_succeeds_if_inspect_shows_connected(
+    env, monkeypatch
+):
+    """Hung NetworkConnect: if cancelling the HTTP call left us joined,
+    treat it as success so the console can emit ready."""
+    shows = {"n": 0}
+
+    class _Container:
+        async def show(self):
+            shows["n"] += 1
+            names = {} if shows["n"] == 1 else {"atm10_default": {}}
+            return {"NetworkSettings": {"Networks": names}}
+
+    network = MagicMock()
+    network.connect = AsyncMock(side_effect=TimeoutError())
+    docker = MagicMock()
+    docker.networks = MagicMock()
+    docker.networks.get = AsyncMock(return_value=network)
+    docker.containers = MagicMock()
+    docker.containers.get = AsyncMock(return_value=_Container())
+    monkeypatch.setenv("HOSTNAME", "selfid")
+
+    await docker_client.attach_self_to_network(docker, "atm10_default")
+
+    network.connect.assert_awaited_once_with({"Container": "selfid"})
+    assert docker_client._network_refcounts["atm10_default"] == 1
+
+
+async def test_attach_timeout_raises_when_still_disconnected(env, monkeypatch):
+    class _Container:
+        async def show(self):
+            return {"NetworkSettings": {"Networks": {}}}
+
+    network = MagicMock()
+    network.connect = AsyncMock(side_effect=TimeoutError())
+    docker = MagicMock()
+    docker.networks = MagicMock()
+    docker.networks.get = AsyncMock(return_value=network)
+    docker.containers = MagicMock()
+    docker.containers.get = AsyncMock(return_value=_Container())
+    monkeypatch.setenv("HOSTNAME", "selfid")
+
+    with pytest.raises(TimeoutError):
+        await docker_client.attach_self_to_network(docker, "atm10_default")
+
     assert "atm10_default" not in docker_client._network_refcounts
 
 

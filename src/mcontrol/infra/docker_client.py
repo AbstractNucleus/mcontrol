@@ -20,6 +20,7 @@ closed its own client (~10 sites, see #98).
 import asyncio
 import logging
 import os
+from collections import defaultdict
 from collections.abc import AsyncIterator
 from contextlib import suppress
 
@@ -162,6 +163,13 @@ async def find_network_name(
 # RCON connection.
 _network_refcounts: dict[str, int] = {}
 _network_refcounts_lock = asyncio.Lock()
+# Per-network: serialise connect/disconnect of *this* container so a hung
+# attach cannot hold the global refcount lock and stall every other server.
+_network_attach_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+# Connecting *this* container to a server network via the mounted docker.sock
+# can stall well past aiohttp's client timeout (the daemon is mutating our
+# own netns). Bound it so SSE can retry / error instead of holding Send.
+_ATTACH_TIMEOUT_S = 8.0
 
 
 def _is_already_connected_error(exc: aiodocker.DockerError) -> bool:
@@ -174,22 +182,62 @@ def _is_already_connected_error(exc: aiodocker.DockerError) -> bool:
     )
 
 
+async def _already_on_network(
+    docker: aiodocker.Docker, network_name: str
+) -> bool:
+    """True if inspect shows this container already joined ``network_name``."""
+    try:
+        info = await _self_inspect(docker)
+    except Exception:
+        return False
+    if not info:
+        return False
+    networks = (info.get("NetworkSettings") or {}).get("Networks") or {}
+    return network_name in networks
+
+
 async def attach_self_to_network(
     docker: aiodocker.Docker, network_name: str
 ) -> None:
     """Connect the mcontrol container to the given docker network. Refcounted:
-    only the 0→1 attach actually connects. An already-connected Docker response
-    is treated as success."""
-    async with _network_refcounts_lock:
-        count = _network_refcounts.get(network_name, 0)
-        if count == 0:
-            network = await docker.networks.get(network_name)
-            try:
-                await network.connect({"Container": self_container_id()})
-            except aiodocker.DockerError as exc:
-                if not _is_already_connected_error(exc):
-                    raise
-        _network_refcounts[network_name] = count + 1
+    only the 0→1 attach actually connects. Already-connected (inspect or a
+    403 from Docker) is success. A hung ``NetworkConnect`` times out."""
+    async with _network_attach_locks[network_name]:
+        async with _network_refcounts_lock:
+            count = _network_refcounts.get(network_name, 0)
+            if count > 0:
+                _network_refcounts[network_name] = count + 1
+                return
+        if await _already_on_network(docker, network_name):
+            async with _network_refcounts_lock:
+                _network_refcounts[network_name] = (
+                    _network_refcounts.get(network_name, 0) + 1
+                )
+            return
+        network = await docker.networks.get(network_name)
+        try:
+            await asyncio.wait_for(
+                network.connect({"Container": self_container_id()}),
+                timeout=_ATTACH_TIMEOUT_S,
+            )
+        except TimeoutError:
+            # Cancelling the HTTP request often lets dockerd finish; inspect
+            # before treating the timeout as failure.
+            if await _already_on_network(docker, network_name):
+                logger.info(
+                    "attach to %s timed out but endpoint is present",
+                    network_name,
+                )
+            else:
+                logger.warning("timed out attaching to %s", network_name)
+                raise
+        except aiodocker.DockerError as exc:
+            if not _is_already_connected_error(exc):
+                raise
+        async with _network_refcounts_lock:
+            _network_refcounts[network_name] = (
+                _network_refcounts.get(network_name, 0) + 1
+            )
 
 
 async def detach_self_from_network(
@@ -197,13 +245,15 @@ async def detach_self_from_network(
 ) -> None:
     """Refcounted counterpart: only the 1→0 detach actually disconnects.
     Floor at 0. an unpaired detach is a no-op."""
-    async with _network_refcounts_lock:
-        count = _network_refcounts.get(network_name, 0)
-        if count > 1:
-            _network_refcounts[network_name] = count - 1
-            return
-        _network_refcounts.pop(network_name, None)
-        if count == 1:
+    async with _network_attach_locks[network_name]:
+        async with _network_refcounts_lock:
+            count = _network_refcounts.get(network_name, 0)
+            if count > 1:
+                _network_refcounts[network_name] = count - 1
+                return
+            _network_refcounts.pop(network_name, None)
+            should_disconnect = count == 1
+        if should_disconnect:
             network = await docker.networks.get(network_name)
             with suppress(Exception):
                 await network.disconnect({"Container": self_container_id()})

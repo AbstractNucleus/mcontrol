@@ -162,7 +162,12 @@ async def run_command(docker: aiodocker.Docker, server: dict, command: str) -> s
     if network_name is None:
         raise RconUnavailable(f"No docker network found for {container_name!r}.")
 
-    await docker_client.attach_self_to_network(docker, network_name)
+    try:
+        await docker_client.attach_self_to_network(docker, network_name)
+    except TimeoutError as exc:
+        raise RconUnavailable(
+            f"Timed out attaching to {container_name}'s docker network."
+        ) from exc
     try:
         try:
             conn = await rcon.connect(container_name, _RCON_PORT, password)

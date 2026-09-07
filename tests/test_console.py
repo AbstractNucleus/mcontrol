@@ -253,6 +253,40 @@ async def test_stream_retries_until_rcon_is_reachable(
     assert fake_docker_network["detaches"] == ["atm10_default"]
 
 
+async def test_stream_retries_when_network_attach_times_out(
+    fake_docker_network, fake_rcon, tmp_path, monkeypatch
+):
+    """A hung docker NetworkConnect must not sit on keepalive forever:
+    time out, tell the pane, retry, then emit ready."""
+    from mcontrol.infra import docker_client
+
+    monkeypatch.setattr(console, "_RETRY_INTERVAL_S", 0.01)
+    calls = {"n": 0}
+
+    async def flaky_attach(_docker, _network):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise TimeoutError()
+
+    monkeypatch.setattr(docker_client, "attach_self_to_network", flaky_attach)
+    _write_props(tmp_path, enable_rcon=True, password="hunter2")
+    request = _Request()
+
+    gen = console._stream(request, object(), "atm10", "atm10", tmp_path)
+    async with asyncio.timeout(5):
+        first = await _next_payload(gen)
+        assert b"docker attach timed out" in first
+        second = await _next_payload(gen)
+        assert b"rcon connected" in second
+        assert b"event: ready" in second
+        request.disconnected = True
+        with pytest.raises(StopAsyncIteration):
+            await gen.__anext__()
+
+    assert calls["n"] == 2
+    assert fake_rcon["connects"] == 1
+
+
 async def test_stream_shares_one_connection_between_subscribers(
     fake_docker_network, fake_rcon, tmp_path
 ):

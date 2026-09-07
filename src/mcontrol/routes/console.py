@@ -291,17 +291,28 @@ async def _stream(
     _connecting[name] += 1
     try:
         yield _KEEPALIVE
-        try:
-            network_name = await docker_client.find_network_name(docker, container_name)
-            if network_name is None:
-                yield _message("[error] no docker network found for container")
+        while True:
+            try:
+                network_name = await docker_client.find_network_name(
+                    docker, container_name
+                )
+                if network_name is None:
+                    yield _message("[error] no docker network found for container")
+                    yield _CLOSED
+                    return
+                await docker_client.attach_self_to_network(docker, network_name)
+                break
+            except TimeoutError:
+                yield _message(
+                    "[info] docker attach timed out; retrying while "
+                    "this page stays open"
+                )
+                if await _wait_for_retry(request):
+                    return
+            except aiodocker.DockerError as exc:
+                yield _message(f"[error] docker: {exc.message}")
                 yield _CLOSED
                 return
-            await docker_client.attach_self_to_network(docker, network_name)
-        except aiodocker.DockerError as exc:
-            yield _message(f"[error] docker: {exc.message}")
-            yield _CLOSED
-            return
 
         try:
             async with aclosing(
