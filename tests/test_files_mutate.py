@@ -119,7 +119,7 @@ async def test_delete_400_on_traversal(client, fake_server) -> None:
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="symlinks need privileges on Windows")
-async def test_delete_symlink_unlinks_link_not_target(
+async def test_delete_external_symlink_is_rejected_without_touching_files(
     client, fake_server, server_dir: Path, tmp_path: Path
 ) -> None:
     outside = tmp_path / "outside.txt"
@@ -132,9 +132,9 @@ async def test_delete_symlink_unlinks_link_not_target(
         data={"path": "link.txt"},
     )
 
-    assert response.status_code == 200
-    assert not link.exists() and not link.is_symlink()
-    # The original file is untouched. we never followed the link.
+    # The shared path guard rejects symlink entries before mutation.
+    assert response.status_code == 400
+    assert link.is_symlink()
     assert outside.read_text(encoding="utf-8") == "untouched"
 
 
