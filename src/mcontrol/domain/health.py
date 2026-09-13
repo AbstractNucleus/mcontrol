@@ -50,7 +50,7 @@ def variables_render_error(server: dict[str, Any]) -> str | None:
         scaffolding.render_start_script(variables)
     except KeyError as e:
         return f"missing variable: {e.args[0]!r}"
-    except UndefinedError as e:
+    except (UndefinedError, ValueError) as e:
         return str(e)
     return None
 
@@ -155,7 +155,7 @@ def compute_scripts_stale(server: dict[str, Any]) -> bool | None:
     try:
         rendered_compose = scaffolding.render_compose(server["name"], variables)
         rendered_start = scaffolding.render_start_script(variables)
-    except (KeyError, UndefinedError):
+    except (KeyError, UndefinedError, ValueError):
         return None
 
     compose_path = _compose_path(server)

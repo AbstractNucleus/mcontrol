@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from mcontrol.domain import migration
+from mcontrol.domain import migration, scaffolding
 
 # ---- fixture ------------------------------------------------------
 
@@ -283,6 +283,14 @@ def test_parse_compose_port_reads_first_25565_mapping(tmp_path):
     assert migration.parse_compose_port(server_dir) == 25567
 
 
+def test_parse_compose_port_treats_null_ports_as_unavailable(tmp_path):
+    server_dir = _legacy_layout(tmp_path)
+    path = server_dir / "docker-compose.yml"
+    path.write_text("services:\n  atm10:\n    ports: null\n")
+
+    assert migration.parse_compose_port(server_dir) is None
+
+
 def test_migrate_uses_bound_server_dir_not_base_name(tmp_path):
     """Bindings may repoint the row away from <base>/<name>."""
     server_dir = tmp_path / "repointed"
@@ -434,7 +442,6 @@ def _snapshot_setup(server_dir):
 
 
 @pytest.mark.parametrize('runtime', [
-    {'ports': ['25571:25565', '24467:24467/udp']},
     {'ports': ['25571:25565', '8123:8123']},
     {'volumes': ['./server:/data', './extra:/extra']},
     {'environment': {'CUSTOM': 'required'}},
@@ -457,6 +464,20 @@ def test_custom_runtime_rejected_without_changing_files(tmp_path, runtime):
         migration.migrate('atm10', _VARS, server_dir)
     assert _snapshot_setup(server_dir) == original
     assert not list(server_dir.glob('.mcontrol-migration-backup-*'))
+
+
+def test_simple_udp_mapping_is_preserved_by_managed_rendering(tmp_path):
+    import yaml
+
+    server_dir = _legacy_layout(tmp_path)
+    path = server_dir / "docker-compose.yml"
+    compose = yaml.safe_load(path.read_text())
+    compose["services"]["atm10"]["ports"].append("24467:24467/udp")
+    path.write_text(yaml.safe_dump(compose))
+
+    variables = migration.prepare_variables("atm10", _VARS, server_dir)
+
+    assert "24467:24467/udp" in scaffolding.render_compose("atm10", variables)
 
 
 @pytest.mark.parametrize('script', [
@@ -604,3 +625,26 @@ def test_compose_generated_container_name_cannot_bypass_stopped_check(tmp_path):
         migration.migrate('atm10', _VARS, server_dir)
     assert _snapshot_setup(server_dir) == original
     assert not list(server_dir.glob('.mcontrol-migration-backup-*'))
+
+
+def test_supported_runtime_rejects_out_of_range_udp_before_backup(tmp_path):
+    import yaml
+
+    server_dir = _legacy_layout(tmp_path, name="loading")
+    path = server_dir / "docker-compose.yml"
+    compose = yaml.safe_load(path.read_text())
+    service = compose["services"].pop("loading")
+    compose["services"]["minecraft"] = service
+    service.update(
+        ports=["25571:25565", "70000:24467/udp"],
+        labels=["com.noelkleen.service=minecraft"],
+        env_file=[".env"],
+        stdin_open=True,
+        tty=True,
+    )
+    path.write_text(yaml.safe_dump(compose))
+
+    with pytest.raises(migration.MigrationError, match="out-of-range UDP"):
+        migration.migrate("loading", _VARS, server_dir)
+
+    assert not list(server_dir.glob(".mcontrol-migration-backup-*"))

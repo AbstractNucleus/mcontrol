@@ -14,7 +14,7 @@
 
   {% if legacy_filenames %}
     <p class="migrate-card__legacy">
-      Backed up, then removed: {% for f in legacy_filenames %}<code>{{ f }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+      Backed up before conversion: {% for f in legacy_filenames %}<code>{{ f }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
     </p>
   {% endif %}
 
@@ -26,6 +26,8 @@
     are replaced using these form values. If custom runtime options or startup
     commands cannot be safely converted, migration stops before changing files
     and explains what needs review.
+    A recognized <code>.env</code>-based RCON setup is retained and managed;
+    other obsolete build files are removed after backup.
     Worlds, mods, jars, and game settings are left untouched.
   </p>
 

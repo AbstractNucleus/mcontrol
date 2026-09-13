@@ -109,16 +109,23 @@ async def migrate_legacy_server(
     if pending is not None:
         intent = migration.read_migration_intent(server_dir, pending)
         if intent["files_ready"]:
-            if intent["name"] != name or intent["variables"] != variables:
+            if (
+                intent["name"] != name
+                or migration.public_variables(intent["variables"])
+                != migration.public_variables(variables)
+            ):
                 raise migration.MigrationError(
                     "An unfinished migration must resume using its saved values. Reload the "
                     "migration card and retry."
                 )
             backup = pending
+            variables = intent["variables"]
         else:
             migration.restore_backup(server_dir, pending)
+            variables = migration.prepare_variables(name, variables, server_dir)
             backup = migration.migrate(name, variables, server_dir)
     else:
+        variables = migration.prepare_variables(name, variables, server_dir)
         backup = migration.migrate(name, variables, server_dir)
     try:
         await db_async.complete_migration(name=name, variables=variables)

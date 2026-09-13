@@ -30,8 +30,32 @@ _SAFE_DOCKERFILE_LINES = (
     re.compile(r"FROM\s+eclipse-temurin:\d+-jre\Z", re.IGNORECASE),
     re.compile(r"COPY\s+entrypoint\.sh\s+/entrypoint\.sh\Z", re.IGNORECASE),
     re.compile(r"RUN\s+chmod\s+\+x\s+/entrypoint\.sh\Z", re.IGNORECASE),
+    re.compile(
+        r"RUN\s+sed\s+-i\s+'s/\\r\$//'\s+/entrypoint\.sh\s+&&\s+chmod\s+\+x\s+"
+        r"/entrypoint\.sh\Z",
+        re.IGNORECASE,
+    ),
+    re.compile(r"WORKDIR\s+/data\Z", re.IGNORECASE),
     re.compile(r'ENTRYPOINT\s+\[\s*"/entrypoint\.sh"\s*\]\Z', re.IGNORECASE),
 )
+_PUBLIC_VARIABLE_KEYS = {
+    "memory_budget_gb",
+    "port",
+    "server_jar",
+    "java_version",
+    "jvm_extra_args",
+}
+_RCON_PREAMBLE = [
+    "set -euo pipefail",
+    'cd "$(dirname "$0")"',
+    'if [[ -n "${RCON_PASSWORD:-}" && -f server.properties ]]; then',
+    "if grep -q '^rcon.password=' server.properties; then",
+    'sed -i "s/^rcon.password=.*/rcon.password=${RCON_PASSWORD}/" server.properties',
+    "else",
+    "printf '\\nrcon.password=%s\\n' \"${RCON_PASSWORD}\" >> server.properties",
+    "fi",
+    "fi",
+]
 
 
 class MigrationError(OSError):
@@ -46,7 +70,26 @@ def _read_text(path: Path) -> str:
 
 
 def parse_compose_port(server_dir: Path) -> int | None:
-    """Return the first legacy ``<host>:25565`` mapping, if present."""
+    """Return the first simple host mapping targeting Minecraft TCP 25565."""
+    try:
+        compose = yaml.safe_load(_read_text(server_dir / "docker-compose.yml"))
+        services = compose.get("services", {}) if isinstance(compose, dict) else {}
+        if not isinstance(services, dict):
+            return None
+        for service in services.values():
+            if not isinstance(service, dict):
+                continue
+            ports = service.get("ports", [])
+            if not isinstance(ports, list):
+                continue
+            for port in ports:
+                if not isinstance(port, str):
+                    continue
+                match = re.fullmatch(r"(\d+):25565(?:/tcp)?", port, re.IGNORECASE)
+                if match:
+                    return int(match.group(1))
+    except (OSError, yaml.YAMLError):
+        pass
     match = _PORT_RE.search(_read_text(server_dir / "docker-compose.yml"))
     return int(match.group(1)) if match else None
 
@@ -67,9 +110,11 @@ def _script_commands(text: str) -> list[str]:
 def _parse_launch(text: str) -> dict[str, Any] | None:
     commands = _script_commands(text)
     java_lines = [line for line in commands if _JAVA_LINE_RE.fullmatch(line)]
-    other_lines = [line for line in commands if line not in java_lines]
-    safe_preamble = {"set -e", "set -euo pipefail"}
-    if len(java_lines) != 1 or any(line not in safe_preamble for line in other_lines):
+    if len(java_lines) != 1 or not commands or commands[-1] != java_lines[0]:
+        return None
+    other_lines = commands[:-1]
+    safe_preamble = other_lines in ([], ["set -e"], ["set -euo pipefail"], _RCON_PREAMBLE)
+    if not safe_preamble:
         return None
     match = _JAVA_LINE_RE.fullmatch(java_lines[0])
     assert match is not None
@@ -122,9 +167,9 @@ def parse_legacy_variables(server_dir: Path) -> dict[str, Any]:
     if launch:
         out.update(launch)
     compose_text = _read_text(source_dir / "docker-compose.yml")
-    port_match = _PORT_RE.search(compose_text)
-    if port_match:
-        out["port"] = int(port_match.group(1))
+    port = parse_compose_port(source_dir)
+    if port is not None:
+        out["port"] = port
     if "memory_budget_gb" not in out:
         mem_match = _MEM_LIMIT_RE.search(compose_text)
         if mem_match:
@@ -195,7 +240,9 @@ def _validate_requested_launch(variables: dict[str, Any]) -> None:
         raise MigrationError("JVM arguments contain unmatched quotes.") from exc
 
 
-def _load_compose_service(name: str, server_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+def _load_compose_service(
+    name: str, server_dir: Path
+) -> tuple[dict[str, Any], str, dict[str, Any]]:
     try:
         text = (server_dir / "docker-compose.yml").read_text(encoding="utf-8")
     except OSError as exc:
@@ -219,20 +266,38 @@ def _load_compose_service(name: str, server_dir: Path) -> tuple[dict[str, Any], 
             "Compose has unsupported top-level settings: " + ", ".join(sorted(top_extra))
         )
     services = compose["services"]
-    if set(services) != {name}:
-        raise MigrationError(f"Compose must contain exactly one service named {name!r}.")
-    service = services[name]
+    if len(services) != 1:
+        raise MigrationError("Compose must contain exactly one service.")
+    service_name = next(iter(services))
+    if not isinstance(service_name, str) or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9_.-]*", service_name
+    ):
+        raise MigrationError("Compose service name is not safe to manage.")
+    service = services[service_name]
     if not isinstance(service, dict):
         raise MigrationError("The managed Compose service must be a mapping.")
-    return compose, service
+    return compose, service_name, service
 
 
-def _validate_compose(name: str, variables: dict[str, Any], server_dir: Path) -> None:
-    compose, service = _load_compose_service(name, server_dir)
+def _validate_compose(
+    name: str, variables: dict[str, Any], server_dir: Path
+) -> dict[str, Any] | None:
+    compose, service_name, service = _load_compose_service(name, server_dir)
     expected = yaml.safe_load(scaffolding.render_compose(name, variables))
     if compose == expected:
-        return
-    allowed = {"build", "container_name", "restart", "mem_limit", "ports", "volumes"}
+        return None
+    allowed = {
+        "build",
+        "container_name",
+        "restart",
+        "mem_limit",
+        "ports",
+        "volumes",
+        "labels",
+        "env_file",
+        "stdin_open",
+        "tty",
+    }
     unsupported = set(service) - allowed
     if unsupported:
         raise MigrationError(
@@ -251,23 +316,91 @@ def _validate_compose(name: str, variables: dict[str, Any], server_dir: Path) ->
     if service.get("restart", "unless-stopped") != "unless-stopped":
         raise MigrationError("Compose restart must be 'unless-stopped' before migrating.")
     ports = service.get("ports")
-    simple_port = (
-        isinstance(ports, list)
-        and len(ports) == 1
-        and isinstance(ports[0], str)
-        and re.fullmatch(r"\d+:25565(?:/tcp)?", ports[0], re.IGNORECASE)
-    )
-    if not simple_port:
+    if not isinstance(ports, list):
+        raise MigrationError("Compose ports must be a list.")
+    primary = [
+        port
+        for port in ports
+        if isinstance(port, str)
+        and re.fullmatch(r"\d+:25565(?:/tcp)?", port, re.IGNORECASE)
+    ]
+    extra_udp = [
+        port
+        for port in ports
+        if isinstance(port, str) and re.fullmatch(r"\d+:\d+/udp", port, re.IGNORECASE)
+    ]
+    if len(primary) != 1 or len(primary) + len(extra_udp) != len(ports):
         raise MigrationError(
-            "Compose must expose only the selected Minecraft TCP port. Secondary TCP/UDP ports "
-            "cannot be preserved by Regenerate; remove them or migrate manually."
+            "Compose may expose one Minecraft TCP port and simple numeric UDP mappings only."
         )
+    for port in extra_udp:
+        published, target = port.rsplit("/", 1)[0].split(":")
+        if not all(1 <= int(number) <= 65535 for number in (published, target)):
+            raise MigrationError("Compose contains an out-of-range UDP port.")
     volumes = service.get("volumes")
     if volumes not in (["./server:/data"], ["./server:/data:rw"]):
         raise MigrationError(
             "Compose must mount only './server:/data'. Custom or additional mounts cannot be "
             "preserved by Regenerate; remove them or migrate manually."
         )
+    if service.get("stdin_open", True) is not True or service.get("tty", True) is not True:
+        raise MigrationError("Compose stdin_open and tty must be true when present.")
+    expected_label = f"com.noelkleen.service={service_name}"
+    labels = service.get("labels", [])
+    if labels not in ([], [expected_label], {"com.noelkleen.service": service_name}):
+        raise MigrationError("Compose contains unsupported labels.")
+    env_file = service.get("env_file")
+    if env_file not in (None, ".env", [".env"], ["./.env"]):
+        raise MigrationError("Compose env_file must be only .env.")
+    if env_file is not None:
+        env_path = server_dir / ".env"
+        if not env_path.is_file():
+            raise MigrationError("Compose uses .env, but the file is missing.")
+    custom = (
+        service_name != name
+        or bool(extra_udp)
+        or bool(labels)
+        or env_file is not None
+    )
+    if not custom:
+        return None
+    return {
+        "compose_service": service_name,
+        "extra_udp_ports": [port.lower() for port in extra_udp],
+        "labels": [expected_label] if labels else [],
+        "env_file": ".env" if env_file is not None else None,
+        "rcon_password_env": env_file is not None,
+    }
+
+
+def public_variables(variables: dict[str, Any]) -> dict[str, Any]:
+    """Return only values controlled by the migration/Variables form."""
+    return {key: value for key, value in variables.items() if key in _PUBLIC_VARIABLE_KEYS}
+
+
+def prepare_variables(
+    name: str, variables: dict[str, Any], server_dir: Path
+) -> dict[str, Any]:
+    """Attach a recognized, bounded runtime profile for durable rendering."""
+    _validate_paths(server_dir)
+    public = public_variables(variables)
+    runtime = _validate_compose(name, public, server_dir)
+    commands = _script_commands(_read_text(server_dir / "server" / "start_server.sh"))
+    java_lines = [line for line in commands if _JAVA_LINE_RE.fullmatch(line)]
+    has_rcon_prelude = (
+        len(java_lines) == 1
+        and bool(commands)
+        and commands[-1] == java_lines[0]
+        and commands[:-1] == _RCON_PREAMBLE
+    )
+    expects_rcon_prelude = bool(runtime and runtime.get("rcon_password_env"))
+    if has_rcon_prelude != expects_rcon_prelude:
+        raise MigrationError(
+            "The recognized RCON startup prelude and Compose env_file .env must be used together."
+        )
+    if runtime is None:
+        return public
+    return {**public, scaffolding.MANAGED_RUNTIME_KEY: runtime}
 
 
 def _validate_legacy_scripts(server_dir: Path) -> None:
@@ -299,7 +432,23 @@ def _validate_legacy_scripts(server_dir: Path) -> None:
     if entrypoint.exists():
         commands = _script_commands(_read_text(entrypoint))
         remaining = [line for line in commands if line not in {"set -e", "set -euo pipefail"}]
-        if remaining not in (["exec ./start_server.sh"], ["cd /data && exec ./start_server.sh"]):
+        loading_entrypoint = [
+            "cd /data",
+            'if [ -f "start_server.sh" ]; then',
+            "chmod +x start_server.sh",
+            'exec ./start_server.sh "$@"',
+            "fi",
+            (
+                'echo "No start script found. Place start_server.sh in the server data '
+                'directory, then rebuild."'
+            ),
+            "exit 1",
+        ]
+        if remaining not in (
+            ["exec ./start_server.sh"],
+            ["cd /data && exec ./start_server.sh"],
+            loading_entrypoint,
+        ):
             raise MigrationError(
                 "entrypoint.sh contains setup behavior that the managed scaffold cannot preserve. "
                 "Move it into a supported start script or migrate manually."
@@ -482,11 +631,11 @@ def mark_backup_complete(server_dir: Path, backup: Path) -> None:
 
 def migrate(name: str, variables: dict[str, Any], server_dir: Path) -> Path:
     """Validate, back up, convert, and remove obsolete root setup files."""
+    variables = prepare_variables(name, variables, server_dir)
     _validate_requested_launch(variables)
     rendered_compose = scaffolding.render_compose(name, variables)
     rendered_start = scaffolding.render_start_script(variables)
     _validate_paths(server_dir)
-    _validate_compose(name, variables, server_dir)
     _validate_legacy_scripts(server_dir)
     launch_path, launch = _legacy_launch(server_dir)
     if launch_path is None or launch is None:
@@ -502,6 +651,9 @@ def migrate(name: str, variables: dict[str, Any], server_dir: Path) -> Path:
         atomic_write_text(start_path, rendered_start)
         start_path.chmod(0o755)
         for filename in _LEGACY_FILENAMES:
+            runtime = variables.get(scaffolding.MANAGED_RUNTIME_KEY) or {}
+            if filename == ".env" and runtime.get("env_file") == ".env":
+                continue
             (server_dir / filename).unlink(missing_ok=True)
         manifest = _read_manifest(server_dir, backup)
         _write_manifest(backup, manifest["files"], "pending", {

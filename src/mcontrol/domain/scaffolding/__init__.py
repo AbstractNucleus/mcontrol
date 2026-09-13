@@ -10,11 +10,13 @@ ordering and path-safety contract.
 """
 
 import os
+import re
 import secrets
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
+import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from mcontrol.infra.file_writer import atomic_write_text
@@ -33,6 +35,9 @@ JAVA_VERSIONS: tuple[int, ...] = (17, 21, 25)
 DEFAULT_JAVA_VERSION = 21
 
 RCON_PORT = 25575
+MANAGED_RUNTIME_KEY = "managed_runtime"
+_SERVICE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
+_UDP_PORT_RE = re.compile(r"(\d{1,5}):(\d{1,5})/udp\Z")
 
 _env = Environment(
     loader=FileSystemLoader(_TEMPLATES_DIR),
@@ -41,13 +46,54 @@ _env = Environment(
 )
 
 
+def _managed_runtime(variables: dict[str, Any]) -> dict[str, Any] | None:
+    value = variables.get(MANAGED_RUNTIME_KEY)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("managed_runtime must be an object")
+    service = value.get("compose_service")
+    if not isinstance(service, str) or not _SERVICE_RE.fullmatch(service):
+        raise ValueError("managed_runtime compose_service is invalid")
+    ports = value.get("extra_udp_ports", [])
+    if not isinstance(ports, list) or any(not isinstance(port, str) for port in ports):
+        raise ValueError("managed_runtime extra_udp_ports must be a list")
+    for port in ports:
+        match = _UDP_PORT_RE.fullmatch(port)
+        if match is None or any(not 1 <= int(number) <= 65535 for number in match.groups()):
+            raise ValueError("managed_runtime contains an invalid UDP port")
+    expected_label = f"com.noelkleen.service={service}"
+    if value.get("labels", []) not in ([], [expected_label]):
+        raise ValueError("managed_runtime contains unsupported labels")
+    env_file = value.get("env_file")
+    rcon = value.get("rcon_password_env", False)
+    if env_file not in (None, ".env") or not isinstance(rcon, bool):
+        raise ValueError("managed_runtime environment settings are invalid")
+    if bool(env_file) != rcon:
+        raise ValueError("managed_runtime RCON environment settings are incomplete")
+    return value
+
+
 def render_compose(name: str, variables: dict[str, Any]) -> str:
-    return _env.get_template("docker-compose.yml.j2").render(
+    rendered = _env.get_template("docker-compose.yml.j2").render(
         name=name,
         memory_budget_gb=variables["memory_budget_gb"],
         port=variables["port"],
         java_version=variables.get("java_version", DEFAULT_JAVA_VERSION),
     )
+    runtime = _managed_runtime(variables)
+    if runtime is None:
+        return rendered
+    compose = yaml.safe_load(rendered)
+    service = compose["services"].pop(name)
+    service_name = runtime["compose_service"]
+    compose["services"][service_name] = service
+    service["ports"].extend(runtime.get("extra_udp_ports", []))
+    if runtime.get("labels"):
+        service["labels"] = runtime["labels"]
+    if runtime.get("env_file"):
+        service["env_file"] = [runtime["env_file"]]
+    return yaml.safe_dump(compose, sort_keys=False, allow_unicode=True)
 
 
 def render_server_properties(rcon_password: str) -> str:
@@ -74,10 +120,25 @@ def _inherit_owner(base: Path, *dirs: Path) -> None:
 
 
 def render_start_script(variables: dict[str, Any]) -> str:
+    runtime = _managed_runtime(variables)
+    rcon_prelude = ""
+    if runtime and runtime.get("rcon_password_env"):
+        rcon_prelude = (
+            'cd "$(dirname "$0")"\n\n'
+            'if [[ -n "${RCON_PASSWORD:-}" && -f server.properties ]]; then\n'
+            "  if grep -q '^rcon.password=' server.properties; then\n"
+            '    sed -i "s/^rcon.password=.*/rcon.password=${RCON_PASSWORD}/" '
+            "server.properties\n"
+            "  else\n"
+            "    printf '\\nrcon.password=%s\\n' \"${RCON_PASSWORD}\" >> server.properties\n"
+            "  fi\n"
+            "fi\n\n"
+        )
     return _env.get_template("start_server.sh.j2").render(
         xmx_gb=variables["memory_budget_gb"] - HEADROOM_GB,
         jvm_extra_args=variables.get("jvm_extra_args", ""),
         server_jar=variables["server_jar"],
+        rcon_prelude=rcon_prelude,
     )
 
 
