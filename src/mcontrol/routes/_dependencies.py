@@ -1,11 +1,13 @@
 """Shared FastAPI dependencies for route modules."""
 
+from collections.abc import AsyncIterator
+from pathlib import Path
 from uuid import UUID
 
 import aiodocker
 from fastapi import Depends, HTTPException, Request
 
-from mcontrol.infra import db_async
+from mcontrol.infra import db_async, server_lock
 
 
 def get_docker(request: Request) -> aiodocker.Docker:
@@ -24,6 +26,19 @@ async def get_server_or_404(name: str) -> dict:
     if server is None:
         raise HTTPException(status_code=404, detail="Server not found")
     return server
+
+
+async def get_locked_server_or_404(request: Request, name: str) -> AsyncIterator[dict]:
+    """Hold the fleet mutation lock and read current DB state inside it.
+
+    Fleet-wide serialization also covers container-name aliases between rows.
+    """
+    base = Path(request.app.state.settings.server_base_path)
+    async with server_lock.server_mutation_lock(base, "__fleet__"):
+        server = await db_async.get_server(name)
+        if server is None:
+            raise HTTPException(status_code=404, detail="Server not found")
+        yield server
 
 
 def validate_uuid(uuid: str) -> str:

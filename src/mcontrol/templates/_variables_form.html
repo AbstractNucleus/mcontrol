@@ -31,11 +31,18 @@
 
     <label>
       <span class="t-eyebrow">Server jar filename</span>
-      <input type="text"
-             name="server_jar"
-             value="{{ vars.server_jar or '' }}"
-             autocomplete="off"
-             required>
+      {% set selected_jar = vars.server_jar or '' %}
+      <select name="server_jar" required>
+        {% if selected_jar and selected_jar not in jar_options %}
+          <option value="{{ selected_jar }}" selected>{{ selected_jar }} (current)</option>
+        {% elif not selected_jar %}
+          <option value="" disabled selected>{% if jar_options %}Choose a server jar…{% else %}No .jar files found{% endif %}</option>
+        {% endif %}
+        {% for jar in jar_options %}
+          <option value="{{ jar }}"{% if selected_jar == jar %} selected{% endif %}>{{ jar }}</option>
+        {% endfor %}
+      </select>
+      {% if not jar_options %}<small class="t-muted">Add a .jar file to this server's <code>server/</code> subfolder, then reopen this form.</small>{% endif %}
       {% if errors.server_jar %}<small class="variables-form__error">{{ errors.server_jar }}</small>{% endif %}
     </label>
 

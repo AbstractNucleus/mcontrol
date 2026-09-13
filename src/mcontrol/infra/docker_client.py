@@ -97,6 +97,25 @@ async def container_states_by_name(docker: aiodocker.Docker) -> dict[str, str]:
     return states
 
 
+async def container_state(docker: aiodocker.Docker, container_name: str) -> str | None:
+    """Inspect one container, returning its authoritative status or ``None`` if absent.
+
+    Docker errors other than a confirmed 404 propagate so callers can fail closed.
+    An incomplete inspect response is also an error rather than an assumed stop.
+    """
+    try:
+        container = await docker.containers.get(container_name)
+        info = await container.show()
+    except aiodocker.DockerError as exc:
+        if exc.status == 404:
+            return None
+        raise
+    status = (info.get("State") or {}).get("Status")
+    if not isinstance(status, str) or not status:
+        raise RuntimeError("Docker inspect did not return a container status")
+    return status
+
+
 _LIFECYCLE_TIMEOUT_S = 30
 _STOP_GRACE_S = 90
 _STOP_WAIT_S = _STOP_GRACE_S + 10

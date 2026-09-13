@@ -77,6 +77,35 @@ async def test_container_states_returns_empty_when_list_raises(env):
     assert states == {}
 
 
+async def test_container_state_reads_authoritative_inspect_status(env):
+    container = MagicMock()
+    container.show = AsyncMock(return_value={"State": {"Status": "exited"}})
+    docker = MagicMock()
+    docker.containers.get = AsyncMock(return_value=container)
+
+    assert await docker_client.container_state(docker, "atm10") == "exited"
+    docker.containers.get.assert_awaited_once_with("atm10")
+
+
+async def test_container_state_returns_none_only_for_confirmed_404(env):
+    docker = MagicMock()
+    docker.containers.get = AsyncMock(
+        side_effect=aiodocker.DockerError(404, {"message": "not found"})
+    )
+
+    assert await docker_client.container_state(docker, "atm10") is None
+
+
+async def test_container_state_propagates_daemon_failure(env):
+    docker = MagicMock()
+    docker.containers.get = AsyncMock(
+        side_effect=aiodocker.DockerError(500, {"message": "daemon failed"})
+    )
+
+    with pytest.raises(aiodocker.DockerError):
+        await docker_client.container_state(docker, "atm10")
+
+
 # --- Slice 4: lifecycle / logs / network helpers ----------------------------
 
 

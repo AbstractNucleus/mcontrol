@@ -14,10 +14,20 @@
 
   {% if legacy_filenames %}
     <p class="migrate-card__legacy">
-      Will delete: {% for f in legacy_filenames %}<code>{{ f }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
-      <code>docker-compose.yml</code> and <code>server/start_server.sh</code> are re-rendered from your form values.
+      Backed up, then removed: {% for f in legacy_filenames %}<code>{{ f }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
     </p>
   {% endif %}
+
+  <p class="migrate-card__hint">
+    Before changing anything, the original setup files are copied to a separate
+    <code>.mcontrol-migration-backup-…/</code> folder in this server's directory,
+    with recovery instructions. If the backup fails, no setup files are changed.
+    <code>docker-compose.yml</code> and <code>server/start_server.sh</code>
+    are replaced using these form values. If custom runtime options or startup
+    commands cannot be safely converted, migration stops before changing files
+    and explains what needs review.
+    Worlds, mods, jars, and game settings are left untouched.
+  </p>
 
   <p class="migrate-card__hint">
     After migrating, the container must be recreated so Docker picks up the new compose file.
@@ -61,11 +71,18 @@
 
     <label>
       <span class="t-eyebrow">Server jar filename</span>
-      <input type="text"
-             name="server_jar"
-             value="{{ form.server_jar }}"
-             autocomplete="off"
-             required>
+      {% set selected_jar = form.server_jar or '' %}
+      <select name="server_jar" required>
+        {% if selected_jar and selected_jar not in jar_options %}
+          <option value="{{ selected_jar }}" selected>{{ selected_jar }} (current)</option>
+        {% elif not selected_jar %}
+          <option value="" disabled selected>{% if jar_options %}Choose a server jar…{% else %}No .jar files found{% endif %}</option>
+        {% endif %}
+        {% for jar in jar_options %}
+          <option value="{{ jar }}"{% if selected_jar == jar %} selected{% endif %}>{{ jar }}</option>
+        {% endfor %}
+      </select>
+      {% if not jar_options %}<small class="migrate-card__hint">Add a .jar file to this server's <code>server/</code> subfolder, then reload this card.</small>{% endif %}
       {% if errors.server_jar %}<small class="migrate-card__error">{{ errors.server_jar }}</small>{% endif %}
     </label>
 

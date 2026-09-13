@@ -3,11 +3,12 @@ and `dir`. The operator's safety valve against drift."""
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol.infra import db_async
-from mcontrol.routes._dependencies import get_server_or_404
+from mcontrol.domain import migration
+from mcontrol.infra import db, db_async
+from mcontrol.routes._dependencies import get_locked_server_or_404, get_server_or_404
 from mcontrol.services import server_service
 from mcontrol.settings import Settings
 from mcontrol.templates import templates
@@ -50,10 +51,14 @@ async def get(
 async def post(
     request: Request,
     name: str,
-    server: dict = Depends(get_server_or_404),
+    server: dict = Depends(get_locked_server_or_404),
     container_name: str = Form(""),
     dir: str = Form(""),
 ) -> HTMLResponse:
+    try:
+        server_service.ensure_no_pending_migration(server)
+    except migration.MigrationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     # Empty string means "clear the override and fall back to name".
     cn_value: str | None = container_name.strip() or None
 
@@ -66,12 +71,18 @@ async def post(
     except ValueError:
         error = f"Directory must be under {base}."
     else:
+        proposed_identity = cn_value or name
         if not target.is_dir():
             error = "Directory does not exist on disk."
         else:
             for row in await db_async.list_servers():
                 if row["name"] == name:
                     continue
+                if db.container_name_for(row) == proposed_identity:
+                    error = (
+                        f"Container is already bound to '{row['name']}'."
+                    )
+                    break
                 other = row.get("dir")
                 if other and Path(other).resolve() == target:
                     error = (

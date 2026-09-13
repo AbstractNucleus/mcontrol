@@ -9,16 +9,18 @@ template level; POST also refuses unscaffolded rows with 409 so a
 direct edit cannot write JSONB on a legacy server.
 """
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol.domain import server_variables_form
+from mcontrol.domain import jar_picker, migration, server_variables_form
 from mcontrol.domain.scaffolding import (
     DEFAULT_JAVA_VERSION,
     JAVA_VERSIONS,
     MEMORY_MIN_GB,
 )
-from mcontrol.routes._dependencies import get_server_or_404
+from mcontrol.routes._dependencies import get_locked_server_or_404, get_server_or_404
 from mcontrol.services import server_service
 from mcontrol.templates import render_variables_card, templates
 
@@ -32,6 +34,7 @@ def _form(
     errors: dict[str, str] | None = None,
     status_code: int = 200,
 ) -> HTMLResponse:
+    server_base_path = Path(request.app.state.settings.server_base_path)
     return templates.TemplateResponse(
         request=request,
         name="_variables_form.html",
@@ -42,6 +45,9 @@ def _form(
             "memory_min_gb": MEMORY_MIN_GB,
             "java_versions": JAVA_VERSIONS,
             "default_java_version": DEFAULT_JAVA_VERSION,
+            "jar_options": jar_picker.existing_jars(
+                Path(server["dir"]), server_base_path
+            ),
         },
         status_code=status_code,
     )
@@ -60,13 +66,17 @@ async def get(
 async def post(
     request: Request,
     name: str,
-    server: dict = Depends(get_server_or_404),
+    server: dict = Depends(get_locked_server_or_404),
     memory_budget_gb: int = Form(...),
     port: int = Form(...),
     server_jar: str = Form(...),
     java_version: int = Form(DEFAULT_JAVA_VERSION),
     jvm_extra_args: str = Form(""),
 ) -> HTMLResponse:
+    try:
+        server_service.ensure_no_pending_migration(server)
+    except migration.MigrationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if server.get("scaffolded_at") is None:
         raise HTTPException(
             status_code=409,

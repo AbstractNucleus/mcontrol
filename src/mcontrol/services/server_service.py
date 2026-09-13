@@ -1,9 +1,8 @@
 """Server-lifecycle service: scaffold, delete, migrate, update variables / bindings.
 
 Routes here are the orchestration layer; this module owns the DB-first
-ordering for scaffold, the tombstone rule for delete, the
-migration → variables-write → mark-scaffolded sequence, and the
-JSONB merge for variables.
+ordering for scaffold, the tombstone rule for delete, the durable migration
+file/DB handoff, and the JSONB merge for variables.
 """
 
 import logging
@@ -14,9 +13,17 @@ from typing import Any
 
 from mcontrol.domain import migration, scaffolding
 from mcontrol.domain.scaffolding import DEFAULT_JAVA_VERSION
-from mcontrol.infra import db_async
+from mcontrol.infra import db, db_async
 
 logger = logging.getLogger("mcontrol.services.server")
+
+
+def _migration_committed(server: dict[str, Any] | None, variables: dict[str, Any]) -> bool:
+    return bool(
+        server is not None
+        and server.get("scaffolded_at") is not None
+        and server.get("variables") == variables
+    )
 
 
 class ScaffoldError(Exception):
@@ -97,17 +104,91 @@ async def delete_server_with_tombstone(server: dict, base: Path) -> None:
 async def migrate_legacy_server(
     *, name: str, variables: dict[str, Any], server_dir: Path
 ) -> None:
-    """Run the legacy-to-scaffold migration + stamp the row.
+    """Migrate files, then atomically stamp DB state with durable retry intent."""
+    pending = migration.latest_recoverable_backup(server_dir)
+    if pending is not None:
+        intent = migration.read_migration_intent(server_dir, pending)
+        if intent["files_ready"]:
+            if intent["name"] != name or intent["variables"] != variables:
+                raise migration.MigrationError(
+                    "An unfinished migration must resume using its saved values. Reload the "
+                    "migration card and retry."
+                )
+            backup = pending
+        else:
+            migration.restore_backup(server_dir, pending)
+            backup = migration.migrate(name, variables, server_dir)
+    else:
+        backup = migration.migrate(name, variables, server_dir)
+    try:
+        await db_async.complete_migration(name=name, variables=variables)
+    except Exception as exc:
+        try:
+            observed = await db_async.get_server(name)
+        except Exception:
+            raise migration.MigrationError(
+                "The database result could not be confirmed. Keep the server stopped; the "
+                f"converted files and recovery backup {backup.name}/ were left in place."
+            ) from exc
+        if _migration_committed(observed, variables):
+            migration.mark_backup_complete(server_dir, backup)
+            return
+        raise migration.MigrationError(
+            "The database did not confirm the migration. Keep the server stopped; the converted "
+            f"files and recovery backup {backup.name}/ were left ready for a safe retry."
+        ) from exc
+    try:
+        observed = await db_async.get_server(name)
+    except Exception as exc:
+        raise migration.MigrationError(
+            "Migration was sent to the database but could not be verified. Keep the server "
+            f"stopped; recovery backup {backup.name}/ remains pending."
+        ) from exc
+    if not _migration_committed(observed, variables):
+        raise migration.MigrationError(
+            "The database did not accept this migration. Keep the server stopped; the converted "
+            f"files and recovery backup {backup.name}/ were left ready for a safe retry."
+        )
+    try:
+        migration.mark_backup_complete(server_dir, backup)
+    except OSError as exc:
+        raise migration.MigrationError(
+            "Migration was saved, but its recovery marker could not be finalized. Keep the "
+            "server stopped and retry after checking directory access."
+        ) from exc
 
-    ``server_dir`` is the row's bound directory (Bindings may have
-    repointed it away from ``<base>/<name>``). Order: file ops first
-    (``migration.migrate`` is idempotent), then ``update_variables``,
-    then ``mark_scaffolded``. State and scaffolded-at checks happen
-    in the route layer.
-    """
-    migration.migrate(name, variables, server_dir)
-    await db_async.update_variables(name=name, variables=variables)
-    await db_async.mark_scaffolded(name=name)
+
+def ensure_no_pending_migration(server: dict[str, Any]) -> None:
+    """Resolve a committed marker or block unsafe mutations after a crash."""
+    server_dir = Path(server["dir"])
+    pending = migration.latest_recoverable_backup(server_dir)
+    if pending is None:
+        return
+    intent = migration.read_migration_intent(server_dir, pending)
+    if (
+        intent["files_ready"]
+        and intent["name"] == server["name"]
+        and _migration_committed(server, intent["variables"])
+    ):
+        migration.mark_backup_complete(server_dir, pending)
+        return
+    raise migration.MigrationError(
+        "This server has an unfinished migration. Keep it stopped and retry migration before "
+        "changing its managed setup."
+    )
+
+
+async def ensure_unique_container_identity(server: dict[str, Any]) -> None:
+    """Refuse ambiguous lifecycle targeting when two rows name one container."""
+    if not server.get("container_name"):
+        return
+    identity = db.container_name_for(server)
+    for other in await db_async.list_servers():
+        if other["name"] != server["name"] and db.container_name_for(other) == identity:
+            raise migration.MigrationError(
+                f"Bindings for {server['name']!r} and {other['name']!r} both target container "
+                f"{identity!r}. Fix Bindings before starting or recreating it."
+            )
 
 
 async def update_server_variables(

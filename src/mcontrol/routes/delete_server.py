@@ -18,9 +18,13 @@ import aiodocker
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol.domain import lifecycle_state
+from mcontrol.domain import lifecycle_state, migration
 from mcontrol.infra import db, docker_client
-from mcontrol.routes._dependencies import get_docker, get_server_or_404
+from mcontrol.routes._dependencies import (
+    get_docker,
+    get_locked_server_or_404,
+    get_server_or_404,
+)
 from mcontrol.routes._flash import hx_redirect
 from mcontrol.services import server_service
 from mcontrol.settings import Settings
@@ -62,10 +66,14 @@ async def get(
 async def post(
     request: Request,
     name: str,
-    server: dict = Depends(get_server_or_404),
+    server: dict = Depends(get_locked_server_or_404),
     confirm_name: str = Form(""),
     docker: aiodocker.Docker = Depends(get_docker),
 ) -> HTMLResponse:
+    try:
+        server_service.ensure_no_pending_migration(server)
+    except migration.MigrationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     # The DB state column can be stale (started outside the panel), so
     # also ask Docker before tombstoning a bind-mount the JVM may still
     # be writing to. An unreachable daemon yields {} and the DB check

@@ -1,5 +1,7 @@
 """Tests for routes/variables.py. the Variables card on the detail page."""
 
+from pathlib import Path
+
 import pytest
 
 from mcontrol.domain import scaffolding
@@ -80,7 +82,7 @@ async def test_get_form_renders_editable_inputs(client, fake_db, tmp_path):
     body = response.text
     assert 'name="memory_budget_gb"' in body
     assert 'name="port"' in body
-    assert 'name="server_jar"' in body
+    assert '<select name="server_jar" required>' in body
     assert 'name="jvm_extra_args"' in body
     assert 'name="java_version"' in body
     from mcontrol.domain.scaffolding import MEMORY_MIN_GB
@@ -88,6 +90,43 @@ async def test_get_form_renders_editable_inputs(client, fake_db, tmp_path):
     assert f'min="{MEMORY_MIN_GB}"' in body
     assert 'value="8"' in body
     assert 'value="25575"' in body
+    assert 'value="paper.jar" selected' in body
+    assert "paper.jar (current)" in body
+
+
+async def test_get_form_lists_jars_from_bound_server_working_dir(
+    client, fake_db, tmp_path
+):
+    bound_dir = tmp_path / "repointed"
+    working_dir = bound_dir / "server"
+    working_dir.mkdir(parents=True)
+    (working_dir / "paper.jar").write_bytes(b"jar")
+    (working_dir / "vanilla.jar").write_bytes(b"jar")
+    (bound_dir / "wrong-place.jar").write_bytes(b"jar")
+    client._transport.app.state.settings.server_base_path = str(tmp_path)
+    fake_db["rows"].append(_row(tmp_path, dir=str(bound_dir)))
+
+    response = await client.get("/servers/newshire/variables?edit=1")
+
+    assert response.status_code == 200
+    body = response.text
+    assert '<option value="paper.jar" selected>paper.jar</option>' in body
+    assert '<option value="vanilla.jar">vanilla.jar</option>' in body
+    assert "wrong-place.jar" not in body
+
+
+async def test_get_form_explains_when_no_jars_or_current_value(
+    client, fake_db, tmp_path
+):
+    row = _row(tmp_path, variables={"memory_budget_gb": 8, "port": 25575})
+    (Path(row["dir"]) / "server").mkdir(parents=True)
+    fake_db["rows"].append(row)
+
+    response = await client.get("/servers/newshire/variables?edit=1")
+
+    assert response.status_code == 200
+    assert '<option value="" disabled selected>No .jar files found</option>' in response.text
+    assert "server/</code> subfolder" in response.text
 
 
 async def test_get_returns_404_for_unknown_server(client, fake_db):

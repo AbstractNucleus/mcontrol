@@ -11,6 +11,7 @@ def fake_server_row(monkeypatch):
     from mcontrol.infra import db
 
     monkeypatch.setattr(db, "get_server", fake_get)
+    monkeypatch.setattr(db, "list_servers", lambda: list(rows.values()))
     return rows
 
 

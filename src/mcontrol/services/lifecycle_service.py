@@ -24,6 +24,7 @@ import aiodocker
 
 from mcontrol.infra import compose, db, db_async, docker_client, server_rcon
 from mcontrol.infra.probe_host import probe_host
+from mcontrol.services import server_service
 
 # After docker_client.start() returns, the container process is up but
 # the JVM may still be binding the listener port. Probe probe_host:port
@@ -87,6 +88,8 @@ async def start_server(
     ``TimeoutError`` from ``docker_client.start`` so the route layer
     can show the timeout flash without updating state.
     """
+    server_service.ensure_no_pending_migration(server)
+    await server_service.ensure_unique_container_identity(server)
     try:
         await docker_client.start(docker, db.container_name_for(server))
     except aiodocker.DockerError as exc:
@@ -115,6 +118,8 @@ async def restart_server(
 ) -> str:
     """Restart the container, probe the listener, commit starting/running,
     drop the cached RCON password baseline."""
+    server_service.ensure_no_pending_migration(server)
+    await server_service.ensure_unique_container_identity(server)
     await docker_client.restart(docker, db.container_name_for(server))
     server_rcon.forget_authed_password(name)
     return await _commit_listener_state(server, name)
@@ -123,6 +128,8 @@ async def restart_server(
 async def recreate_server(server: dict, name: str) -> str:
     """``docker compose up -d`` (recreates only when config changed), then
     probe the listener and commit starting/running."""
+    server_service.ensure_no_pending_migration(server)
+    await server_service.ensure_unique_container_identity(server)
     await compose.compose_up(Path(server["dir"]))
     server_rcon.forget_authed_password(name)
     return await _commit_listener_state(server, name)

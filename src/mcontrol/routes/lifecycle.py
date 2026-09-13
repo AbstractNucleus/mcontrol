@@ -21,9 +21,10 @@ import aiodocker
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol.domain import lifecycle_state
+from mcontrol.domain import lifecycle_state, migration
+from mcontrol.infra import server_lock
 from mcontrol.infra.compose import ComposeError
-from mcontrol.routes._dependencies import get_docker, get_server_or_404
+from mcontrol.routes._dependencies import get_docker, get_locked_server_or_404
 from mcontrol.services import lifecycle_service
 from mcontrol.templates import templates
 
@@ -52,6 +53,8 @@ def _action_failure(
 ) -> HTMLResponse:
     logger.warning("lifecycle %s failed for %s: %s", action, name, exc)
     if isinstance(exc, ComposeError):
+        flash = str(exc)
+    elif isinstance(exc, migration.MigrationError):
         flash = str(exc)
     elif isinstance(exc, aiodocker.DockerError):
         flash = _docker_error_msg(exc)
@@ -106,12 +109,14 @@ def _respond(
 async def start(
     request: Request,
     name: str,
-    server: dict = Depends(get_server_or_404),
+    server: dict = Depends(get_locked_server_or_404),
     docker: aiodocker.Docker = Depends(get_docker),
 ) -> HTMLResponse:
     try:
-        new_state = await lifecycle_service.start_server(docker, server, name)
-    except (TimeoutError, ComposeError, aiodocker.DockerError) as exc:
+        new_state = await server_lock.drain_on_cancel(
+            lifecycle_service.start_server(docker, server, name)
+        )
+    except (TimeoutError, ComposeError, aiodocker.DockerError, migration.MigrationError) as exc:
         return _action_failure(request, server, name, "start", exc)
     return _respond(request, server, new_state)
 
@@ -120,11 +125,13 @@ async def start(
 async def stop(
     request: Request,
     name: str,
-    server: dict = Depends(get_server_or_404),
+    server: dict = Depends(get_locked_server_or_404),
     docker: aiodocker.Docker = Depends(get_docker),
 ) -> HTMLResponse:
     try:
-        new_state = await lifecycle_service.stop_server(docker, server, name)
+        new_state = await server_lock.drain_on_cancel(
+            lifecycle_service.stop_server(docker, server, name)
+        )
     except (TimeoutError, ComposeError, aiodocker.DockerError) as exc:
         return _action_failure(request, server, name, "stop", exc)
     return _respond(request, server, new_state)
@@ -134,12 +141,14 @@ async def stop(
 async def restart(
     request: Request,
     name: str,
-    server: dict = Depends(get_server_or_404),
+    server: dict = Depends(get_locked_server_or_404),
     docker: aiodocker.Docker = Depends(get_docker),
 ) -> HTMLResponse:
     try:
-        new_state = await lifecycle_service.restart_server(docker, server, name)
-    except (TimeoutError, ComposeError, aiodocker.DockerError) as exc:
+        new_state = await server_lock.drain_on_cancel(
+            lifecycle_service.restart_server(docker, server, name)
+        )
+    except (TimeoutError, ComposeError, aiodocker.DockerError, migration.MigrationError) as exc:
         return _action_failure(request, server, name, "restart", exc)
     return _respond(request, server, new_state)
 
@@ -148,10 +157,12 @@ async def restart(
 async def recreate(
     request: Request,
     name: str,
-    server: dict = Depends(get_server_or_404),
+    server: dict = Depends(get_locked_server_or_404),
 ) -> HTMLResponse:
     try:
-        new_state = await lifecycle_service.recreate_server(server, name)
-    except (TimeoutError, ComposeError, aiodocker.DockerError) as exc:
+        new_state = await server_lock.drain_on_cancel(
+            lifecycle_service.recreate_server(server, name)
+        )
+    except (TimeoutError, ComposeError, aiodocker.DockerError, migration.MigrationError) as exc:
         return _action_failure(request, server, name, "recreate", exc)
     return _respond(request, server, new_state)

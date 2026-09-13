@@ -17,9 +17,15 @@ of ``mcontrol.db`` still flow through.
 """
 
 import asyncio
+from collections.abc import Callable
 from typing import Any
 
-from mcontrol.infra import db
+from mcontrol.infra import db, server_lock
+
+
+async def _run_uncancellable(func: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+    """Do not release a caller's mutation lock while its DB thread is still running."""
+    return await server_lock.drain_on_cancel(asyncio.to_thread(func, *args, **kwargs))
 
 
 async def list_servers() -> list[dict[str, Any]]:
@@ -31,21 +37,21 @@ async def get_server(name: str) -> dict[str, Any] | None:
 
 
 async def insert_server(*, name: str, dir: str, state: str) -> None:
-    await asyncio.to_thread(db.insert_server, name=name, dir=dir, state=state)
+    await _run_uncancellable(db.insert_server, name=name, dir=dir, state=state)
 
 
 async def update_server_state(*, name: str, state: str) -> None:
-    await asyncio.to_thread(db.update_server_state, name=name, state=state)
+    await _run_uncancellable(db.update_server_state, name=name, state=state)
 
 
 async def update_variables(*, name: str, variables: dict[str, Any]) -> None:
-    await asyncio.to_thread(db.update_variables, name=name, variables=variables)
+    await _run_uncancellable(db.update_variables, name=name, variables=variables)
 
 
 async def update_bindings(
     *, name: str, container_name: str | None, dir: str
 ) -> None:
-    await asyncio.to_thread(
+    await _run_uncancellable(
         db.update_bindings, name=name, container_name=container_name, dir=dir
     )
 
@@ -53,7 +59,7 @@ async def update_bindings(
 async def insert_scaffolding_server(
     *, name: str, dir: str, variables: dict[str, Any], loader: str
 ) -> None:
-    await asyncio.to_thread(
+    await _run_uncancellable(
         db.insert_scaffolding_server,
         name=name,
         dir=dir,
@@ -63,11 +69,15 @@ async def insert_scaffolding_server(
 
 
 async def mark_scaffolded(*, name: str) -> None:
-    await asyncio.to_thread(db.mark_scaffolded, name=name)
+    await _run_uncancellable(db.mark_scaffolded, name=name)
+
+
+async def complete_migration(*, name: str, variables: dict[str, Any]) -> None:
+    await _run_uncancellable(db.complete_migration, name=name, variables=variables)
 
 
 async def delete_server(name: str) -> None:
-    await asyncio.to_thread(db.delete_server, name)
+    await _run_uncancellable(db.delete_server, name)
 
 
 async def list_players() -> list[dict[str, Any]]:
@@ -79,14 +89,14 @@ async def get_player(uuid: str) -> dict[str, Any] | None:
 
 
 async def insert_players_bulk(rows: list[dict[str, Any]]) -> None:
-    await asyncio.to_thread(db.insert_players_bulk, rows)
+    await _run_uncancellable(db.insert_players_bulk, rows)
 
 
 async def delete_player(uuid: str) -> None:
-    await asyncio.to_thread(db.delete_player, uuid)
+    await _run_uncancellable(db.delete_player, uuid)
 
 
 async def upsert_player_from_mojang(*, uuid: str, name: str) -> dict[str, Any]:
-    return await asyncio.to_thread(
+    return await _run_uncancellable(
         db.upsert_player_from_mojang, uuid=uuid, name=name
     )

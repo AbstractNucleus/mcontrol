@@ -46,10 +46,8 @@ def _legacy_layout(
         "    restart: unless-stopped\n"
         "    ports:\n"
         f'      - "{host_port}:25565"\n'
-        "      - \"25575:25575\"\n"
         "    volumes:\n"
         "      - ./server:/data\n"
-        "    env_file: .env\n"
     )
     start = (
         "#!/usr/bin/env bash\n"
@@ -176,7 +174,7 @@ def test_migrate_writes_scaffold_files_with_expected_contents(tmp_path):
     assert "-XX:+UseG1GC" in start
 
 
-def test_migrate_unlinks_all_four_legacy_files(tmp_path):
+def test_migrate_removes_legacy_files_after_backup(tmp_path):
     server_dir = _legacy_layout(tmp_path)
     migration.migrate("atm10", _VARS, server_dir)
 
@@ -288,7 +286,7 @@ def test_parse_compose_port_reads_first_25565_mapping(tmp_path):
 def test_migrate_uses_bound_server_dir_not_base_name(tmp_path):
     """Bindings may repoint the row away from <base>/<name>."""
     server_dir = tmp_path / "repointed"
-    _legacy_layout(tmp_path, name="repointed")
+    _legacy_layout(tmp_path, name="loading").rename(server_dir)
 
     migration.migrate("loading", _VARS, server_dir)
 
@@ -343,13 +341,266 @@ def test_migrate_loading_legacy_compose_shape(tmp_path):
         "server_jar": "server.jar",
         "java_version": 21,
     }
-    migration.migrate("loading", vars_, server_dir)
+    original = (server_dir / "docker-compose.yml").read_bytes()
+    with pytest.raises(migration.MigrationError):
+        migration.migrate("loading", vars_, server_dir)
+    assert (server_dir / "docker-compose.yml").read_bytes() == original
+    assert (server_dir / "Dockerfile").exists()
+    assert not list(server_dir.glob(".mcontrol-migration-backup-*"))
 
-    compose = (server_dir / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "image: eclipse-temurin:21-jre" in compose
-    assert "stop_grace_period: 90s" in compose
-    assert "mem_limit: 12g" in compose
-    assert "build:" not in compose
-    assert not (server_dir / "Dockerfile").exists()
-    assert not (server_dir / "entrypoint.sh").exists()
-    assert (inner / "server.properties").exists() is False
+
+def test_backup_preserves_original_bytes_and_survives_retry(tmp_path):
+    server_dir = _legacy_layout(tmp_path)
+    originals = {p.relative_to(server_dir): p.read_bytes()
+                 for p in server_dir.rglob('*') if p.is_file()}
+    first = migration.migrate('atm10', _VARS, server_dir)
+    second = migration.migrate('atm10', _VARS, server_dir)
+    assert first != second
+    for relative, data in originals.items():
+        assert (first / relative).read_bytes() == data
+    assert (first / 'RESTORE.txt').is_file()
+
+
+def test_backup_failure_leaves_setup_unchanged(tmp_path, monkeypatch):
+    server_dir = _legacy_layout(tmp_path)
+    originals = {p.relative_to(server_dir): p.read_bytes()
+                 for p in server_dir.rglob('*') if p.is_file()}
+    real_copy = migration.shutil.copy2
+    calls = 0
+
+    def fail_second(source, target):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError('disk full')
+        return real_copy(source, target)
+
+    monkeypatch.setattr(migration.shutil, 'copy2', fail_second)
+    with pytest.raises(migration.MigrationError, match='No setup files were changed'):
+        migration.migrate('atm10', _VARS, server_dir)
+    for relative, data in originals.items():
+        assert (server_dir / relative).read_bytes() == data
+
+
+def test_write_failure_keeps_recoverable_originals(tmp_path, monkeypatch):
+    server_dir = _legacy_layout(tmp_path)
+    compose = (server_dir / 'docker-compose.yml').read_bytes()
+    start = (server_dir / 'server/start_server.sh').read_bytes()
+
+    real_write = migration.atomic_write_text
+
+    def partial_write(path, content):
+        if path == server_dir / 'server/start_server.sh':
+            raise OSError('disk full')
+        return real_write(path, content)
+
+    monkeypatch.setattr(migration, 'atomic_write_text', partial_write)
+    with pytest.raises(migration.MigrationError, match='original setup was restored'):
+        migration.migrate('atm10', _VARS, server_dir)
+    backup, = server_dir.glob('.mcontrol-migration-backup-*')
+    assert (backup / 'docker-compose.yml').read_bytes() == compose
+    assert (backup / 'server/start_server.sh').read_bytes() == start
+    assert (server_dir / 'docker-compose.yml').read_bytes() == compose
+    assert (server_dir / 'server/start_server.sh').read_bytes() == start
+
+
+def test_special_setup_path_rejected_before_changes(tmp_path):
+    server_dir = _legacy_layout(tmp_path)
+    compose = (server_dir / 'docker-compose.yml').read_bytes()
+    (server_dir / '.env').unlink()
+    (server_dir / '.env').mkdir()
+    with pytest.raises(migration.MigrationError):
+        migration.migrate('atm10', _VARS, server_dir)
+    assert (server_dir / 'docker-compose.yml').read_bytes() == compose
+    assert not list(server_dir.glob('.mcontrol-migration-backup-*'))
+
+
+def test_migrate_keeps_mods_jars_and_user_settings(tmp_path):
+    server_dir = _legacy_layout(tmp_path)
+    data = {'mods/example.jar': b'mod', 'server.jar': b'jar',
+            'server.properties': b'motd=Custom', 'config/custom.toml': b'custom=true'}
+    for relative, content in data.items():
+        target = server_dir / 'server' / relative
+        target.parent.mkdir(exist_ok=True)
+        target.write_bytes(content)
+    migration.migrate('atm10', _VARS, server_dir)
+    for relative, content in data.items():
+        assert (server_dir / 'server' / relative).read_bytes() == content
+
+
+def _snapshot_setup(server_dir):
+    return {name: (server_dir / name).read_bytes()
+            for name in migration._SETUP_FILENAMES if (server_dir / name).is_file()}
+
+
+@pytest.mark.parametrize('runtime', [
+    {'ports': ['25571:25565', '24467:24467/udp']},
+    {'ports': ['25571:25565', '8123:8123']},
+    {'volumes': ['./server:/data', './extra:/extra']},
+    {'environment': {'CUSTOM': 'required'}},
+    {'env_file': '.env'},
+    {'labels': {'custom': 'required'}},
+    {'command': ['java', '-jar', 'special.jar']},
+    {'working_dir': '/custom'},
+    {'network_mode': 'host'},
+])
+def test_custom_runtime_rejected_without_changing_files(tmp_path, runtime):
+    import yaml
+
+    server_dir = _legacy_layout(tmp_path)
+    path = server_dir / 'docker-compose.yml'
+    compose = yaml.safe_load(path.read_text())
+    compose['services']['atm10'].update(runtime)
+    path.write_text(yaml.safe_dump(compose))
+    original = _snapshot_setup(server_dir)
+    with pytest.raises(migration.MigrationError):
+        migration.migrate('atm10', _VARS, server_dir)
+    assert _snapshot_setup(server_dir) == original
+    assert not list(server_dir.glob('.mcontrol-migration-backup-*'))
+
+
+@pytest.mark.parametrize('script', [
+    'exec java -Xmx12G -jar server.jar --world custom nogui',
+    'exec java -Xmx12G -jar server.jar nogui --port 25566',
+    'export CUSTOM=important\nexec java -Xmx12G -jar server.jar nogui',
+    'cd /another-world\nexec java -Xmx12G -jar server.jar nogui',
+    'prepare-world\nexec java -Xmx12G -jar server.jar nogui',
+])
+def test_custom_launch_rejected_before_changes(tmp_path, script):
+    server_dir = _legacy_layout(tmp_path)
+    (server_dir / 'server/start_server.sh').write_text(script + '\n')
+    original = _snapshot_setup(server_dir)
+    with pytest.raises(migration.MigrationError):
+        migration.migrate('atm10', _VARS, server_dir)
+    assert _snapshot_setup(server_dir) == original
+    assert not list(server_dir.glob('.mcontrol-migration-backup-*'))
+
+
+def test_parser_keeps_jvm_flags_before_and_after_heap(tmp_path):
+    server_dir = _legacy_layout(tmp_path)
+    (server_dir / 'server/start_server.sh').write_text(
+        'exec java -Dcustom=value -Xmx12G -XX:+UseG1GC -jar server.jar nogui\n'
+    )
+    parsed = migration.parse_legacy_variables(server_dir)
+    assert parsed['jvm_extra_args'] == '-Dcustom=value -XX:+UseG1GC'
+    migration.migrate('atm10', {**_VARS, **parsed}, server_dir)
+    assert '-Dcustom=value -XX:+UseG1GC' in (server_dir / 'server/start_server.sh').read_text()
+
+
+@pytest.mark.parametrize('java', [17, 25])
+def test_pending_backup_retains_retry_defaults_and_can_restore(tmp_path, java):
+    server_dir = _legacy_layout(tmp_path)
+    path = server_dir / 'Dockerfile'
+    path.write_text(path.read_text().replace(':17-jre', f':{java}-jre'))
+    original = _snapshot_setup(server_dir)
+    backup = migration.migrate('atm10', {**_VARS, 'java_version': java}, server_dir)
+    assert not path.exists()
+    assert migration.latest_recoverable_backup(server_dir) == backup
+    assert migration.parse_legacy_variables(server_dir)['java_version'] == java
+    migration.restore_backup(server_dir, backup)
+    assert _snapshot_setup(server_dir) == original
+    assert migration.latest_recoverable_backup(server_dir) is None
+    assert (backup / 'Dockerfile').read_bytes() == original['Dockerfile']
+
+
+def test_completed_backup_is_kept_but_not_pending(tmp_path):
+    server_dir = _legacy_layout(tmp_path)
+    backup = migration.migrate('atm10', _VARS, server_dir)
+    migration.mark_backup_complete(server_dir, backup)
+    assert migration.latest_recoverable_backup(server_dir) is None
+    assert (backup / 'Dockerfile').is_file()
+
+
+@pytest.mark.parametrize('relative, extra', [
+    ('Dockerfile', 'RUN install-something\n'),
+    ('entrypoint.sh', 'prepare-world\n'),
+    ('.env', 'CUSTOM_WORLD=important\n'),
+])
+def test_custom_legacy_setup_is_not_discarded(tmp_path, relative, extra):
+    server_dir = _legacy_layout(tmp_path)
+    path = server_dir / relative
+    path.write_text(path.read_text() + extra)
+    original = _snapshot_setup(server_dir)
+    with pytest.raises(migration.MigrationError):
+        migration.migrate('atm10', _VARS, server_dir)
+    assert _snapshot_setup(server_dir) == original
+
+
+def test_redirected_working_directory_rejected(tmp_path, monkeypatch):
+    server_dir = _legacy_layout(tmp_path)
+    original = _snapshot_setup(server_dir)
+    real_resolve = Path.resolve
+
+    def redirected(path, *args, **kwargs):
+        if path == server_dir / 'server':
+            return tmp_path / 'outside'
+        return real_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'resolve', redirected)
+    with pytest.raises(migration.MigrationError):
+        migration.migrate('atm10', _VARS, server_dir)
+    assert _snapshot_setup(server_dir) == original
+    assert not list(server_dir.glob('.mcontrol-migration-backup-*'))
+
+
+@pytest.mark.skipif(not hasattr(os, 'chown') or not hasattr(os, 'geteuid') or
+                    (hasattr(os, 'geteuid') and os.geteuid() != 0),
+                    reason='requires Linux root to verify different file owner')
+def test_backup_and_restore_preserve_private_file_ownership(tmp_path):
+    import stat
+
+    server_dir = _legacy_layout(tmp_path)
+    env_path = server_dir / '.env'
+    os.chown(env_path, 1234, 1235)
+    env_path.chmod(0o600)
+    original = env_path.read_bytes()
+    backup = migration.migrate('atm10', _VARS, server_dir)
+    migration.restore_backup(server_dir, backup)
+    restored = env_path.stat()
+    assert (restored.st_uid, restored.st_gid) == (1234, 1235)
+    assert stat.S_IMODE(restored.st_mode) == 0o600
+    assert env_path.read_bytes() == original
+
+
+def test_pending_intent_records_requested_values_and_completed_files(tmp_path):
+    server_dir = _legacy_layout(tmp_path)
+    variables = {**_VARS, 'java_version': 25}
+    backup = migration.migrate('atm10', variables, server_dir)
+    assert migration.read_migration_intent(server_dir, backup) == {
+        'name': 'atm10', 'variables': variables, 'files_ready': True,
+    }
+    migration.mark_backup_complete(server_dir, backup)
+    assert migration.read_migration_intent(server_dir, backup)['variables'] == variables
+
+
+def test_crash_during_file_write_leaves_prepared_intent_and_recoverable_files(
+    tmp_path, monkeypatch
+):
+    server_dir = _legacy_layout(tmp_path)
+    original = _snapshot_setup(server_dir)
+    real_write = migration.atomic_write_text
+
+    def simulated_crash(path, content):
+        if path == server_dir / 'server/start_server.sh':
+            raise KeyboardInterrupt('process terminated')
+        return real_write(path, content)
+
+    monkeypatch.setattr(migration, 'atomic_write_text', simulated_crash)
+    with pytest.raises(KeyboardInterrupt):
+        migration.migrate('atm10', _VARS, server_dir)
+    backup = migration.latest_recoverable_backup(server_dir)
+    assert backup is not None
+    assert migration.read_migration_intent(server_dir, backup)['files_ready'] is False
+    migration.restore_backup(server_dir, backup)
+    assert _snapshot_setup(server_dir) == original
+
+
+def test_compose_generated_container_name_cannot_bypass_stopped_check(tmp_path):
+    server_dir = _legacy_layout(tmp_path)
+    path = server_dir / 'docker-compose.yml'
+    path.write_text(path.read_text().replace('    container_name: atm10\n', ''))
+    original = _snapshot_setup(server_dir)
+    with pytest.raises(migration.MigrationError, match='explicitly set container_name'):
+        migration.migrate('atm10', _VARS, server_dir)
+    assert _snapshot_setup(server_dir) == original
+    assert not list(server_dir.glob('.mcontrol-migration-backup-*'))

@@ -144,6 +144,17 @@ def mark_scaffolded(*, name: str) -> None:
     ).eq("name", name).execute()
 
 
+def complete_migration(*, name: str, variables: dict[str, Any]) -> None:
+    """Atomically store migrated variables and stamp the row scaffolded."""
+    _table().update(
+        {
+            "variables": variables,
+            "state": "created",
+            "scaffolded_at": datetime.now(UTC).isoformat(),
+        }
+    ).eq("name", name).is_("scaffolded_at", "null").execute()
+
+
 def delete_server(name: str) -> None:
     """Hard-delete a row by name. Used by PR 2's rollback path and by
     PR 5's delete flow."""

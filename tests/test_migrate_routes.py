@@ -20,9 +20,16 @@ def base_dir(tmp_path, monkeypatch, env):
 
 @pytest.fixture
 async def app_client(base_dir) -> AsyncIterator[AsyncClient]:
+    import aiodocker
+
     from mcontrol.main import create_app
+    from tests.conftest import make_fake_docker
 
     app = create_app()
+    app.state.docker = make_fake_docker()
+    app.state.docker.containers.get.side_effect = aiodocker.DockerError(
+        404, {"message": "No such container"}
+    )
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -59,10 +66,15 @@ def fake_db(monkeypatch):
                 row["state"] = "created"
                 row["scaffolded_at"] = "2026-05-09T22:00:00+00:00"
 
+    def fake_complete_migration(*, name, variables):
+        fake_update_variables(name=name, variables=variables)
+        fake_mark_scaffolded(name=name)
+
     monkeypatch.setattr(db, "get_server", fake_get_server)
     monkeypatch.setattr(db, "list_servers", fake_list_servers)
     monkeypatch.setattr(db, "update_variables", fake_update_variables)
     monkeypatch.setattr(db, "mark_scaffolded", fake_mark_scaffolded)
+    monkeypatch.setattr(db, "complete_migration", fake_complete_migration)
     return state
 
 
@@ -141,6 +153,31 @@ async def test_get_returns_form_prefilled_from_legacy_files(
     assert ".env" in body
 
 
+async def test_get_lists_jars_from_bound_server_working_dir(
+    app_client, fake_db, base_dir
+):
+    server_dir = _legacy_layout(base_dir, name="repointed")
+    (server_dir / "server" / "available.jar").write_bytes(b"jar")
+    (server_dir / "wrong-place.jar").write_bytes(b"jar")
+    fake_db["rows"].append(
+        {
+            **_legacy_row(base_dir, name="loading"),
+            "dir": str(server_dir),
+        }
+    )
+
+    response = await app_client.get("/servers/loading/migrate")
+
+    assert response.status_code == 200
+    body = response.text
+    assert '<option value="available.jar">available.jar</option>' in body
+    assert "wrong-place.jar" not in body
+    assert (
+        '<option value="neoforge-21.1.86-server.jar" selected>'
+        "neoforge-21.1.86-server.jar (current)</option>"
+    ) in body
+
+
 async def test_get_button_disabled_when_state_running(
     app_client, fake_db, base_dir
 ):
@@ -189,6 +226,8 @@ async def test_get_falls_back_to_blank_fields_when_parse_fails(
     # Required inputs render; values are empty strings.
     assert 'name="memory_budget_gb"' in body
     assert 'name="server_jar"' in body
+    assert '<option value="" disabled selected>No .jar files found</option>' in body
+    assert "server/</code> subfolder" in body
     # No "Will delete" line when nothing legacy exists.
     assert "Will delete" not in body
 
@@ -222,7 +261,7 @@ async def test_post_writes_scaffold_files_and_stamps_row(
     assert '- "25571:25565"' in compose
     assert "-Xmx12g" in start
 
-    # Legacy files removed.
+    # Legacy build files are preserved in the backup and removed from the live setup.
     assert not (server_dir / "Dockerfile").exists()
     assert not (server_dir / "entrypoint.sh").exists()
     assert not (server_dir / ".dockerignore").exists()
@@ -265,9 +304,18 @@ async def test_post_drops_jvm_extra_args_when_blank(
     assert "jvm_extra_args" not in written_vars
 
 
-async def test_post_refuses_when_state_running(app_client, fake_db, base_dir):
+async def test_post_refuses_when_state_running(
+    app_client, fake_db, base_dir, monkeypatch
+):
+    from mcontrol.infra import docker_client
+
     _legacy_layout(base_dir)
     fake_db["rows"].append(_legacy_row(base_dir, state="running"))
+
+    async def fake_state(_docker, _name):
+        return "running"
+
+    monkeypatch.setattr(docker_client, "container_state", fake_state)
 
     response = await app_client.post(
         "/servers/atm10/migrate",
@@ -412,7 +460,10 @@ async def test_post_migrates_bound_dir_not_base_name(
     app_client, fake_db, base_dir
 ):
     """A Bindings-repointed row must migrate the bound directory."""
-    server_dir = _legacy_layout(base_dir, name="repointed")
+    server_dir = _legacy_layout(base_dir, name="loading")
+    repointed = base_dir / "repointed"
+    server_dir.rename(repointed)
+    server_dir = repointed
     fake_db["rows"].append(
         {
             "name": "loading",
@@ -440,6 +491,162 @@ async def test_post_migrates_bound_dir_not_base_name(
     assert "image: eclipse-temurin:21-jre" in compose
     assert not (base_dir / "loading").exists()
     assert fake_db["scaffolded_marks"] == ["loading"]
+
+
+async def test_post_fails_closed_when_docker_inspect_fails(
+    app_client, fake_db, base_dir, monkeypatch
+):
+    from mcontrol.infra import docker_client
+
+    _legacy_layout(base_dir)
+    fake_db["rows"].append(_legacy_row(base_dir))
+
+    async def inspect_failed(_docker, _name):
+        raise ConnectionError("docker unavailable")
+
+    monkeypatch.setattr(docker_client, "container_state", inspect_failed)
+
+    response = await app_client.post(
+        "/servers/atm10/migrate",
+        data={
+            "memory_budget_gb": "14",
+            "port": "25571",
+            "server_jar": "neoforge.jar",
+            "jvm_extra_args": "",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "Could not confirm the container is stopped" in response.text
+    assert fake_db["variables_writes"] == []
+    assert (base_dir / "atm10" / "Dockerfile").exists()
+
+
+async def test_post_rejects_container_name_override_before_inspect(
+    app_client, fake_db, base_dir, monkeypatch
+):
+    from mcontrol.infra import docker_client
+
+    _legacy_layout(base_dir)
+    row = _legacy_row(base_dir)
+    row["container_name"] = "atm10-old"
+    fake_db["rows"].append(row)
+    inspected: list[str] = []
+
+    async def fake_state(_docker, name):
+        inspected.append(name)
+        return None
+
+    monkeypatch.setattr(docker_client, "container_state", fake_state)
+
+    response = await app_client.post(
+        "/servers/atm10/migrate",
+        data={
+            "memory_budget_gb": "14",
+            "port": "25571",
+            "server_jar": "neoforge.jar",
+            "jvm_extra_args": "",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "Clear the container-name override" in response.text
+    assert inspected == []
+    assert fake_db["variables_writes"] == []
+
+
+async def test_post_restores_files_when_database_write_fails(
+    app_client, fake_db, base_dir, monkeypatch
+):
+    from mcontrol.infra import db
+
+    server_dir = _legacy_layout(base_dir)
+    original_compose = (server_dir / "docker-compose.yml").read_bytes()
+    fake_db["rows"].append(_legacy_row(base_dir))
+
+    def fail_complete(*, name, variables):  # noqa: ARG001
+        raise ConnectionError("database unavailable")
+
+    monkeypatch.setattr(db, "complete_migration", fail_complete)
+
+    response = await app_client.post(
+        "/servers/atm10/migrate",
+        data={
+            "memory_budget_gb": "14",
+            "port": "25571",
+            "server_jar": "neoforge.jar",
+            "jvm_extra_args": "",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "ready for a safe retry" in response.text
+    assert (server_dir / "docker-compose.yml").read_bytes() != original_compose
+    assert not (server_dir / "Dockerfile").exists()
+    assert fake_db["scaffolded_marks"] == []
+
+
+async def test_post_treats_committed_then_lost_response_as_success(
+    app_client, fake_db, base_dir, monkeypatch
+):
+    from mcontrol.infra import db
+
+    _legacy_layout(base_dir)
+    fake_db["rows"].append(_legacy_row(base_dir))
+
+    def commit_then_fail(*, name, variables):
+        for row in fake_db["rows"]:
+            if row["name"] == name:
+                row["variables"] = dict(variables)
+                row["state"] = "created"
+                row["scaffolded_at"] = "2026-05-09T22:00:00+00:00"
+        raise ConnectionError("response lost")
+
+    monkeypatch.setattr(db, "complete_migration", commit_then_fail)
+
+    response = await app_client.post(
+        "/servers/atm10/migrate",
+        data={
+            "memory_budget_gb": "14",
+            "port": "25571",
+            "server_jar": "neoforge.jar",
+            "jvm_extra_args": "",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["HX-Redirect"] == "/servers/atm10"
+    backups = list((base_dir / "atm10").glob(".mcontrol-migration-backup-*"))
+    assert len(backups) == 1
+    assert '"status": "complete"' in (backups[0] / "manifest.json").read_text()
+
+
+async def test_post_reads_server_state_after_waiting_for_mutation_lock(
+    app_client, fake_db, base_dir
+):
+    import asyncio
+
+    from mcontrol.infra import server_lock
+
+    _legacy_layout(base_dir)
+    row = _legacy_row(base_dir)
+    fake_db["rows"].append(row)
+    data = {
+        "memory_budget_gb": "14",
+        "port": "25571",
+        "server_jar": "neoforge.jar",
+        "jvm_extra_args": "",
+    }
+
+    async with server_lock.server_mutation_lock(base_dir, "__fleet__"):
+        pending = asyncio.create_task(app_client.post("/servers/atm10/migrate", data=data))
+        await asyncio.sleep(0.1)
+        assert not pending.done()
+        row["scaffolded_at"] = "2026-05-09T22:00:00+00:00"
+
+    response = await pending
+    assert response.status_code == 409
+    assert fake_db["variables_writes"] == []
 
 
 # ---- detail page wires the card shell -----------------------------

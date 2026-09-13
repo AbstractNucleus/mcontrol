@@ -14,11 +14,12 @@ Flow:
 import difflib
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mcontrol.domain import health, scaffolding
-from mcontrol.routes._dependencies import get_server_or_404
+from mcontrol.domain import health, migration, scaffolding
+from mcontrol.routes._dependencies import get_locked_server_or_404, get_server_or_404
+from mcontrol.services import server_service
 from mcontrol.templates import render_variables_card, templates
 
 router = APIRouter()
@@ -103,10 +104,14 @@ async def get(
 @router.post("/servers/{name}/regenerate/confirm", response_class=HTMLResponse)
 async def confirm(
     request: Request,
-    server: dict = Depends(get_server_or_404),
+    server: dict = Depends(get_locked_server_or_404),
     compose_mtime_ns: int = Form(...),
     start_mtime_ns: int = Form(...),
 ) -> HTMLResponse:
+    try:
+        server_service.ensure_no_pending_migration(server)
+    except migration.MigrationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     server_dir = Path(server["dir"])
     variables = server.get("variables") or {}
 
