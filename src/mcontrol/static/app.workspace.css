@@ -2,14 +2,14 @@
 .mobile-header, .file-divider, .layout-only { display: none; }
 .freshness { color: var(--fg-muted); font-size: var(--fs-xs); }
 .server-detail-layout { container: workspace / inline-size; min-width: 0; gap: var(--space-5); }
-.detail-header { z-index: 10; }
+.detail-header { z-index: 10; padding-bottom: 0; }
 .detail-header__row { align-items: center; }
 .detail-title__name { overflow-wrap: anywhere; white-space: normal; }
 .detail-header__actions, .lifecycle-row__buttons { flex-wrap: wrap; }
 .detail-identity { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
 .detail-identity__icon { width: 52px; height: 52px; display: grid; place-items: center; flex: none; background: var(--bg-surface); border: 1px solid var(--border-soft); border-radius: var(--radius-md); color: var(--fg-secondary); }
-.detail-identity__text { min-width: 0; }
-.workspace-toolbar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.detail-identity__text { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.workspace-toolbar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-3); }
 .layout-actions { display: contents; }
 .layout-actions fieldset { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; border: 0; margin: 0 0 0 auto; padding: 0; gap: var(--space-3); }
 .layout-actions label { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-sm); }
@@ -36,7 +36,7 @@
   .panel[data-span="8"] { grid-column: span 8; }
   .panel[data-span="12"] { grid-column: span 12; }
 }
-[data-settings="true"] .dashboard, [data-settings="true"] .workspace-toolbar > :not(.freshness) { display: none; }
+[data-settings="true"] .dashboard, [data-settings="true"] .workspace-toolbar { display: none; }
 .server-settings { width: 100%; max-width: 960px; padding-top: var(--space-2); }
 .server-settings > header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); margin-bottom: var(--space-6); }
 .server-settings > header h2 { margin: var(--space-2) 0; font-size: var(--fs-xl); letter-spacing: -.025em; }

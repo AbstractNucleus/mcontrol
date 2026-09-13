@@ -130,6 +130,7 @@ async def test_shared_layout_cancel_save_and_migration(page, mock_url):
     await expect(page.locator("[data-dashboard] > section").first).to_have_attribute(
         "data-pane", "files"
     )
+    await page.get_by_label("More actions", exact=True).click()
     await page.get_by_role("button", name="Customize layout").click()
     await page.get_by_role("button", name="Reset", exact=True).click()
     await expect(page.locator("[data-dashboard] > section").first).to_have_attribute(
@@ -139,6 +140,7 @@ async def test_shared_layout_cancel_save_and_migration(page, mock_url):
     await expect(page.locator("[data-dashboard] > section").first).to_have_attribute(
         "data-pane", "files"
     )
+    await page.get_by_label("More actions", exact=True).click()
     await page.get_by_role("button", name="Customize layout").click()
     await page.get_by_role("button", name="Reset", exact=True).click()
     await page.get_by_role("combobox", name="Console width").select_option("12")
@@ -402,31 +404,28 @@ async def test_workspace_telemetry_and_settings_alignment(page, mock_url, width)
         '#server-resources > .resources-strip__item, #server-disk'
       )).map(el => el.getBoundingClientRect());
       const fresh = rect('#resources-freshness');
-      const customize = rect('[data-customize]');
+      const identity = rect('.detail-identity__text');
       return {
         tops: cards.map(r => r.top), bottoms: cards.map(r => r.bottom),
         widths: cards.map(r => r.width),
-        freshnessGap: fresh.top - Math.max(...cards.map(r => r.bottom)),
-        footerCenterDelta: Math.abs((fresh.top + fresh.bottom) / 2
-          - (customize.top + customize.bottom) / 2),
-        footerItemGap: customize.left - fresh.right,
-        footerRightDelta: Math.abs(customize.right - rect('.detail-header__status').right),
+        freshnessInIdentity: fresh.left >= identity.left && fresh.right <= identity.right
+          && fresh.top >= identity.top && fresh.bottom <= identity.bottom,
+        freshnessAboveCards: fresh.bottom <= Math.min(...cards.map(r => r.top)),
         flashDisplay: getComputedStyle(document.querySelector('#lifecycle-flash')).display,
         overflows: document.documentElement.scrollWidth > innerWidth
       };
     }""")
     assert not geometry["overflows"]
     assert geometry["flashDisplay"] == "none"
-    assert 8 <= geometry["freshnessGap"] <= 28, geometry
-    assert geometry["footerCenterDelta"] <= 1, geometry
-    assert geometry["footerItemGap"] >= 8, geometry
-    assert geometry["footerRightDelta"] <= 1, geometry
+    assert geometry["freshnessInIdentity"] and geometry["freshnessAboveCards"], geometry
+    await expect(page.locator(".workspace-toolbar")).to_be_hidden()
+    await expect(page.get_by_role("button", name="Customize layout")).to_be_hidden()
     await expect(page.locator("#resources-freshness")).to_have_count(1)
     async with page.expect_response("**/servers/atm10/resources"):
         await page.evaluate(
             "htmx.trigger(document.querySelector('#server-resources'), 'mc:refresh')"
         )
-    await expect(page.locator(".workspace-toolbar > #resources-freshness")).to_contain_text(
+    await expect(page.locator(".detail-identity__text > #resources-freshness")).to_contain_text(
         "Checked"
     )
     await expect(page.locator("#resources-freshness")).to_have_count(1)
@@ -434,16 +433,17 @@ async def test_workspace_telemetry_and_settings_alignment(page, mock_url, width)
         assert max(geometry["tops"]) - min(geometry["tops"]) <= 1, geometry
         assert max(geometry["bottoms"]) - min(geometry["bottoms"]) <= 1, geometry
         assert abs(geometry["widths"][1] - geometry["widths"][3]) <= 1, geometry
+    await page.get_by_label("More actions", exact=True).click()
     await page.get_by_role("button", name="Customize layout").click()
     await expect(page.get_by_role("button", name="Save layout", exact=True)).to_be_visible()
     inline = await page.locator(".workspace-toolbar").evaluate("""el => {
       const row = el.getBoundingClientRect();
-      const fresh = el.querySelector('.freshness').getBoundingClientRect();
       const controls = Array.from(el.querySelectorAll('.layout-actions button'))
         .map(button => button.getBoundingClientRect());
       return {inside: controls.every(r => r.left >= row.left && r.right <= row.right
           && r.top >= row.top && r.bottom <= row.bottom),
-        centers: controls.map(r => Math.abs((r.top + r.bottom - fresh.top - fresh.bottom) / 2)),
+        centers: controls.map(r => Math.abs((r.top + r.bottom
+          - controls[0].top - controls[0].bottom) / 2)),
         overflows: document.documentElement.scrollWidth > innerWidth};
     }""")
     assert inline["inside"] and not inline["overflows"], inline
@@ -456,7 +456,8 @@ async def test_workspace_telemetry_and_settings_alignment(page, mock_url, width)
     await expect(page.get_by_role("button", name="Save layout", exact=True)).to_be_visible()
     await expect(page.locator("#resources-freshness")).to_have_count(1)
     await page.get_by_role("button", name="Cancel", exact=True).click()
-    await expect(page.get_by_role("button", name="Customize layout")).to_be_visible()
+    await expect(page.locator(".workspace-toolbar")).to_be_hidden()
+    await expect(page.get_by_label("More actions", exact=True)).to_be_focused()
     screenshots = ROOT / ".localdev" / "ui-review"
     screenshots.mkdir(parents=True, exist_ok=True)
     await page.screenshot(
@@ -485,6 +486,7 @@ async def test_panel_customization_stays_inside_titlebar(page, mock_url, width):
         "els => els.map(el => el.getBoundingClientRect().height)"
     )
     assert all(height == (52 if width < 768 else 48) for height in normal_heights)
+    await page.get_by_label("More actions", exact=True).click()
     await page.get_by_role("button", name="Customize layout").click()
     geometry = await headers.evaluate_all("""headers => headers.map(header => {
       const bar = header.getBoundingClientRect();
@@ -535,6 +537,7 @@ async def test_panel_customization_stays_inside_titlebar(page, mock_url, width):
 
 async def test_titlebar_layout_controls_keep_move_resize_hide_and_drag(page, mock_url):
     await page.goto(mock_url + "/servers/atm10")
+    await page.get_by_label("More actions", exact=True).click()
     await page.get_by_role("button", name="Customize layout").click()
     console = page.locator('[data-pane="console"]')
     players = page.locator('[data-pane="players"]')
@@ -573,6 +576,7 @@ async def test_native_panel_drag_targets_settle_and_cancel(page, mock_url, width
     await page.emulate_media(reduced_motion="reduce" if reduced else "no-preference")
     await page.goto(mock_url + "/servers/atm10")
     await expect(page.locator("#server-resources")).to_contain_text("CPU")
+    await page.get_by_label("More actions", exact=True).click()
     await page.get_by_role("button", name="Customize layout").click()
     panels = page.locator("[data-dashboard] > section")
     for panel in await panels.all():
@@ -644,6 +648,7 @@ async def test_native_panel_drag_targets_settle_and_cancel(page, mock_url, width
     await page.get_by_role("button", name="Cancel", exact=True).click()
     await expect(console).to_have_attribute("data-collapsed", "false")
     if width == 1440 and not reduced:
+        await page.get_by_label("More actions", exact=True).click()
         await page.get_by_role("button", name="Customize layout").click()
         players = page.locator('[data-pane="players"]')
         await drag_to(console, players, after=True)

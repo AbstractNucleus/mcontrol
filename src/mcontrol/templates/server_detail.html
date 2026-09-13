@@ -97,6 +97,7 @@
             <span class="detail-title__name">{{ server.name }}</span>
             {% include "_state_pill.html" %}
           </h1>
+          <span id="resources-freshness" class="freshness">Checking resources…</span>
         </div>
       </div>
       <div class="detail-header__actions">
@@ -107,6 +108,7 @@
         <details class="detail-menu">
           <summary class="detail-menu__trigger" title="More actions" aria-label="More actions">⋯</summary>
           <div class="detail-menu__panel">
+            <button type="button" class="detail-menu__item" data-customize title="Layout is shared across your servers">Customize layout</button>
             <button type="button"
                     class="detail-menu__item detail-menu__item--danger"
                     data-delete-server
@@ -133,18 +135,16 @@
       </section>
       <section id="server-disk" class="disk-status" data-loading hx-get="/servers/{{ server.name }}/disk"
                hx-trigger="load, every 60s, mc:refresh" hx-swap="outerHTML" data-poll data-async-label="Disk usage">Measuring disk…</section>
-      <div class="workspace-toolbar">
-        <span id="resources-freshness" class="freshness">Checking resources…</span>
-        <button type="button" class="btn btn--sm" data-customize title="Layout is shared across your servers">{{ icon('grid') }} Customize layout</button>
+      <div class="workspace-toolbar" hidden>
         <div class="layout-actions" hidden>
           <fieldset data-panel-visibility><legend class="visually-hidden">Visible panels</legend></fieldset>
           <button type="button" class="btn btn--primary btn--sm" data-layout-save>Save layout</button>
           <button type="button" class="btn btn--sm" data-layout-cancel>Cancel</button>
           <button type="button" class="btn btn--sm btn--ghost" data-layout-reset>Reset</button>
         </div>
-        <p class="visually-hidden" data-layout-status role="status"></p>
       </div>
     </div>
+    <p class="visually-hidden" data-layout-status role="status"></p>
     {#
       Visually-hidden aria-live region for lifecycle state announcements
       `static/lifecycle.js` writes the new state here on

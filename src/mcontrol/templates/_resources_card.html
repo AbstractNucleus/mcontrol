@@ -11,14 +11,16 @@
      aria-label="Live resource usage" data-poll data-async-label="Resource usage">
   {% if ok %}
     <span class="resources-strip__item resources-strip__item--mem">
-      <span class="resources-strip__key">{{ icon('memory', size=14) }} Memory</span>
+      <span class="resources-strip__key">
+        {{ icon('memory', size=14) }} Memory
+        <span class="resources-strip__pct t-num">({{ "%.0f"|format(mem_percent) }} %)</span>
+      </span>
       <span class="resources-strip__val t-num">{{ format_bytes(mem_used) }} / {{ format_bytes(mem_limit) }}</span>
       <span class="resources-strip__bar" aria-hidden="true">
         {% set _bar_class = 'resources-strip__bar-fill--danger' if mem_percent >= 90 else ('resources-strip__bar-fill--warning' if mem_percent >= 75 else '') %}
         {# Stable id so htmx settle animates the width between polls. #}
         <span id="resources-bar-fill" class="resources-strip__bar-fill {{ _bar_class }}" style="--fill: {{ mem_percent|round(1) }}%"></span>
       </span>
-      <span class="resources-strip__pct t-num">({{ "%.0f"|format(mem_percent) }} %)</span>
     </span>
     <span class="resources-strip__item">
       <span class="resources-strip__key">{{ icon('cpu', size=14) }} CPU</span>

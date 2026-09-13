@@ -96,13 +96,21 @@
   function setEditing(value) {
     if (!value) { endDrag(); finishMoves(); }
     editing = value; root.dataset.customizing = String(value);
+    document.querySelector(".workspace-toolbar").hidden = !value;
     document.querySelector(".layout-actions").hidden = !value;
     document.querySelector("[data-customize]").hidden = value;
     panels.forEach(p => p.querySelector(".panel__grip").draggable = value);
   }
-  document.querySelector("[data-customize]").addEventListener("click", () => { before = read(); setEditing(true); document.querySelector("[data-layout-save]").focus(); });
-  document.querySelector("[data-layout-save]").addEventListener("click", () => { persist(); setEditing(false); document.querySelector("[data-customize]").focus(); });
-  document.querySelector("[data-layout-cancel]").addEventListener("click", () => { apply(before); setEditing(false); announce("Layout changes cancelled."); document.querySelector("[data-customize]").focus(); });
+  const customize = document.querySelector("[data-customize]");
+  const layoutMenu = customize.closest("details");
+  const layoutTrigger = layoutMenu.querySelector("summary");
+  customize.addEventListener("click", () => {
+    layoutMenu.open = false;
+    if (root.dataset.settings === "true") settings(false);
+    before = read(); setEditing(true); document.querySelector("[data-layout-save]").focus();
+  });
+  document.querySelector("[data-layout-save]").addEventListener("click", () => { persist(); setEditing(false); layoutTrigger.focus(); });
+  document.querySelector("[data-layout-cancel]").addEventListener("click", () => { apply(before); setEditing(false); announce("Layout changes cancelled."); layoutTrigger.focus(); });
   document.querySelector("[data-layout-reset]").addEventListener("click", () => { apply(defaults); announce("Default layout restored. Save to keep it."); });
   visibility.addEventListener("change", e => {
     const panel = byId[e.target.dataset.showPanel]; if (!panel) return;

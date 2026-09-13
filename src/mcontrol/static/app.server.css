@@ -657,6 +657,14 @@
   gap: var(--space-2);
 }
 
+.lifecycle-row__buttons .btn-spinner {
+  display: none;
+}
+
+.lifecycle-row__buttons .htmx-request .btn-spinner {
+  display: inline-block;
+}
+
 .lifecycle-flash {
   font-size: var(--fs-sm);
   min-height: 0;
@@ -748,7 +756,7 @@
   position: relative;
   display: grid;
   grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(100px, 1fr));
-  align-items: start;
+  align-items: stretch;
   gap: var(--space-3);
   margin-top: 0;
   min-width: 0;
@@ -767,9 +775,8 @@
 
 .resources-strip__item {
   display: flex;
-  flex-wrap: wrap;
-  align-content: center;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--space-2);
   min-width: 0;
   min-height: 94px;
@@ -779,11 +786,8 @@
   border-radius: var(--radius-md);
 }
 
-.resources-strip__item--mem { position: relative; }
-.resources-strip__item--mem .resources-strip__key { padding-right: var(--space-10); }
-.resources-strip__item--mem .resources-strip__val { font-size: var(--fs-md); }
-.resources-strip__item--mem .resources-strip__pct { position: absolute; top: var(--space-4); right: var(--space-4); }
-.resources-strip__item--mem .resources-strip__bar { position: absolute; bottom: var(--space-2); left: var(--space-4); width: calc(100% - var(--space-8)); height: 3px; }
+.resources-strip__item--mem .resources-strip__pct { margin-left: auto; }
+.resources-strip__item--mem .resources-strip__bar { width: 100%; height: 3px; }
 
 .resources-strip__item--muted {
   color: var(--fg-muted);
@@ -794,7 +798,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex-basis: 100%;
+  flex-basis: auto;
   font-size: var(--fs-xs);
   text-transform: none;
   letter-spacing: normal;
@@ -849,7 +853,7 @@
 .disk-status {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: var(--space-2);
   grid-column: 4;
   min-height: 94px;
@@ -861,7 +865,7 @@
   font-size: var(--fs-xs);
   margin: 0;
 }
-.disk-status .t-num { color: var(--fg-primary); font-size: var(--fs-lg); font-weight: 600; letter-spacing: -.02em; }
+.disk-status .t-num { color: var(--fg-primary); font-size: var(--fs-lg); font-weight: 600; line-height: 1.3; letter-spacing: -.02em; }
 
 /* Last seen sits at the far end of the status row (no extra top margin
    inside the flex row). */
