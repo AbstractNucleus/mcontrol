@@ -1,8 +1,8 @@
 """Shared form validator for the server-variables field set.
 
 Used by routes/new_server.py, routes/migrate.py, and routes/variables.py,
-all of which accept the same (memory_budget_gb, port, server_jar,
-java_version, jvm_extra_args) fields with the same rules.
+all of which accept the same memory, port, jar, Java and JVM fields.
+Creation and variables editing also support a custom start script.
 """
 
 import socket
@@ -15,6 +15,7 @@ from mcontrol.domain.scaffolding import (
     HEADROOM_GB,
     JAVA_VERSIONS,
     MEMORY_MIN_GB,
+    custom_start_script_error,
 )
 from mcontrol.infra import db_async
 
@@ -60,7 +61,12 @@ def validate(form: dict) -> dict[str, str]:
         )
     if not (PORT_MIN <= form["port"] <= PORT_MAX):
         errors["port"] = f"Port must be between {PORT_MIN} and {PORT_MAX}."
-    if not form["server_jar"].strip():
+    custom_script = form.get("custom_start_script", "")
+    if custom_script:
+        error = custom_start_script_error(custom_script)
+        if error:
+            errors["custom_start_script"] = error
+    elif not form["server_jar"].strip():
         errors["server_jar"] = "Required."
     if "loader" in form and form["loader"] not in LOADERS:
         errors["loader"] = f"Must be one of: {', '.join(LOADERS)}."
@@ -74,9 +80,8 @@ def validate(form: dict) -> dict[str, str]:
 def build_variables(form: dict) -> dict:
     """Assemble the variables JSONB from a validated form dict.
 
-    ``jvm_extra_args`` is omitted when empty so the stored shape stays
-    minimal and the start-script template's ``.get(..., "")`` default
-    applies. Shared by the new-server and migrate flows; the variables
+    Optional JVM args and custom start script are omitted when empty.
+    Shared by the new-server and migrate flows; the variables
     *edit* flow merges into existing JSONB instead (see
     ``server_service.update_server_variables``).
     """
@@ -88,6 +93,8 @@ def build_variables(form: dict) -> dict:
     }
     if form.get("jvm_extra_args"):
         variables["jvm_extra_args"] = form["jvm_extra_args"]
+    if form.get("custom_start_script"):
+        variables["custom_start_script"] = form["custom_start_script"]
     return variables
 
 

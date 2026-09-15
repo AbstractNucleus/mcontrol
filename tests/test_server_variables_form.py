@@ -132,6 +132,26 @@ def test_build_variables_stores_explicit_java_version():
     assert built["java_version"] == 17
 
 
+def test_custom_script_replaces_required_jar_and_is_stored():
+    form = _base_form(server_jar="", custom_start_script="scripts/run.sh")
+    assert validate(form) == {}
+    assert build_variables(form)["custom_start_script"] == "scripts/run.sh"
+    assert "custom_start_script" not in build_variables(_base_form(custom_start_script=""))
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        "/run.sh", "../run.sh", "scripts/../../run.sh", "C:/run.sh",
+        "scripts\\run.sh", "run.bat", "run.sh\n", "start_server.sh",
+        "./start_server.sh", "scripts/../start_server.sh",
+    ],
+)
+def test_custom_script_rejects_unsupported_or_unsafe_paths(script):
+    errors = validate(_base_form(custom_start_script=script))
+    assert "custom_start_script" in errors
+
+
 async def test_check_port_collision_reads_legacy_compose_port(tmp_path, monkeypatch):
     server_dir = tmp_path / "loading"
     server_dir.mkdir()

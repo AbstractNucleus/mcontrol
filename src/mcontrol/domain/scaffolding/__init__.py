@@ -12,8 +12,9 @@ ordering and path-safety contract.
 import os
 import re
 import secrets
+import shlex
 from contextlib import suppress
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -120,6 +121,11 @@ def _inherit_owner(base: Path, *dirs: Path) -> None:
 
 
 def render_start_script(variables: dict[str, Any]) -> str:
+    custom_start_script = variables.get("custom_start_script", "")
+    if custom_start_script:
+        error = custom_start_script_error(custom_start_script)
+        if error:
+            raise ValueError(error)
     runtime = _managed_runtime(variables)
     rcon_prelude = ""
     if runtime and runtime.get("rcon_password_env"):
@@ -134,12 +140,41 @@ def render_start_script(variables: dict[str, Any]) -> str:
             "  fi\n"
             "fi\n\n"
         )
+    elif custom_start_script:
+        rcon_prelude = 'cd "$(dirname "$0")"\n\n'
     return _env.get_template("start_server.sh.j2").render(
         xmx_gb=variables["memory_budget_gb"] - HEADROOM_GB,
         jvm_extra_args=variables.get("jvm_extra_args", ""),
-        server_jar=variables["server_jar"],
+        server_jar=variables["server_jar"] if not custom_start_script else "",
+        custom_start_script=(
+            shlex.quote(f"./{PurePosixPath(custom_start_script)}")
+            if custom_start_script else ""
+        ),
         rcon_prelude=rcon_prelude,
     )
+
+
+def custom_start_script_error(value: str) -> str | None:
+    """Check a Linux script path relative to the server data directory."""
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or "\\" in value
+        or ":" in value
+        or any(ord(char) < 32 or ord(char) == 127 for char in value)
+        or PurePosixPath(value).is_absolute()
+        or ".." in value.split("/")
+    ):
+        return (
+            "Use a relative Linux .sh path inside server/; "
+            "absolute paths and .. are not allowed."
+        )
+    path = PurePosixPath(value)
+    if path.suffix != ".sh":
+        return "Use a Linux .sh script, such as run.sh; Windows .bat scripts are not supported."
+    if path == PurePosixPath("start_server.sh"):
+        return "start_server.sh is managed by mcontrol. Choose the modpack's own script."
+    return None
 
 
 def write_scaffold_files(

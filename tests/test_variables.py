@@ -82,7 +82,7 @@ async def test_get_form_renders_editable_inputs(client, fake_db, tmp_path):
     body = response.text
     assert 'name="memory_budget_gb"' in body
     assert 'name="port"' in body
-    assert '<select name="server_jar" required>' in body
+    assert '<select name="server_jar">' in body
     assert 'name="jvm_extra_args"' in body
     assert 'name="java_version"' in body
     from mcontrol.domain.scaffolding import MEMORY_MIN_GB
@@ -192,6 +192,62 @@ async def test_post_drops_jvm_extra_args_when_blank(client, fake_db, tmp_path):
     assert response.status_code == 200
     kwargs = fake_db["writes"][0][1]
     assert "jvm_extra_args" not in kwargs["variables"]
+
+
+async def test_custom_script_is_displayed_and_editable_without_jar(client, fake_db, tmp_path):
+    row = _row(tmp_path)
+    row["variables"].update(server_jar="", custom_start_script="run.sh")
+    scaffolding.scaffold(row["name"], row["variables"], tmp_path)
+    fake_db["rows"].append(row)
+    card = await client.get("/servers/newshire/variables")
+    assert "Custom start script" in card.text
+    assert "run.sh" in card.text
+    form = await client.get("/servers/newshire/variables?edit=1")
+    assert 'name="custom_start_script"' in form.text
+    assert 'value="run.sh"' in form.text
+    response = await client.post(
+        "/servers/newshire/variables",
+        data={"memory_budget_gb": "12", "port": "25575", "custom_start_script": "scripts/run.sh"},
+    )
+    assert response.status_code == 200
+    assert fake_db["writes"][0][1]["variables"]["custom_start_script"] == "scripts/run.sh"
+    assert "Regenerate" in response.text
+
+
+async def test_omitted_custom_script_preserves_startup_on_variable_edit(client, fake_db, tmp_path):
+    row = _row(tmp_path)
+    row["variables"]["custom_start_script"] = "run.sh"
+    fake_db["rows"].append(row)
+    response = await client.post(
+        "/servers/newshire/variables", data={"memory_budget_gb": "12", "port": "25575"},
+    )
+    assert response.status_code == 200
+    assert fake_db["writes"][0][1]["variables"]["custom_start_script"] == "run.sh"
+
+
+async def test_blank_custom_script_switches_back_to_jar(client, fake_db, tmp_path):
+    row = _row(tmp_path)
+    row["variables"]["custom_start_script"] = "run.sh"
+    fake_db["rows"].append(row)
+    response = await client.post(
+        "/servers/newshire/variables",
+        data={"memory_budget_gb": "8", "port": "25575", "server_jar": "paper.jar",
+              "custom_start_script": ""},
+    )
+    assert response.status_code == 200
+    assert "custom_start_script" not in fake_db["writes"][0][1]["variables"]
+    assert "exec java" in scaffolding.render_start_script(row["variables"])
+
+
+async def test_invalid_custom_script_edit_does_not_write(client, fake_db, tmp_path):
+    fake_db["rows"].append(_row(tmp_path))
+    response = await client.post(
+        "/servers/newshire/variables",
+        data={"memory_budget_gb": "8", "port": "25575", "custom_start_script": "start_server.sh"},
+    )
+    assert response.status_code == 422
+    assert "managed by mcontrol" in response.text
+    assert not fake_db["writes"]
 
 
 async def test_post_preserves_unknown_jsonb_keys(client, fake_db, tmp_path):

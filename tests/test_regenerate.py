@@ -156,6 +156,28 @@ async def test_confirm_does_not_overwrite_server_properties(
     assert props.read_text(encoding="utf-8") == original
 
 
+async def test_regenerate_switches_jar_to_custom_script_and_preserves_pack_files(
+    client, fake_db, tmp_path
+):
+    row = _row(tmp_path)
+    compose, start = _scaffold(tmp_path, row)
+    pack_script = start.parent / "run.sh"
+    pack_script.write_text("exec java @user_jvm_args.txt @libraries/args.txt\n")
+    row["variables"]["custom_start_script"] = "run.sh"
+    fake_db["rows"].append(row)
+    preview = await client.get("/servers/newshire/regenerate")
+    assert "exec bash ./run.sh" in preview.text
+    response = await client.post(
+        "/servers/newshire/regenerate/confirm",
+        data={"compose_mtime_ns": str(compose.stat().st_mtime_ns),
+              "start_mtime_ns": str(start.stat().st_mtime_ns)},
+    )
+    assert response.status_code == 200
+    assert "exec bash ./run.sh" in start.read_text()
+    assert "exec java" not in start.read_text()
+    assert pack_script.read_text() == "exec java @user_jvm_args.txt @libraries/args.txt\n"
+
+
 async def test_confirm_returns_409_with_diff_when_compose_mtime_drifts(
     client, fake_db, tmp_path
 ):

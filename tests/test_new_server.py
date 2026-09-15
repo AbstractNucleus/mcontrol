@@ -204,6 +204,33 @@ async def test_post_includes_jvm_extra_args_in_variables_when_present(
     assert insert_kwargs["variables"]["jvm_extra_args"] == "-XX:+UseG1GC"
 
 
+async def test_post_custom_script_without_jar_scaffolds_wrapper(
+    app_client, base_dir, fake_db
+):
+    form = _form(custom_start_script=" run.sh ")
+    form.pop("server_jar")
+    response = await app_client.post("/servers/new", data=form)
+    assert response.status_code == 303
+    variables = fake_db["writes"][0][1]["variables"]
+    assert variables["custom_start_script"] == "run.sh"
+    start = base_dir / "newshire" / "server" / "start_server.sh"
+    assert "exec bash ./run.sh" in start.read_text()
+    assert "exec java" not in start.read_text()
+
+
+async def test_post_invalid_custom_script_keeps_form_and_does_not_write(
+    app_client, base_dir, fake_db
+):
+    response = await app_client.post(
+        "/servers/new", data=_form(custom_start_script="../run.sh")
+    )
+    assert response.status_code == 422
+    assert 'value="../run.sh"' in response.text
+    assert "absolute paths and .. are not allowed" in response.text
+    assert not fake_db["writes"]
+    assert not (base_dir / "newshire").exists()
+
+
 async def test_post_persists_loader_at_top_level_not_in_variables(
     app_client, base_dir, fake_db
 ):

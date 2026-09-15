@@ -208,6 +208,8 @@ async def update_server_variables(
     ``memory_budget_gb``, ``port``, ``server_jar``, ``java_version``,
     and an optional ``jvm_extra_args``: an empty/missing value drops
     the key from the merged JSONB (matches the slice 6 contract).
+    ``custom_start_script`` is preserved when omitted and removed when
+    explicitly blank, allowing an operator to switch back to jar startup.
     """
     existing = server.get("variables") or {}
     updated = {
@@ -221,6 +223,11 @@ async def update_server_variables(
         updated["jvm_extra_args"] = new_values["jvm_extra_args"]
     else:
         updated.pop("jvm_extra_args", None)
+    if "custom_start_script" in new_values:
+        if new_values["custom_start_script"]:
+            updated["custom_start_script"] = new_values["custom_start_script"]
+        else:
+            updated.pop("custom_start_script", None)
 
     await db_async.update_variables(name=name, variables=updated)
     return updated

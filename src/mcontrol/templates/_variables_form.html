@@ -15,6 +15,7 @@
              value="{{ vars.memory_budget_gb if vars.memory_budget_gb is not none else '' }}"
              autofocus
              required>
+      <small class="t-muted">Jar startup reserves 2 GB outside the Java heap.</small>
       {% if errors.memory_budget_gb %}<small class="variables-form__error">{{ errors.memory_budget_gb }}</small>{% endif %}
     </label>
 
@@ -32,7 +33,7 @@
     <label>
       <span class="t-eyebrow">Server jar filename</span>
       {% set selected_jar = vars.server_jar or '' %}
-      <select name="server_jar" required>
+      <select name="server_jar">
         {% if selected_jar and selected_jar not in jar_options %}
           <option value="{{ selected_jar }}" selected>{{ selected_jar }} (current)</option>
         {% elif not selected_jar %}
@@ -44,6 +45,19 @@
       </select>
       {% if not jar_options %}<small class="t-muted">Add a .jar file to this server's <code>server/</code> subfolder, then reopen this form.</small>{% endif %}
       {% if errors.server_jar %}<small class="variables-form__error">{{ errors.server_jar }}</small>{% endif %}
+      <small class="t-muted">Required unless using a custom start script.</small>
+    </label>
+
+    <label>
+      <span class="t-eyebrow">Custom start script (optional)</span>
+      <input type="text"
+             name="custom_start_script"
+             value="{{ vars.custom_start_script or '' }}"
+             placeholder="run.sh"
+             autocomplete="off"
+             {% if errors.custom_start_script %}aria-invalid="true"{% endif %}>
+      <small class="t-muted">Relative Linux .sh path inside <code>server/</code>. Replaces jar startup and controls Java heap and JVM args; set them below the memory budget. Leave blank to use the jar. Windows .bat scripts are not supported; start_server.sh is managed by mcontrol.</small>
+      {% if errors.custom_start_script %}<small class="variables-form__error">{{ errors.custom_start_script }}</small>{% endif %}
     </label>
 
     <label>
@@ -63,6 +77,7 @@
              name="jvm_extra_args"
              value="{{ vars.jvm_extra_args or '' }}"
              autocomplete="off">
+      <small class="t-muted">Used for jar startup. With a custom script, configure JVM args in the pack's files.</small>
     </label>
 
     <div class="variables-form__actions">

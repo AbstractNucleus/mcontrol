@@ -84,10 +84,11 @@ async def new_submit(
     name: str = Form(...),
     memory_budget_gb: int = Form(...),
     port: int = Form(...),
-    server_jar: str = Form(...),
+    server_jar: str = Form(""),
     loader: str = Form("vanilla"),
     java_version: int = Form(DEFAULT_JAVA_VERSION),
     jvm_extra_args: str = Form(""),
+    custom_start_script: str = Form(""),
     accept_eula: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
     form = {
@@ -98,6 +99,7 @@ async def new_submit(
         "loader": loader,
         "java_version": java_version,
         "jvm_extra_args": jvm_extra_args.strip(),
+        "custom_start_script": custom_start_script.strip(),
         "accept_eula": bool(accept_eula),
     }
     errors = _validate_static(form)

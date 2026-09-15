@@ -19,6 +19,27 @@ mcontrol sits a thin Minecraft-aware UI over plain `docker compose`. No daemon a
 - **Health probe**: `GET /healthz` returns a deep per-subsystem JSON (Supabase + Docker socket + bind-mount); 503 on any subsystem degraded.
 - **Interface**: inspired by [Beautiful UI](https://www.beautifului.dev/), with a fixed dark appearance, live fleet summary cards, status filters, and rounded workspace panels. A mobile drawer, stacked fleet cards, and a single-view file browser/editor adapt the workspace to phones.
 
+### Modpacks with a start script
+
+When creating a server, enter the pack's Linux `.sh` filename in **Custom start
+script**, for example `run.sh`, instead of supplying a server jar. After creation,
+copy the extracted server pack into the server's `server/` folder, keeping its
+folders intact. The script path is relative to that folder.
+
+mcontrol runs the script with Bash from `server/`. Keep the generated
+`start_server.sh`; it launches the pack's script. If the pack uses that same
+filename, rename the pack's script and enter its new name in the form.
+Windows `.bat` scripts cannot be used in the Linux container.
+
+The selected Java version and container memory limit still apply. Set the Java
+heap and JVM flags in the pack's script or its settings file, leaving room within
+the container limit for memory outside the heap. The form's JVM extra arguments
+apply only to jar startup. Scripts that need additional programs require those
+programs to be available in the runtime image.
+
+You can change the script path later in **Variables**. Clear it and select a
+server jar to return to jar startup.
+
 ## Who it's for
 
 You self-host Minecraft servers in Docker on a single box and want:

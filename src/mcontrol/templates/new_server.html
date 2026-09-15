@@ -38,7 +38,7 @@
                  value="{{ form.memory_budget_gb or '' }}"
                  {% if errors.memory_budget_gb %}aria-invalid="true"{% endif %}
                  required>
-          <small class="new-server__hint">Includes 2 GB reserved outside the Java heap.</small>
+          <small class="new-server__hint">Jar startup reserves 2 GB outside the Java heap.</small>
           {% if errors.memory_budget_gb %}<small class="new-server__error">{{ errors.memory_budget_gb }}</small>{% endif %}
         </label>
 
@@ -67,10 +67,21 @@
                  value="{{ form.server_jar or '' }}"
                  placeholder="paper-1.21.4.jar"
                  autocomplete="off"
-                 {% if errors.server_jar %}aria-invalid="true"{% endif %}
-                 required>
-          <small class="new-server__hint">Upload this file to server/ after creation.</small>
+                 {% if errors.server_jar %}aria-invalid="true"{% endif %}>
+          <small class="new-server__hint">Required unless using a custom start script. Upload this file to server/ after creation.</small>
           {% if errors.server_jar %}<small class="new-server__error">{{ errors.server_jar }}</small>{% endif %}
+        </label>
+
+        <label class="new-server__wide" for="new-server-script">
+          <span>Custom start script (optional)</span>
+          <input id="new-server-script" type="text"
+                 name="custom_start_script"
+                 value="{{ form.custom_start_script or '' }}"
+                 placeholder="run.sh"
+                 autocomplete="off"
+                 {% if errors.custom_start_script %}aria-invalid="true"{% endif %}>
+          <small class="new-server__hint">For downloaded modpacks: upload the pack's server files to server/ after creation. Use a relative Linux .sh path, such as run.sh. This replaces jar startup; the script controls Java heap and JVM args. Set them below the container's memory budget. Windows .bat scripts are not supported. Keep the pack's script named differently from start_server.sh, which mcontrol manages.</small>
+          {% if errors.custom_start_script %}<small class="new-server__error">{{ errors.custom_start_script }}</small>{% endif %}
         </label>
 
         <label for="new-server-java">

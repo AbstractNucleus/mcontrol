@@ -69,9 +69,10 @@ async def post(
     server: dict = Depends(get_locked_server_or_404),
     memory_budget_gb: int = Form(...),
     port: int = Form(...),
-    server_jar: str = Form(...),
+    server_jar: str = Form(""),
     java_version: int = Form(DEFAULT_JAVA_VERSION),
     jvm_extra_args: str = Form(""),
+    custom_start_script: str | None = Form(None),
 ) -> HTMLResponse:
     try:
         server_service.ensure_no_pending_migration(server)
@@ -83,12 +84,17 @@ async def post(
             detail="Variables are only editable on a scaffolded server.",
         )
 
+    submitted = await request.form()
     form = {
         "memory_budget_gb": memory_budget_gb,
         "port": port,
         "server_jar": server_jar.strip(),
         "java_version": java_version,
         "jvm_extra_args": jvm_extra_args.strip(),
+        "custom_start_script": (
+            (custom_start_script or "").strip() if "custom_start_script" in submitted
+            else (server.get("variables") or {}).get("custom_start_script", "")
+        ),
     }
     errors = server_variables_form.validate(form)
 

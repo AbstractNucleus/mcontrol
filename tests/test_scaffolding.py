@@ -1,4 +1,7 @@
 import os
+import shutil
+import subprocess
+from pathlib import Path
 
 import jinja2
 import pytest
@@ -55,6 +58,63 @@ def test_render_start_script_raises_on_missing_server_jar():
     incomplete = {"memory_budget_gb": 8}
     with pytest.raises(KeyError):
         scaffolding.render_start_script(incomplete)
+
+
+def test_render_custom_script_does_not_require_jar_or_add_jvm_args():
+    rendered = scaffolding.render_start_script({
+        "memory_budget_gb": 8,
+        "custom_start_script": "scripts/run.sh",
+        "jvm_extra_args": "-XX:+UseG1GC",
+    })
+    assert "exec bash ./scripts/run.sh" in rendered
+    assert "exec java" not in rendered
+    assert "-Xmx" not in rendered
+    assert "-XX" not in rendered
+
+
+def test_render_custom_script_revalidates_stored_path():
+    with pytest.raises(ValueError, match="managed by mcontrol"):
+        scaffolding.render_start_script({
+            "memory_budget_gb": 8, "custom_start_script": "./start_server.sh",
+        })
+
+
+@pytest.mark.parametrize("managed_rcon", [False, True])
+def test_custom_script_runs_in_data_dir_with_literal_path_and_preserves_exit(
+    tmp_path, managed_rcon
+):
+    git_bash = Path("C:/Program Files/Git/bin/bash.exe")
+    bash = str(git_bash) if os.name == "nt" and git_bash.is_file() else shutil.which("bash")
+    if not bash:
+        pytest.skip("Bash is required for the startup integration check")
+    inner = tmp_path / "server"
+    inner.mkdir()
+    # Shell syntax in a real filename must remain literal, even with a quote.
+    script_name = "pack's $(touch injected).sh"
+    (inner / script_name).write_text(
+        "printf 'started' > started-here\nexit 23\n", encoding="utf-8"
+    )
+    props = inner / "server.properties"
+    props.write_text("rcon.password=old\n", encoding="utf-8")
+    variables = {"memory_budget_gb": 8, "custom_start_script": script_name}
+    if managed_rcon:
+        variables["managed_runtime"] = {
+            "compose_service": "minecraft", "env_file": ".env", "rcon_password_env": True,
+        }
+    wrapper = inner / "start_server.sh"
+    wrapper.write_text(scaffolding.render_start_script(variables), encoding="utf-8")
+    result = subprocess.run(
+        [bash, str(wrapper)], cwd=tmp_path,
+        env={**os.environ, "RCON_PASSWORD": "updated-secret"},
+        capture_output=True, text=True, timeout=15,
+    )
+    assert result.returncode == 23, result.stderr
+    assert (inner / "started-here").read_text() == "started"
+    assert not (inner / "injected").exists()
+    assert not (tmp_path / "injected").exists()
+    assert props.read_text() == (
+        "rcon.password=updated-secret\n" if managed_rcon else "rcon.password=old\n"
+    )
 
 
 def test_render_compose_raises_on_undefined_template_var(monkeypatch):
