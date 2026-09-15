@@ -43,6 +43,7 @@
   <script src="/static/file_uploader.js?v={{ version }}" defer></script>
   <script src="/static/file_bulk.js?v={{ version }}" defer></script>
   <script src="/static/file_tree_nav.js?v={{ version }}" defer></script>
+  <script src="/static/file_archives.js?v={{ version }}" defer></script>
   <script src="/static/dashboard.js?v={{ version }}" defer></script>
 {% endblock %}
 
@@ -223,6 +224,7 @@
     <div id="file-bulk-toolbar" class="file-bulk-toolbar" hidden>
       <span class="t-caption" data-bulk-count>0 selected</span>
       <button type="button" class="btn btn--sm" data-bulk-action="move">Move selected</button>
+      <button type="button" class="btn btn--sm" data-bulk-action="compress">Compress selected</button>
       <button type="button" class="btn btn--sm btn--danger" data-bulk-action="delete">Delete selected</button>
       <button type="button" class="btn btn--sm btn--ghost" data-bulk-action="clear">Clear</button>
     </div>

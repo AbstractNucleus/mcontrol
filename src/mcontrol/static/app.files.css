@@ -338,6 +338,7 @@
   margin: 0;
   max-height: calc(100dvh - 16px);
   overflow: auto;
+  max-width: calc(100vw - 16px);
 }
 .file-tree__menu-panel[popover]:not(:popover-open) { display: none; }
 
@@ -360,6 +361,7 @@
   font-size: var(--fs-sm);
   border-radius: var(--radius-xs);
   text-decoration: none;
+  overflow-wrap: anywhere;
 }
 
 .file-tree__menu-item:hover,
@@ -488,6 +490,28 @@
   display: grid;
   gap: var(--space-3);
 }
+
+.file-archive-dialog {
+  color: var(--fg-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  width: min(32rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+}
+.file-archive-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.file-archive-dialog__form { display: grid; gap: var(--space-3); min-width: 0; }
+.file-archive-dialog h2 { margin: 0; font-size: var(--fs-lg); }
+.file-archive-dialog p { margin: 0; overflow-wrap: anywhere; }
+.file-archive-dialog__field { display: grid; gap: var(--space-2); font-size: var(--fs-sm); }
+.file-archive-dialog__field :is(input, select) { width: 100%; min-width: 0; }
+.file-archive-dialog__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.file-archive-dialog__error { color: var(--danger-fg); }
+.file-archive-dialog__picker summary { cursor: pointer; font-size: var(--fs-sm); }
+.file-archive-dialog .file-picker { margin-top: var(--space-2); }
+.file-archive-dialog[aria-busy="true"] .file-picker { pointer-events: none; }
 
 .file-move-modal__selection {
   margin: 0;
@@ -817,4 +841,3 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
-

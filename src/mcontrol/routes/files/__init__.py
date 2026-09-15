@@ -24,7 +24,7 @@ Path-safety contract (mirrors slice 5 plan; applies to every endpoint):
 
 from fastapi import APIRouter
 
-from mcontrol.routes.files import mutate, search, tree, view, write
+from mcontrol.routes.files import archive, mutate, search, tree, view, write
 
 router = APIRouter()
 router.include_router(tree.router)
@@ -32,5 +32,6 @@ router.include_router(view.router)
 router.include_router(write.router)
 router.include_router(mutate.router)
 router.include_router(search.router)
+router.include_router(archive.router)
 
 __all__ = ["router"]

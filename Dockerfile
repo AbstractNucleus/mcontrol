@@ -16,8 +16,11 @@ WORKDIR /app
 ARG DOCKER_CE_CLI_VERSION=5:27.4.0-1~debian.12~bookworm
 ARG DOCKER_COMPOSE_PLUGIN_VERSION=2.31.0-1~debian.12~bookworm
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+# Debian's non-free component supplies the freely distributable UnRAR reader.
+# The separate RAR writer is licensed and is not included in the public image.
+RUN sed -i 's/^Components: main$/Components: main non-free/' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg unrar \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg \
         | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \

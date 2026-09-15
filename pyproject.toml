@@ -15,6 +15,7 @@ dependencies = [
     # python-multipart is required for FastAPI's Form(...) parsing. Used by
     # routes/console.py (RCON command submit) and routes/bindings.py.
     "python-multipart>=0.0.20",
+    "rarfile>=4.5",
 ]
 
 [dependency-groups]

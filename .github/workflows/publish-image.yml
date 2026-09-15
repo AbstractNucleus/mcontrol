@@ -40,6 +40,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: test-key
           SERVER_BASE_PATH: /tmp/mcontrol-test-servers
         run: |
+          sudo apt-get update
+          sudo apt-get install -y unrar
           uv sync --frozen
           uv run ruff check .
           uv run pytest -q

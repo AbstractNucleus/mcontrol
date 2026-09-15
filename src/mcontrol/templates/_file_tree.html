@@ -36,7 +36,7 @@
               hx-trigger="click once"><span class="file-tree__chevron">{{ icon('chevron-right', 12) }}</span><span class="file-tree__icon file-tree__icon--folder">{{ icon('folder', 16) }}</span><span class="file-tree__label">{{ entry.name }}</span></button>
       <details class="file-tree__menu">
         <summary class="file-tree__menu-trigger" tabindex="-1" title="Actions for {{ entry.name }}/" aria-label="Actions for {{ entry.name }}/">{{ icon('more', 16) }}</summary>
-        <div class="file-tree__menu-panel">
+        <div class="file-tree__menu-panel" popover="manual">
           <button class="file-tree__menu-item"
                   type="button"
                   data-upload-trigger
@@ -81,7 +81,7 @@
       <span class="file-tree__name" title="{{ entry.path }} (symlink)"><span class="file-tree__icon">{{ icon('link', 16) }}</span><span class="file-tree__label">{{ entry.name }} →</span></span>
       <details class="file-tree__menu">
         <summary class="file-tree__menu-trigger" tabindex="-1" title="Actions for {{ entry.name }}" aria-label="Actions for {{ entry.name }}">{{ icon('more', 16) }}</summary>
-        <div class="file-tree__menu-panel">
+        <div class="file-tree__menu-panel" popover="manual">
           <button class="file-tree__menu-item"
                   type="button"
                   data-action-rename
@@ -122,10 +122,16 @@
          hx-swap="innerHTML"><span class="file-tree__icon{% if entry.name.rsplit('.', 1)[-1] in ['json', 'yaml', 'yml', 'toml', 'xml', 'properties', 'sh', 'env'] %} file-tree__icon--code{% endif %}">{{ icon('file-code' if entry.name.rsplit('.', 1)[-1] in ['json', 'yaml', 'yml', 'toml', 'xml', 'properties', 'sh', 'env'] else 'file', 16) }}</span><span class="file-tree__label">{{ entry.name }}</span></a>
       <details class="file-tree__menu">
         <summary class="file-tree__menu-trigger" tabindex="-1" title="Actions for {{ entry.name }}" aria-label="Actions for {{ entry.name }}">{{ icon('more', 16) }}</summary>
-        <div class="file-tree__menu-panel">
+        <div class="file-tree__menu-panel" popover="manual">
           <a class="file-tree__menu-item"
              href="/servers/{{ server_name }}/files/download?path={{ entry.path|urlencode }}"
              download>Download</a>
+          {% if entry.name.lower().endswith(('.zip', '.rar')) %}
+          <button class="file-tree__menu-item" type="button"
+                  data-archive-extract="here" data-archive-path="{{ entry.path }}">Extract here</button>
+          <button class="file-tree__menu-item" type="button"
+                  data-archive-extract="to" data-archive-path="{{ entry.path }}">Extract to {{ entry.name.rsplit('.', 1)[0] }}/…</button>
+          {% endif %}
           <button class="file-tree__menu-item"
                   type="button"
                   data-action-rename

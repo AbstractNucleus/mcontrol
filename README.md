@@ -40,6 +40,29 @@ programs to be available in the runtime image.
 You can change the script path later in **Variables**. Clear it and select a
 server jar to return to jar startup.
 
+### Archive actions
+
+Open a ZIP or RAR file's action menu in **Files**:
+
+- **Extract here** places the contents in the archive's current folder.
+- **Extract to folder…** lets you choose a destination, including a new folder.
+
+Both actions keep the original archive and preserve its internal folder structure.
+Existing files are never overwritten. Rename or move conflicting files before
+trying again.
+
+Select files or folders and choose **Compress…** to create an archive. Choose
+the format, filename, and destination. The original files remain in place.
+ZIP creation is built in. RAR creation is available when the `rar` command is
+installed in the app's runtime; the standard image includes the UnRAR reader only.
+RARLAB requires a license for continued use of its writer after the trial period;
+see its [license terms](https://www.rarlab.com/license.htm).
+
+Archive operations reject links, special files, and paths that escape the server
+folder. Password-protected and multipart archives are not supported. Each operation is limited
+to 20 GiB of file data, 100,000 entries, and ten minutes. Extraction uses temporary
+space before placing the files, so allow space for both the archive and its contents.
+
 ## Who it's for
 
 You self-host Minecraft servers in Docker on a single box and want:
