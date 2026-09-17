@@ -24,6 +24,7 @@
 <div id="lifecycle-buttons"
      class="lifecycle-row__buttons"
      data-state="{{ state or '' }}"
+     data-state-label="{{ status_label(state) }}"
      {% if oob %}hx-swap-oob="true"{% endif %}>
   <button class="btn btn--sm{% if lifecycle.accent == 'start' %} btn--primary{% endif %}"
           type="button"

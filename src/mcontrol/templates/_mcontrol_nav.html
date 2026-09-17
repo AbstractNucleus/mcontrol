@@ -1,0 +1,22 @@
+{% from "_icons.html" import icon %}
+{% set _path = request.url.path if request is defined else "" %}
+{% set _context = dashboard_context(request) if request is defined else {} %}
+{% set _server_n = _context.get('servers', []) | length %}
+<header class="mcontrol-nav">
+  <div class="mcontrol-nav__identity">
+    <span class="mcontrol-nav__mark" aria-hidden="true">{{ icon('server', 18) }}</span>
+    <span class="mcontrol-nav__copy">
+      <span class="mcontrol-nav__eyebrow">Dashboard</span>
+      <strong>mcontrol</strong>
+    </span>
+  </div>
+  <nav class="mcontrol-nav__links" aria-label="mcontrol sections">
+    <a href="/" {% if _path == '/' or _path.startswith('/servers/') %}aria-current="page"{% endif %}>
+      {{ icon('grid') }}<span>Servers</span>
+      {% if _server_n %}<span class="mcontrol-nav__count t-num">{{ _server_n }}</span>{% endif %}
+    </a>
+    <a href="/players" {% if _path == '/players' %}aria-current="page"{% endif %}>
+      {{ icon('users') }}<span>Players</span>
+    </a>
+  </nav>
+</header>

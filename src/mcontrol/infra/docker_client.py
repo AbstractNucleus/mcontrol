@@ -10,7 +10,7 @@
 - self_container_id(). used by the attach/detach calls.
 
 Every entry point takes an ``aiodocker.Docker`` as its first argument.
-The single long-lived client is opened in ``main.lifespan`` and stored on
+The single long-lived client is opened in ``mcontrol_dashboard.lifespan`` and stored on
 ``app.state.docker``; routes inject it via ``Depends(get_docker)`` and
 pass it down to non-route callers (discovery, healthz, resources,
 server_rcon). This replaces an earlier shape where each call opened and

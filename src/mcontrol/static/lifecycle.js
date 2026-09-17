@@ -41,32 +41,26 @@
     }
   }
 
-  function syncSidebarDot(name, state) {
+  function syncServerSwitcherDot(name, state) {
     if (!name || !state) return;
     const href = "/servers/" + name;
-    document.querySelectorAll(".sidebar__server").forEach((a) => {
+    document.querySelectorAll(".server-switcher__panel a").forEach((a) => {
       if (a.getAttribute("href") !== href) return;
-      const dot = a.querySelector(".sidebar__server-dot");
+      const dot = a.querySelector(".server-switcher__dot");
       if (dot) {
-        dot.className = "sidebar__server-dot sidebar__server-dot--" + state;
+        dot.className = "server-switcher__dot server-switcher__dot--" + state;
       }
-      a.title = name + " (" + state + ")";
+      const label = a.querySelector("small");
+      const buttons = document.getElementById("lifecycle-buttons");
+      if (label && buttons) label.textContent = buttons.dataset.stateLabel;
     });
-  }
-
-  function syncHomeSummary() {
-    const summary = document.querySelector(".fleet-summary");
-    if (!summary) return;
-    const n = document.querySelectorAll(".server-list .state-pill--running").length;
-    summary.textContent = summary.textContent.replace(/\d+ running/, n + " running");
   }
 
   function applyState(state, name) {
     if (!state) return;
     const server = name || currentServerName();
     syncDeleteItem(state);
-    syncSidebarDot(server, state);
-    syncHomeSummary();
+    syncServerSwitcherDot(server, state);
     document.body.dispatchEvent(new CustomEvent("mc:state-changed", {
       bubbles: true,
       detail: { state: state, server: server },

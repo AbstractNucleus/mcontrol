@@ -1,5 +1,5 @@
 /* Workspace layout, resizing, and responsive application navigation. */
-.mobile-header, .file-divider, .layout-only { display: none; }
+.file-divider, .layout-only { display: none; }
 .freshness { color: var(--fg-muted); font-size: var(--fs-xs); }
 .server-detail-layout { container: workspace / inline-size; min-width: 0; gap: var(--space-5); }
 .detail-header { z-index: 10; padding-bottom: 0; }
@@ -99,17 +99,6 @@
 [data-stale="true"] { opacity: .8; }
 [aria-busy="true"] { cursor: progress; }
 @media (max-width: 767px) {
-  .mobile-header { display: flex; align-items: center; justify-content: flex-end; position: sticky; top: 0; z-index: 40; height: 60px; padding: var(--space-2) var(--space-4); background: var(--bg-page); border-bottom: 1px solid var(--border-soft); font-weight: 600; }
-  .app-shell { display: block; }
-  .page-main, [data-sidebar] .page-main { margin-left: 0; padding: var(--space-4); width: 100%; }
-  .sidebar, [data-sidebar] .sidebar { display: none; }
-  :root[data-mobile-nav="true"] .sidebar { display: flex; position: fixed; top: 60px; left: 0; bottom: 0; height: calc(100dvh - 60px); width: min(300px, 85vw); z-index: 50; padding: var(--space-4); background: var(--bg-surface); }
-  :root[data-mobile-nav="true"] .sidebar__nav-label, :root[data-mobile-nav="true"] .sidebar__servers, :root[data-mobile-nav="true"] .sidebar__nav-count, :root[data-mobile-nav="true"] .sidebar__caption, :root[data-mobile-nav="true"] .sidebar__hint { display: block; }
-  :root[data-mobile-nav="true"] .sidebar__footer { flex-direction: row; justify-content: space-between; }
-  :root[data-mobile-nav="true"] .sidebar__caption { display: flex; }
-  :root[data-mobile-nav="true"] .sidebar__nav-link { justify-content: flex-start; gap: var(--space-3); }
-  .sidebar__collapse, .sidebar__resize-handle { display: none; }
-  .nav-backdrop { position: fixed; inset: 60px 0 0; border: 0; background: var(--overlay-scrim-strong); z-index: 45; }
   .detail-header { position: relative; top: auto; }
   .detail-header__actions, .lifecycle-row, .lifecycle-row__buttons { min-width: 0; max-width: 100%; gap: var(--space-2); }
   .detail-header__row { display: flex; flex-direction: column; align-items: flex-start; }
@@ -137,10 +126,10 @@
   .console-pane__stream { font-size: var(--fs-xs); }
   .console-pane__body { min-height: 100px; }
   .console-pane__input .btn { padding: var(--space-2) var(--space-3); }
-  .btn, .panel__btn, .file-tree__menu-trigger, .sidebar__nav-link, .sidebar__server, select { min-height: 44px; }
+  .btn, .panel__btn, .file-tree__menu-trigger, .sidebar__nav-link, select { min-height: 44px; }
   .panel__btn, .file-tree__menu-trigger { min-width: 44px; }
   .bindings-card__edit, .variables-card__edit { min-height: 44px; display: inline-flex; align-items: center; }
-  .console-tools label, .layout-actions label, .detail-menu__trigger, .detail-back { min-height: 44px; display: inline-flex; align-items: center; }
+  .console-tools label, .layout-actions label, .detail-menu__trigger, .detail-back, .server-switcher > summary { min-height: 44px; display: inline-flex; align-items: center; }
   .detail-menu__trigger { min-width: 44px; justify-content: center; }
   .file-tree__toggle, .file-tree__entry--file > a, .file-tree__menu-item, .file-view__breadcrumb-segment { min-height: 44px; }
   .file-tree__entry--file > a { display: inline-flex; align-items: center; }

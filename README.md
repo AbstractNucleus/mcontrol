@@ -1,142 +1,55 @@
-# mcontrol
+# Dash
 
-A lightweight web panel for managing a fleet of [itzg/minecraft-server](https://docker-minecraft-server.readthedocs.io/)-style Minecraft servers on a single Docker host.
+A personal dashboard workspace. **mcontrol** is the first dashboard, for managing Minecraft servers on a single Docker host.
 
-mcontrol sits a thin Minecraft-aware UI over plain `docker compose`. No daemon agents, no per-server custom images, no opaque database of "eggs" or "templates". Each Minecraft server is a directory on disk with a `docker-compose.yml` and a bind-mounted `server/` folder. The panel reads, scaffolds, and edits those directories directly.
+The sidebar selects dashboards. Inside mcontrol, Servers and Players have their own navigation. Each server has a configurable workspace for Console, Players, and Files, plus Settings and a server switcher.
 
-## What it does
+The Python package, image, and deployment directory are still named `mcontrol`. The move to `dash.noelkleen.com` is planned separately.
 
-- **Server lifecycle**: start / stop / restart with state-aware buttons and Docker-backed health, including a "starting" state that probes the listener port before reporting healthy. Start creates the container from the server's compose file when it does not exist yet.
-- **Shared workspace**: configurable Console, Players, and Files panels with adjustable widths and heights, Save/Cancel, and temporary focus mode. Layouts are shared across servers in this browser and migrate from dashboard v2. Configuration lives in Settings.
-- **Console**: independent log and command connections, search, severity filters, wrapping, pause-follow, and Jump to latest. Commands wait for a connection; rejected text stays in the input.
-- **File browser**: read-only tree + CodeMirror editor (JSON / YAML / TOML / XML syntax highlighting), multi-file upload with drag-drop, rename/move with destination picker, single-file download, bulk delete and move, full-text search across `server/` with Ctrl/Cmd+P.
-- **New-server scaffolding**: generate a working `docker-compose.yml` + `start_server.sh` for a fresh server in one form submit; no per-server Dockerfile. The form picks a Java version (17 / 21 / 25) and turns RCON on in `server.properties`.
-- **Player roster**: DB-backed player list with Mojang UUID lookup, per-server whitelist / ops membership, and an Import button to ingest existing `whitelist.json` / `ops.json`.
-- **Resource visibility**: observed status, CPU, memory, uptime, and freshness every five seconds while visible. Disk refreshes independently every minute. Failed requests retain prior content with stale feedback and Retry after a 12-second deadline. The fleet supports status filters.
-- **Discovery**: operator-triggered fleet rescan that picks up new server directories without restarting the panel.
-- **Deleted servers**: deletion renames the directory to `.deleted-<name>-<unix-ts>/`. Recover manually by renaming it back, then rescanning. Empty trash selects directories older than seven days; cleanup only runs when requested and confirmed.
-- **Legacy-server migration**: one-way migrate card for servers that were running before mcontrol existed (itzg-image shape to mcontrol scaffold shape).
-- **Health probe**: `GET /healthz` returns a deep per-subsystem JSON (Supabase + Docker socket + bind-mount); 503 on any subsystem degraded.
-- **Interface**: inspired by [Beautiful UI](https://www.beautifului.dev/), with a fixed dark appearance, live fleet summary cards, status filters, and rounded workspace panels. A mobile drawer, stacked fleet cards, and a single-view file browser/editor adapt the workspace to phones.
+## mcontrol features
 
-### Modpacks with a start script
+- Start, stop, restart, create, discover, and delete Minecraft servers.
+- Live CPU, memory, uptime, disk usage, and connection status.
+- Console logs and RCON commands with search and filtering.
+- File editing, upload, download, search, move, bulk actions, and ZIP/RAR extraction.
+- Player roster, whitelist, and operator management.
+- Shared panel layouts with resizing, rearranging, focus mode, and Save/Cancel.
+- Server configuration, generated startup scripts, and legacy-server migration.
 
-When creating a server, enter the pack's Linux `.sh` filename in **Custom start
-script**, for example `run.sh`, instead of supplying a server jar. After creation,
-copy the extracted server pack into the server's `server/` folder, keeping its
-folders intact. The script path is relative to that folder.
+Each server is a directory containing `docker-compose.yml` and a bind-mounted `server/` folder. The dashboard works with those files directly. Supabase stores server metadata and the player roster; deleted servers stay on disk as `.deleted-<name>-<timestamp>/` directories.
 
-mcontrol runs the script with Bash from `server/`. Keep the generated
-`start_server.sh`; it launches the pack's script. If the pack uses that same
-filename, rename the pack's script and enter its new name in the form.
-Windows `.bat` scripts cannot be used in the Linux container.
+This is a single-user workspace with no built-in authentication or roles. Put it behind your own access control.
 
-The selected Java version and container memory limit still apply. Set the Java
-heap and JVM flags in the pack's script or its settings file, leaving room within
-the container limit for memory outside the heap. The form's JVM extra arguments
-apply only to jar startup. Scripts that need additional programs require those
-programs to be available in the runtime image.
-
-You can change the script path later in **Variables**. Clear it and select a
-server jar to return to jar startup.
-
-### Archive actions
-
-Open a ZIP or RAR file's action menu in **Files**:
-
-- **Extract here** places the contents in the archive's current folder.
-- **Extract to folder…** lets you choose a destination, including a new folder.
-
-Both actions keep the original archive and preserve its internal folder structure.
-Existing files are never overwritten. Rename or move conflicting files before
-trying again.
-
-Select files or folders and choose **Compress…** to create an archive. Choose
-the format, filename, and destination. The original files remain in place.
-ZIP creation is built in. RAR creation is available when the `rar` command is
-installed in the app's runtime; the standard image includes the UnRAR reader only.
-RARLAB requires a license for continued use of its writer after the trial period;
-see its [license terms](https://www.rarlab.com/license.htm).
-
-Archive operations reject links, special files, and paths that escape the server
-folder. Password-protected and multipart archives are not supported. Each operation is limited
-to 20 GiB of file data, 100,000 entries, and ten minutes. Extraction uses temporary
-space before placing the files, so allow space for both the archive and its contents.
-
-## Who it's for
-
-You self-host Minecraft servers in Docker on a single box and want:
-- A panel that doesn't impose its own server-image abstraction (no daemons, no eggs).
-- Source you can read end-to-end in an afternoon (~6k lines of Python + Jinja + HTMX).
-- A file browser that edits the same files you'd edit over SSH.
-- A roster system that works without an external auth provider.
-
-mcontrol is **not** a multi-tenant control panel. There's no user/role system; anyone who can reach the panel can do everything. Run it behind your own auth (Tailscale, Cloudflare Access, basic auth at the reverse proxy, etc.).
-
-## Architecture
-
-- **Backend**: FastAPI + Jinja2 + HTMX (server-rendered, minimal client JS).
-- **Storage**: Supabase (Postgres + service-role key) for the servers table, player roster, and tombstones.
-- **Docker integration**: `aiodocker` against `/var/run/docker.sock`; per-server compose files live on disk under `SERVER_BASE_PATH/<name>/`.
-- **Frontend**: HTMX for interaction, CodeMirror (vendored) for the file editor, no bundler.
-
-## Local development
+## Local preview
 
 Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
 
-```bash
+```sh
 uv sync
-cp .env.example .env   # fill in SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SERVER_BASE_PATH
+uv run uvicorn dev_mock:app --reload --port 8000
+```
+
+Open http://localhost:8000. The preview uses fake Docker and database adapters and seeds sample server files under `.localdev/minecraft/`. It does not manage real servers. Set `MCONTROL_MOCK_BASE` to use another preview directory.
+
+For real services, copy `.env.example` to `.env`, configure Supabase and the Minecraft server directory, then run:
+
+```sh
 uv run uvicorn mcontrol.main:app --reload --port 8000
 ```
 
-Visit `http://localhost:8000/` for the home page. `http://localhost:8000/healthz` returns 200 with per-subsystem JSON when DB, Docker socket, and base path are all reachable; 503 otherwise.
+The production runtime also needs Docker access. See [deployment](deploy/README.md) for the container setup.
 
-Run tests:
+## Server files
 
-```bash
-uv run pytest -v
-```
+For a modpack with a Linux start script, enter its `.sh` filename in **Custom start script**, then upload the extracted pack into the server's `server/` folder. The path is relative to that folder. Keep the generated `start_server.sh`; rename the pack's script if it uses that name. Windows `.bat` scripts cannot run in the Linux container.
 
-Lint:
+The selected Java version and container memory limit still apply. Configure heap and JVM flags in the pack's own script, leaving memory for the rest of the container. The form's JVM extra arguments apply to JAR startup. Clear the custom script in Settings to return to JAR startup.
 
-```bash
-uv run ruff check .
-```
+ZIP and RAR extraction keep the original archive and never overwrite existing files. Password-protected and multipart archives are unsupported. Operations are limited to 20 GiB, 100,000 entries, and ten minutes, and need temporary disk space. ZIP creation is built in; RAR creation requires a separately installed and licensed `rar` writer. The image includes only the UnRAR reader.
 
-Tests mock out Supabase and the Docker socket; you do not need either available to run the suite.
+Deleting a server preserves its files in a `.deleted-<name>-<timestamp>/` directory. Restore it manually by renaming the directory back and rescanning, or remove that directory manually when the files are no longer needed.
 
-Browser regression checks start an isolated `dev_mock` process with temporary server files:
+## Development and deployment
 
-```bash
-uv run playwright install chromium
-MCONTROL_BROWSER_TESTS=1 uv run pytest tests/browser -v
-```
-
-PowerShell: set `$env:MCONTROL_BROWSER_TESTS='1'` before the pytest command. Screenshots are saved to `.localdev/ui-review/`. Tests cover the fixed dark interface from 390 to 1920 pixels under either operating-system color scheme, layout migration/cancellation, dirty editors, failed saves, retry recovery, connection state, and keyboard access. Additional cases check dark rendering with saved light preferences, blocked storage, and JavaScript disabled, plus the roster, server creation, trash confirmations, short-screen sidebar controls, static asset loading, and fleet filters during an in-flight refresh.
-
-## Deployment
-
-The hosted instance pulls a GHCR image using `deploy/compose.yml`; follow [deploy/README.md](deploy/README.md) and the [redesign release checks](deploy/UI_REDESIGN_RELEASE.md). The root compose file below is for builds from source.
-
-The tracked `docker-compose.yml` runs only the `app` service. The container exposes `:8000` internally and binds to `${HOST_BIND_IP:-127.0.0.1}:8003` on the host. Terminate TLS at an upstream reverse proxy (nginx, Caddy, Traefik, etc.) and `proxy_pass` to that host:port.
-
-```bash
-docker compose up -d --build
-```
-
-Pre-requisites:
-- A Supabase project (the schema lives in a separate migration outside this repo).
-- An upstream reverse proxy that terminates TLS and reverse-proxies to `HOST_BIND_IP:8003`.
-- A `.env` populated from `.env.example`.
-- Your own access control in front of the panel. See "Who it's for" above.
-
-The container needs `/var/run/docker.sock` and the host's `SERVER_BASE_PATH` bind-mounted read-write so it can manage per-server containers and scaffold/edit files.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev loop, route-adding pattern, and project conventions.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+- [CONTRIBUTING.md](CONTRIBUTING.md): project structure, checks, and adding dashboards.
+- [deploy/README.md](deploy/README.md): image publishing, host configuration, verification, and rollback.

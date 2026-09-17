@@ -1,39 +1,19 @@
 import logging
-from contextlib import asynccontextmanager, suppress
+from collections.abc import Iterable
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-import aiodocker
-import aiohttp
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from mcontrol import __version__
-from mcontrol.domain import discovery, tombstones
-from mcontrol.infra import db_async, docker_client, healthz
-from mcontrol.infra import probe_host as probe_host_mod
-from mcontrol.routes import (
-    bindings,
-    console,
-    delete_server,
-    files,
-    home,
-    lifecycle,
-    logs,
-    migrate,
-    new_server,
-    players,
-    regenerate,
-    server,
-    server_players,
-    server_resources,
-    trash,
-    variables,
-)
+from mcontrol.dashboards import Dashboard, DashboardRegistry
+from mcontrol.mcontrol_dashboard import dashboard as mcontrol_dashboard
 from mcontrol.routes._flash import COOKIE as FLASH_COOKIE
 from mcontrol.routes._flash import read_flash
-from mcontrol.settings import Settings, get_settings
+from mcontrol.settings import get_settings
 from mcontrol.templates import templates
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -68,102 +48,28 @@ def _wants_html(request: Request) -> bool:
     return "text/html" in accept or accept == ""
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    settings: Settings = app.state.settings
-    # Single aiodocker client lives for the whole process lifetime
-    # (decision #98). Routes inject it via Depends(get_docker); non-route
-    # callers (discovery here, healthz, resources, server_rcon) get it
-    # passed in explicitly.
-    # The timeout bounds one-shot API calls so a wedged daemon can't hang
-    # the panel. aiodocker strips total/sock_read for long-running paths
-    # (log follow, stats streams), so SSE log tailing stays alive.
-    docker = aiodocker.Docker(
-        url=settings.docker_host,
-        timeout=aiohttp.ClientTimeout(total=60, connect=5, sock_read=30),
-    )
-    app.state.docker = docker
-
-    try:
-        await probe_host_mod.resolve(docker)
-    except Exception:
-        logger.warning("probe host resolve failed", exc_info=True)
-    try:
-        await docker_client.prune_stale_self_networks(docker)
-    except Exception:
-        logger.warning("stale network prune failed", exc_info=True)
-
-    base_path = Path(settings.server_base_path)
-    try:
-        count = await discovery.run_discovery(docker, base_path)
-        logger.info("discovery: %d server dir(s) seen under %s", count, base_path)
-    except Exception:
-        # Discovery must never block the app from coming up. The home page
-        # surfaces an empty state and the operator can investigate from there.
-        logger.exception("discovery failed; continuing without it")
-    try:
-        yield
-    finally:
-        with suppress(Exception):
-            await docker_client.disconnect_refcount_networks(docker)
-        with suppress(Exception):
-            await docker.close()
-
-
-def create_app() -> FastAPI:
+def create_app(dashboards: Iterable[Dashboard] | None = None) -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="mcontrol", version=__version__, lifespan=lifespan)
+    registered = tuple(dashboards) if dashboards is not None else (mcontrol_dashboard,)
+    registry = DashboardRegistry(registered)
+
+    @asynccontextmanager
+    async def app_lifespan(app: FastAPI):
+        async with registry.lifespan(app):
+            yield
+
+    app = FastAPI(title="mcontrol", version=__version__, lifespan=app_lifespan)
     app.state.settings = settings
-
-    # Jinja global for the tombstone-count badge. Called
-    # from _sidebar.html on every page; uses tombstones.count() which is
-    # a single scandir, so cheap to invoke per render.
-    def _tombstone_count(request: Request) -> int:
-        try:
-            base = Path(request.app.state.settings.server_base_path)
-            return tombstones.count(base)
-        except Exception:
-            return 0
-
-    templates.env.globals["tombstone_count"] = _tombstone_count
-
-    # Jinja global for the sidebar server list. The rail is rendered into
-    # every full page, but Jinja render is synchronous: hitting the DB here
-    # would block the event loop on a Supabase round-trip per render (issue
-    # #99). Instead the list is prefetched off-loop by the middleware below
-    # and stashed on request.state; this global just reads it back.
-    def _sidebar_servers(request: Request) -> list[dict]:
-        return getattr(request.state, "sidebar_servers", [])
-
-    templates.env.globals["sidebar_servers"] = _sidebar_servers
-
-    def _page_flash(request: Request) -> dict | None:
-        return getattr(request.state, "page_flash", None)
-
-    templates.env.globals["page_flash"] = _page_flash
+    app.state.dashboard_registry = registry
 
     @app.middleware("http")
-    async def _prime_sidebar(request: Request, call_next):
-        # Full-page navigations render the sidebar and so need its server
-        # list. Fetch it via the threaded db_async client (never on the
-        # render path) and hand it to the template through request.state.
-        # HTMX partials, static assets, and the health probe never render
-        # the chrome, so they skip the round-trip. A DB blip leaves an
-        # empty rail, not a 500 (same posture as tombstone_count).
-        path = request.url.path
-        skip = (
-            path.startswith("/static")
-            or path == "/healthz"
-            or path.endswith("/logs")
-            or path.endswith("/rcon")
-            or path.endswith("/download")
-            or not _wants_html(request)
-        )
-        if not skip:
-            try:
-                request.state.sidebar_servers = await db_async.list_servers()
-            except Exception:
-                request.state.sidebar_servers = []
+    async def _prepare_page(request: Request, call_next):
+        dashboard = registry.match(request.scope)
+        request.state.dashboard = dashboard
+        request.state.dashboard_context = {}
+        if request.url.path != "/healthz" and _wants_html(request):
+            if dashboard is not None and dashboard.page_context is not None:
+                request.state.dashboard_context = await dashboard.page_context(request)
             flash = read_flash(request)
             if flash:
                 request.state.page_flash = flash
@@ -174,33 +80,7 @@ def create_app() -> FastAPI:
         return response
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-    app.include_router(home.router)
-    # new_server must register before server so /servers/new takes
-    # precedence over /servers/{name}'s catch-all.
-    app.include_router(new_server.router)
-    app.include_router(server.router)
-    app.include_router(lifecycle.router)
-    app.include_router(logs.router)
-    app.include_router(console.router)
-    app.include_router(bindings.router)
-    app.include_router(variables.router)
-    app.include_router(regenerate.router)
-    app.include_router(migrate.router)
-    app.include_router(delete_server.router)
-    app.include_router(files.router)
-    app.include_router(server_players.router)
-    app.include_router(server_resources.router)
-    app.include_router(players.router)
-    app.include_router(trash.router)
-
-    @app.get("/healthz")
-    async def healthz_endpoint(request: Request) -> JSONResponse:
-        status_code, payload = await healthz.build_report(
-            request.app.state.docker
-        )
-        if status_code != 200:
-            logger.warning("healthz degraded: %s", payload["checks"])
-        return JSONResponse(status_code=status_code, content=payload)
+    registry.install_routes(app)
 
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon() -> RedirectResponse:
@@ -217,8 +97,13 @@ def create_app() -> FastAPI:
         if exc.status_code in (404, 405) and _wants_html(request):
             return templates.TemplateResponse(
                 request=request,
-                name="404.html",
-                context={"detail": exc.detail},
+                name="error.html",
+                context={
+                    "code": exc.status_code,
+                    "title": "Not found" if exc.status_code == 404 else "Method not allowed",
+                    "detail": exc.detail,
+                    "icon_name": "search",
+                },
                 status_code=exc.status_code,
                 headers=getattr(exc, "headers", None) or {},
             )
@@ -236,8 +121,13 @@ def create_app() -> FastAPI:
         if _wants_html(request):
             return templates.TemplateResponse(
                 request=request,
-                name="500.html",
-                context={},
+                name="error.html",
+                context={
+                    "code": 500,
+                    "title": "Something went wrong",
+                    "detail": "The dashboard hit an internal error.",
+                    "icon_name": "server",
+                },
                 status_code=500,
             )
         return JSONResponse(

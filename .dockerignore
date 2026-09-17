@@ -6,6 +6,7 @@
 .claude/
 .pytest_cache/
 .ruff_cache/
+.localdev/
 # ** is required: bare __pycache__/ matches only the context root, and this
 # repo's bytecode all lives under src/mcontrol/.
 **/__pycache__/

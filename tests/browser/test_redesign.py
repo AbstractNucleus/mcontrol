@@ -1,6 +1,5 @@
 """Whole-page and navigation regressions against the isolated browser fixture."""
 
-import asyncio
 import os
 import re
 import socket
@@ -40,7 +39,6 @@ async def test_secondary_pages_responsive(page, mock_url, width, system_scheme):
     for path, heading, name in [
         ("/players", "Players", "players"),
         ("/servers/new", "Create a server", "new-server"),
-        ("/trash", "Trash", "trash"),
         ("/missing-redesign-page", None, "not-found"),
     ]:
         response = await page.goto(mock_url + path)
@@ -61,7 +59,7 @@ async def test_fleet_visuals(page, mock_url, width, system_scheme):
     await page.emulate_media(color_scheme=system_scheme, reduced_motion="reduce")
     await page.goto(mock_url + "/")
     await expect(page.locator(".server-card")).to_have_count(5)
-    await expect(page.locator(".fleet-insights")).to_contain_text("Memory usage")
+    await expect(page.locator(".fleet-insights")).to_have_count(0)
     assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     ratios = await page.evaluate("""() => {
       const sample = document.createElement('span'); document.body.append(sample);
@@ -100,51 +98,39 @@ async def test_sidebar_footer_stays_in_short_viewport(page, mock_url):
     await _screenshot(page, "sidebar-1280x720-dark", full_page=False)
 
 
-async def test_fleet_status_filter_survives_inflight_poll(page, mock_url):
-    started = asyncio.Event()
-    release = asyncio.Event()
+async def test_server_switcher_tracks_lifecycle_changes(page, mock_url):
+    await page.goto(mock_url + "/servers/cobblemon")
+    current = page.locator('.server-switcher__panel a[aria-current="page"]')
+    await expect(current.locator("small")).to_have_text("Stopped")
+    await page.get_by_role("button", name="Start cobblemon", exact=True).click()
+    await expect(page.locator("#state-pill")).to_have_text("Running")
+    await expect(current.locator("small")).to_have_text("Running")
+    await page.get_by_role("button", name="Stop cobblemon", exact=True).click()
+    await expect(page.locator("#state-pill")).to_have_text("Stopped")
+    await expect(current.locator("small")).to_have_text("Stopped")
+    await page.locator(".server-switcher summary").press("Enter")
+    await page.get_by_role("navigation", name="Switch server", exact=True).get_by_role(
+        "link", name="atm10 Running", exact=True
+    ).click()
+    await expect(page).to_have_url(mock_url + "/servers/atm10")
 
-    async def hold_poll(route):
-        started.set()
-        await release.wait()
-        await route.continue_()
 
-    await page.route("**/fleet/status", hold_poll)
+async def test_fleet_refresh_keeps_all_servers_visible(page, mock_url):
     await page.goto(mock_url + "/")
-    state = page.get_by_role("combobox", name="Status", exact=True)
-    stopped = page.get_by_role("button", name="Stopped", exact=True)
-    await stopped.click()
-    await expect(state).to_have_value("Stopped")
-    await expect(stopped).to_have_attribute("aria-pressed", "true")
-    await expect(page.locator(".server-card:visible")).to_have_count(2)
+    await expect(page.get_by_role("combobox", name="Status", exact=True)).to_have_count(0)
+    await expect(page.get_by_role("button", name="All servers", exact=True)).to_have_count(0)
+    await expect(page.get_by_role("button", name="Running", exact=True)).to_have_count(0)
+    await expect(page.get_by_role("button", name="Stopped", exact=True)).to_have_count(0)
+    await expect(page.locator(".server-card:visible")).to_have_count(5)
     observed = page.locator("#fleet time[data-observed-at]")
     before = await observed.get_attribute("data-observed-at")
-    await page.locator("h1").click()
     async with page.expect_response("**/fleet/status") as response:
-        await asyncio.wait_for(started.wait(), timeout=8)
-        await state.select_option("Running")
-        await state.focus()
-        await expect(state).to_be_focused()
-        release.set()
+        await page.evaluate(
+            "document.getElementById('fleet').dispatchEvent(new Event('mc:refresh'))"
+        )
     assert (await response.value).status == 200
     await expect(observed).not_to_have_attribute("data-observed-at", before)
-    await expect(state).to_have_value("Running")
-    await expect(state).to_be_focused()
-    await expect(page.locator(".server-card:visible")).to_have_count(3)
-    await expect(page.get_by_role("button", name="Running", exact=True)).to_have_attribute(
-        "aria-pressed", "true"
-    )
-    await expect(stopped).to_have_attribute("aria-pressed", "false")
-    await state.select_option("Missing")
-    await expect(page.locator(".server-card:visible")).to_have_count(0)
-    await expect(page.locator("[data-fleet-empty]")).to_be_visible()
-    await page.get_by_role("button", name="Clear filters", exact=True).click()
-    await expect(state).to_have_value("")
-    await expect(page.get_by_role("button", name="All servers", exact=True)).to_have_attribute(
-        "aria-pressed", "true"
-    )
     await expect(page.locator(".server-card:visible")).to_have_count(5)
-    await expect(page.locator("[data-fleet-empty]")).to_be_hidden()
 
 
 @pytest.mark.parametrize("width", [390, 1440])
@@ -154,28 +140,27 @@ async def test_navigation_stays_dark_with_saved_light_preference(page, mock_url,
     await page.add_init_script("localStorage.setItem('theme', 'light')")
     await page.goto(mock_url + "/")
     sidebar = page.locator("#primary-sidebar")
+    sections = page.get_by_role("navigation", name="mcontrol sections")
     if width == 390:
         await page.get_by_role("button", name="Menu", exact=True).click()
     await expect(sidebar.locator('[data-theme-toggle]')).to_have_count(0)
+    await expect(sidebar.get_by_role("link", name="mcontrol", exact=True)).to_have_attribute(
+        "aria-current", "page"
+    )
+    await expect(sidebar.get_by_role("link", name="Players", exact=True)).to_have_count(0)
+    await expect(sidebar.get_by_role("link", name="Trash", exact=True)).to_have_count(0)
     await expect(page.locator("html")).to_have_attribute("data-theme", "dark")
     if width == 390:
         await _screenshot(page, "sidebar-drawer-390-dark", full_page=False)
-    await sidebar.locator('nav a[href="/players"]').click()
+        await page.get_by_role("button", name="Menu", exact=True).click()
+        await expect(sidebar).to_be_hidden()
+    await sections.get_by_role("link", name="Players", exact=True).click()
     await expect(page).to_have_url(mock_url + "/players")
     await expect(page.locator("html")).to_have_attribute("data-theme", "dark")
-    if width == 390:
-        await expect(sidebar).to_be_hidden()
-        await page.get_by_role("button", name="Menu", exact=True).click()
-    await expect(sidebar.locator('nav a[href="/players"]')).to_have_attribute(
+    await expect(sections.get_by_role("link", name="Players", exact=True)).to_have_attribute(
         "aria-current", "page"
     )
-    await sidebar.locator('nav a[href="/trash"]').click()
-    await expect(page).to_have_url(mock_url + "/trash")
-    if width == 390:
-        await page.get_by_role("button", name="Menu", exact=True).click()
-    await expect(sidebar.locator('nav a[href="/trash"]')).to_have_attribute(
-        "aria-current", "page"
-    )
+    await expect(sections.get_by_role("link", name="Trash", exact=True)).to_have_count(0)
     await page.emulate_media(color_scheme="dark")
     await expect(page.locator("html")).to_have_attribute("data-theme", "dark")
     await page.emulate_media(color_scheme="light")
@@ -239,7 +224,7 @@ async def test_roster_filters_and_remove_dialog_keyboard(page, mock_url, width):
 
 
 @pytest.mark.parametrize("width", [390, 1440])
-async def test_create_validation_delete_and_trash_confirmation(page, mock_url, width):
+async def test_create_validation_and_delete_confirmation(page, mock_url, width):
     await page.set_viewport_size({"width": width, "height": 1000})
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -282,28 +267,7 @@ async def test_create_validation_delete_and_trash_confirmation(page, mock_url, w
     await dialog.get_by_role("button", name="Delete", exact=True).click()
     await expect(page).to_have_url(mock_url + "/")
     await expect(page.locator(f'.server-card[data-name="{name}"]')).to_have_count(0)
-    await page.goto(mock_url + "/trash")
-    row = page.locator(".trash-row").filter(has_text=name)
-    await expect(row).to_be_visible()
-    await expect(page.get_by_role("button", name=re.compile("Empty trash:"))).to_be_disabled()
-    trigger = row.get_by_role("link", name="Delete now", exact=True)
-    await trigger.click()
-    dialog = page.get_by_role("dialog", name="Delete tombstone", exact=True)
-    await expect(dialog).to_be_visible()
-    await dialog.get_by_role("button", name="Cancel", exact=True).click()
-    await expect(dialog).to_have_count(0)
-    await expect(trigger).to_be_focused()
-    await trigger.click()
-    await dialog.locator('[name="confirm_name"]').fill("wrong-name")
-    await dialog.get_by_role("button", name="Delete now", exact=True).click()
-    await expect(dialog.locator(".trash-modal__error")).to_be_visible()
-    await expect(dialog.locator('[name="confirm_name"]')).to_have_value("wrong-name")
-    await _screenshot(page, f"trash-dialog-{width}")
-    await dialog.locator('[name="confirm_name"]').fill(name)
-    await dialog.get_by_role("button", name="Delete now", exact=True).click()
-    await expect(page).to_have_url(mock_url + "/trash")
-    await expect(row).to_have_count(0)
-    await expect(page.get_by_role("heading", name="Trash is empty")).to_be_visible()
+
 
 
 @pytest.mark.parametrize("width", [390, 1158])

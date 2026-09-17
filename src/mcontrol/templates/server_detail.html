@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "mcontrol_base.html" %}
 {% from "_icons.html" import icon %}
 
 {% block title %}{{ server.name }} | mcontrol{% endblock %}
@@ -84,12 +84,30 @@
     → .server-detail).
   #}
   <header class="detail-header">
-    <a class="detail-back" href="/">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M15 18l-6-6 6-6"></path>
-      </svg>
-      All servers
-    </a>
+    <div class="detail-header__navigation">
+      <a class="detail-back" href="/">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M15 18l-6-6 6-6"></path>
+        </svg>
+        All servers
+      </a>
+      {% set _server_rows = dashboard_context(request).get('servers', []) if request is defined else [] %}
+      <details class="server-switcher">
+        <summary>Switch server <strong>{{ server.name }}</strong></summary>
+        <nav class="server-switcher__panel" aria-label="Switch server">
+          {% for row in _server_rows %}
+            <a href="/servers/{{ row.name }}" {% if row.name == server.name %}aria-current="page"{% endif %}>
+              <span class="server-switcher__dot server-switcher__dot--{{ row.state }}" aria-hidden="true"></span>
+              <span>{{ row.name }}</span>
+              <small>{{ status_label(row.state) }}</small>
+            </a>
+          {% else %}
+            <span class="server-switcher__empty">No other servers available.</span>
+          {% endfor %}
+          <a class="server-switcher__new" href="/servers/new">{{ icon('plus', 14) }} New server</a>
+        </nav>
+      </details>
+    </div>
     <div class="detail-header__row">
       <div class="detail-identity">
         <span class="detail-identity__icon" aria-hidden="true">{{ icon('server', size=24) }}</span>

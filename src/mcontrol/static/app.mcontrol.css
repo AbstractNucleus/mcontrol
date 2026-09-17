@@ -1,0 +1,110 @@
+.mcontrol-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.mcontrol-nav__identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.mcontrol-nav__mark {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+}
+
+.mcontrol-nav__copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: var(--lh-snug);
+}
+
+.mcontrol-nav__copy strong {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+
+.mcontrol-nav__eyebrow {
+  color: var(--fg-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mcontrol-nav__links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.mcontrol-nav__links a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--fg-secondary);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.mcontrol-nav__links a:hover {
+  color: var(--fg-primary);
+  background: var(--bg-sunken);
+}
+
+.mcontrol-nav__links a[aria-current="page"] {
+  color: var(--fg-primary);
+  background: var(--bg-sunken);
+  box-shadow: var(--shadow-sm);
+}
+
+.mcontrol-nav__links a[aria-current="page"] > .ui-icon {
+  color: var(--accent-text);
+}
+
+.mcontrol-nav__count {
+  min-width: 20px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  color: var(--fg-muted);
+  background: var(--bg-page);
+  font-size: var(--fs-xs);
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .mcontrol-nav {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .mcontrol-nav__links {
+    width: 100%;
+    overflow-x: auto;
+  }
+  .mcontrol-nav__links a {
+    flex: 1 0 auto;
+    justify-content: center;
+  }
+}

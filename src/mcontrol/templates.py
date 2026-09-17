@@ -1,9 +1,4 @@
-"""Shared Jinja2Templates instance for all mcontrol routes.
-
-Slice 3 inlined `Jinja2Templates(directory=TEMPLATES_DIR)` in both
-routes/home.py and routes/server.py. Slice 4 adds four more route
-modules; sharing a single instance keeps configuration in one place.
-"""
+"""Shared Jinja configuration for the dashboard shell and route templates."""
 
 import hashlib
 import re
@@ -21,8 +16,6 @@ from mcontrol.infra.resources import format_bytes
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
-# Every page's base.html needs `version` for asset cache-busting and the
-# sidebar brand; a global means no route can forget to pass it.
 _assets = TEMPLATES_DIR.parent / "static"
 _digest = hashlib.sha256()
 for _asset in sorted(_assets.rglob("*")):
@@ -30,6 +23,31 @@ for _asset in sorted(_assets.rglob("*")):
         _digest.update(_asset.read_bytes())
 templates.env.globals["version"] = __version__ + "." + _digest.hexdigest()[:12]
 templates.env.globals["status_label"] = status.label
+
+
+def registered_dashboards(request: Request) -> tuple:
+    registry = getattr(request.app.state, "dashboard_registry", None)
+    return registry.dashboards if registry is not None else ()
+
+
+def current_dashboard(request: Request):
+    return getattr(request.state, "dashboard", None)
+
+
+def dashboard_context(request: Request) -> dict:
+    return getattr(request.state, "dashboard_context", {})
+
+
+def page_flash(request: Request) -> dict | None:
+    return getattr(request.state, "page_flash", None)
+
+
+templates.env.globals.update(
+    registered_dashboards=registered_dashboards,
+    current_dashboard=current_dashboard,
+    dashboard_context=dashboard_context,
+    page_flash=page_flash,
+)
 
 
 def humantime(mtime_ns: int) -> str:

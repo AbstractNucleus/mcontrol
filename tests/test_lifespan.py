@@ -67,7 +67,7 @@ async def test_lifespan_constructs_docker_client_with_timeout(
     client is built with an explicit aiohttp.ClientTimeout."""
     monkeypatch.setenv("SERVER_BASE_PATH", str(tmp_path))
 
-    from mcontrol import main
+    from mcontrol import main, mcontrol_dashboard
     from mcontrol.domain import discovery
     from tests.conftest import make_fake_docker
 
@@ -78,7 +78,7 @@ async def test_lifespan_constructs_docker_client_with_timeout(
         captured.update(kwargs)
         return fake
 
-    monkeypatch.setattr(main.aiodocker, "Docker", factory)
+    monkeypatch.setattr(mcontrol_dashboard.aiodocker, "Docker", factory)
 
     async def _noop(_docker, _base_path):
         return 0

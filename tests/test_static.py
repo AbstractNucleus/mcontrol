@@ -50,8 +50,8 @@ async def test_lifecycle_js_is_served(client):
 
 
 async def test_modals_js_is_served(client):
-    # Shared focus-trap / return-focus helper for the three overlay
-    # modals (player-remove, trash-empty, trash-delete).
+    # Shared focus-trap / return-focus helper for the overlay
+    # modals (player-remove, server-delete).
     response = await client.get("/static/modals.js")
     assert response.status_code == 200
     content_type = response.headers["content-type"]
@@ -63,7 +63,8 @@ async def test_modals_js_is_served(client):
     assert "data-modal-root" in body
     assert "data-modal-close" in body
     assert "player-modal" in body
-    assert "trash-modal" in body
+    assert "server-modal" in body
+    assert "trash-modal" not in body
     assert "data-panels-menu" in body
     assert 'evt.key !== "Escape"' in body
 

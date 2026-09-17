@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+
+{% block title %}{{ title }} | Dash{% endblock %}
+
+{% block main %}
+<section class="error-page">
+  <span class="page-symbol page-symbol--large">{{ icon(icon_name, size=24) }}</span>
+  <p class="error-page__code">{{ code }}</p>
+  <h1 class="error-page__title">{{ title }}</h1>
+  <p class="error-page__body">{{ detail }}</p>
+  <div class="error-page__actions">
+    <a class="btn btn--primary" href="/">{{ icon('arrow-left') }} Dashboard home</a>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block dashboard_shell_styles %}
+  <link rel="stylesheet" href="/static/app.mcontrol.css?v={{ version }}">
+{% endblock %}
+
+{% block dashboard_styles %}
+  <link rel="stylesheet" href="/static/app.server.css?v={{ version }}">
+  <link rel="stylesheet" href="/static/app.files.css?v={{ version }}">
+  <link rel="stylesheet" href="/static/app.misc.css?v={{ version }}">
+  <link rel="stylesheet" href="/static/app.workspace.css?v={{ version }}">
+  <link rel="stylesheet" href="/static/app.fleet.css?v={{ version }}">
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/workspace.js?v={{ version }}" defer></script>
+  <script src="/static/htmx.min.js?v={{ version }}" defer></script>
+  <script src="/static/htmx-ext-sse.js?v={{ version }}" defer></script>
+  <script src="/static/errors.js?v={{ version }}" defer></script>
+  {{ super() }}
+  <script src="/static/modals.js?v={{ version }}" defer></script>
+  <script src="/static/focus.js?v={{ version }}" defer></script>
+  <script src="/static/lifecycle.js?v={{ version }}" defer></script>
+  <script src="/static/streams.js?v={{ version }}" defer></script>
+{% endblock %}
+
+{% block dashboard_nav %}
+  {% include "_mcontrol_nav.html" %}
+{% endblock %}

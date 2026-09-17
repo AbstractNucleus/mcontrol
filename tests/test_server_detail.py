@@ -289,6 +289,27 @@ async def test_server_detail_links_back_to_home(client, fake_get_server):
     assert 'href="/"' in response.text
 
 
+async def test_server_detail_switcher_lists_servers(client, fake_get_server, monkeypatch):
+    from mcontrol.infra import db
+
+    fake_get_server["atm10"] = _row("atm10")
+    monkeypatch.setattr(
+        db,
+        "list_servers",
+        lambda: [_row("atm10"), _row("monifactory", state="exited")],
+    )
+
+    body = (await client.get("/servers/atm10", headers={"Accept": "text/html"})).text
+    switcher = body[body.index('class="server-switcher"') : body.index("</details>")]
+
+    assert 'aria-label="Switch server"' in switcher
+    current = switcher[switcher.index('href="/servers/atm10"') :]
+    current = current[: current.index(">")]
+    assert 'aria-current="page"' in current
+    assert 'href="/servers/monifactory"' in switcher
+    assert 'href="/servers/new"' in switcher
+
+
 async def test_server_detail_legacy_row_has_no_variables_card_or_banner(
     client, fake_get_server
 ):

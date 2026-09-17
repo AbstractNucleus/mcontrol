@@ -157,7 +157,7 @@ async def test_lifecycle_returns_404_for_unknown_server(
     assert response.status_code == 404
 
 
-async def test_probe_listener_returns_true_when_port_answers(monkeypatch):
+async def test_probe_listener_returns_true_when_port_answers(env, monkeypatch):
     """The probe returns True as soon as a TCP connect succeeds."""
     from mcontrol.services import lifecycle_service
 
@@ -172,7 +172,7 @@ async def test_probe_listener_returns_true_when_port_answers(monkeypatch):
     assert await lifecycle_service.probe_listener(25565) is True
 
 
-async def test_probe_listener_returns_false_on_persistent_refusal(monkeypatch):
+async def test_probe_listener_returns_false_on_persistent_refusal(env, monkeypatch):
     """The probe returns False when the connect keeps failing until the
     deadline. We shrink the deadline so the test doesn't actually wait
     10s."""

@@ -1,6 +1,6 @@
 """Persist a toast across HX-Redirect via the existing #flash-stack cookie.
 
-Delete / trash purge return an empty body plus HX-Redirect, so an OOB
+Server deletion returns an empty body plus HX-Redirect, so an OOB
 swap never lands. The next full page reads this cookie and renders
 ``_flash.html`` into ``#flash-stack``.
 """

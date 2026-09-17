@@ -1,11 +1,5 @@
 {% from "_icons.html" import icon %}
 <div id="fleet" hx-get="/fleet/status" hx-trigger="every 5s, mc:refresh" hx-swap="outerHTML" data-poll data-async-label="Fleet status">
-  <div class="fleet-insights" aria-label="Fleet overview">
-    <div class="fleet-insight"><span class="fleet-insight__label">Total servers {{ icon('server') }}</span><strong>{{ summary.total }}</strong></div>
-    <div class="fleet-insight"><span class="fleet-insight__label">Running {{ icon('activity') }}</span><strong>{{ summary.running }}</strong></div>
-    <div class="fleet-insight fleet-insight--memory" title="Running-server memory / container limits"><span class="fleet-insight__label">Memory usage {{ icon('memory') }}</span><strong class="fleet-insight__memory">{% if summary.memory %}{{ summary.memory.split(' / ')[0] }}<span class="fleet-insight__suffix"> / {{ summary.memory.split(' / ')[1] }}</span>{% else %}—{% endif %}</strong></div>
-  </div>
-  {% include "_fleet_filters.html" %}
   {% if servers %}
     <div class="fleet-table">
     <div class="fleet-columns" aria-hidden="true"><span>Status</span><span>Server name</span><span>Port</span><span>CPU</span><span>Memory</span><span>Uptime</span><span>Actions</span></div>
@@ -37,6 +31,5 @@
       </div>
     </div>
   {% endif %}
-<p data-fleet-empty class="fleet-no-results" role="status" hidden>{{ icon('search', 20) }}No servers match these filters.<button type="button" class="btn btn--sm" data-fleet-clear>Clear filters</button></p>
 <p class="freshness fleet-freshness">{{ icon('refresh', 12) }} Checked <time data-observed-at="{{ observed_at }}">just now</time></p>
 </div>

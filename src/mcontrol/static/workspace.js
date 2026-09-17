@@ -1,45 +1,5 @@
 (function () {
   "use strict";
-  const menu = document.querySelector("[data-mobile-menu]"), sidebar = document.querySelector("#primary-sidebar"), backdrop = document.querySelector("[data-close-nav]");
-  function nav(open) {
-    document.documentElement.dataset.mobileNav = String(open); backdrop.hidden = !open;
-    menu.setAttribute("aria-expanded", String(open));
-    document.querySelector("#main").inert = open;
-    if (open) sidebar.querySelector("a").focus(); else menu.focus();
-  }
-  menu?.addEventListener("click", () => nav(menu.getAttribute("aria-expanded") !== "true"));
-  backdrop?.addEventListener("click", () => nav(false));
-  document.addEventListener("keydown", e => {
-    if (document.documentElement.dataset.mobileNav !== "true") return;
-    if (e.key === "Escape") { nav(false); e.preventDefault(); }
-    if (e.key === "Tab") {
-      const items = [menu, ...Array.from(sidebar.querySelectorAll('a, button, input')).filter(el => !el.disabled && el.getClientRects().length)];
-      const first = items[0], last = items[items.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-      if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    }
-  });
-  matchMedia("(min-width: 768px)").addEventListener("change", e => { if (e.matches && document.documentElement.dataset.mobileNav === "true") nav(false); });
-  function fleetFilter() {
-    const state = document.querySelector("[data-fleet-state]")?.value || "";
-    let visible = 0;
-    document.querySelectorAll("#fleet .server-card").forEach(row => {
-      row.hidden = !!state && row.querySelector(".state-pill").textContent.trim() !== state;
-      if (!row.hidden) visible++;
-      const link = Array.from(document.querySelectorAll(".sidebar__server")).find(a => a.getAttribute("href") === "/servers/" + row.dataset.name);
-      if (link) { link.title = row.dataset.name + " (" + row.querySelector(".state-pill").textContent.trim() + ")"; link.querySelector(".sidebar__server-dot").className = "sidebar__server-dot sidebar__server-dot--" + row.dataset.state; }
-    });
-    const empty = document.querySelector("[data-fleet-empty]"); if (empty) empty.hidden = visible > 0 || !state;
-    document.querySelectorAll("[data-fleet-filter]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.fleetFilter === state)));
-  }
-  document.addEventListener("click", e => {
-    const chip = e.target.closest("[data-fleet-filter]"), clear = e.target.closest("[data-fleet-clear]");
-    if (!chip && !clear) return;
-    const select = document.querySelector("[data-fleet-state]");
-    if (!select) return;
-    select.value = chip ? chip.dataset.fleetFilter : "";
-    fleetFilter();
-  });
   let rosterQ = "", rosterServer = "", memberQ = "";
   function rosterFilter() {
     const select = document.querySelector("[data-roster-server]"), rows = Array.from(document.querySelectorAll("[data-roster-name]"));
@@ -62,7 +22,6 @@
     const noMembers = document.querySelector("[data-members-empty]"); if (noMembers) noMembers.hidden = members > 0 || !memberQ;
   }
   document.addEventListener("input", e => {
-    if (e.target.matches("[data-fleet-state]")) fleetFilter();
     if (e.target.matches("[data-roster-search]")) { rosterQ = e.target.value; rosterFilter(); }
     if (e.target.matches("[data-roster-server]")) { rosterServer = e.target.value; rosterFilter(); }
     if (e.target.matches("[data-members-search]")) { memberQ = e.target.value; rosterFilter(); }
@@ -87,7 +46,7 @@
   });
   divider?.addEventListener("keydown", e => { if (["ArrowLeft", "ArrowRight"].includes(e.key)) { e.preventDefault(); size(Number(divider.getAttribute("aria-valuenow")) + (e.key === "ArrowRight" ? 20 : -20)); } });
   document.addEventListener("htmx:afterSettle", e => {
-    fleetFilter(); rosterFilter();
+    rosterFilter();
     if (e.detail.target?.id === "file-view" || e.target.id === "file-view") openFile();
   });
   function freshness() {
@@ -99,5 +58,5 @@
     });
   }
   setInterval(() => { if (!document.hidden) freshness(); }, 1000);
-  fleetFilter(); rosterFilter(); openFile();
+  rosterFilter(); openFile();
 })();

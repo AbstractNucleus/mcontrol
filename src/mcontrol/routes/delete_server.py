@@ -114,4 +114,4 @@ async def post(
     # #server-modal slot was the form's swap target; without the
     # redirect we'd swap an empty body into it. The cookie flash lands
     # in #flash-stack on Home.
-    return hx_redirect("/", kind="ok", message=f"Deleted {name} (moved to Trash).")
+    return hx_redirect("/", kind="ok", message=f"Deleted {name} (files preserved on disk).")

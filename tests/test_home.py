@@ -1,5 +1,3 @@
-import re
-
 import pytest
 
 
@@ -67,16 +65,13 @@ async def test_home_lists_servers_when_present(client, fake_servers, fake_stats)
     body = response.text
     assert "atm10" in body
     assert "monifactory" in body
-    assert "running" in body
     assert "Unavailable" in body
     assert "No servers yet" not in body
 
 
-async def test_sidebar_lists_servers(client, fake_servers, fake_stats):
-    """The left rail is populated from request.state (prefetched off the
-    render path by the _prime_sidebar middleware), not a blocking DB call
-    inside the Jinja global. Assert the server appears specifically inside
-    the <aside class="sidebar"> block, not just anywhere on the page."""
+async def test_sidebar_lists_dashboard_instead_of_individual_servers(
+    client, fake_servers, fake_stats
+):
     fake_servers.append({"name": "atm10", "state": "running"})
 
     response = await client.get("/", headers={"Accept": "text/html"})
@@ -84,7 +79,11 @@ async def test_sidebar_lists_servers(client, fake_servers, fake_stats):
     assert response.status_code == 200
     body = response.text
     aside = body[body.index('<aside id="primary-sidebar"') : body.index("</aside>")]
-    assert 'sidebar__server-name">atm10' in aside
+    assert "Dash" in aside
+    assert "mcontrol" in aside
+    assert "atm10" not in aside
+    assert 'href="/players"' not in aside
+    assert 'href="/trash"' not in aside
 
 
 async def test_home_links_each_server_to_detail_page(client, fake_servers, fake_stats):
@@ -113,9 +112,7 @@ def _row_block(html: str, name: str) -> str:
 
     Cards are rendered in db-row order; we slice from the row's name
     anchor to the next card start (or list end) so per-row assertions
-    can target the right block. Anchors on ``class="server-card__name"``
-    rather than the bare ``href`` because the sidebar (rendered into
-    every page) also links each server by ``href="/servers/{name}"``.
+    can target the right block.
     """
     anchor = f'class="server-card__name" href="/servers/{name}"'
     start = html.index(anchor)
@@ -217,29 +214,6 @@ async def test_home_fleet_row_targets_closest_li(
     block = _row_block(response.text, "foo.bar")
     assert 'hx-target="closest li"' in block
     assert 'hx-target="#fleet-row-foo.bar"' not in block
-
-
-async def test_home_summary_running_uses_live_stats_not_db(
-    client, fake_servers, fake_stats
-):
-    """DB says ghost is running but Docker has no container; atm10 is
-    live even though the row still says exited."""
-    fake_servers.append({"name": "ghost", "state": "running"})
-    fake_servers.append({"name": "atm10", "state": "exited"})
-    fake_stats["atm10"] = {
-        "status": "ok",
-        "cpu_percent": 1.0,
-        "mem_used": 1024,
-        "mem_limit": 2048,
-    }
-
-    body = (await client.get("/")).text
-
-    metrics = dict(re.findall(
-        r'<span class="fleet-insight__label">(Total servers|Running).*?</span>'
-        r'<strong>(\d+)</strong>', body, re.DOTALL,
-    ))
-    assert metrics == {"Total servers": "2", "Running": "1"}
 
 
 async def test_prime_sidebar_skips_when_accept_lacks_html(

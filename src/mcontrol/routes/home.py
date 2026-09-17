@@ -44,8 +44,6 @@ def _row_view(row: dict, stats: object) -> dict:
         **row,
         "memory": _format_memory(stats),
         "cpu": f"{stats['cpu_percent']:.1f} %" if ok else None,
-        "mem_used": stats["mem_used"] if ok else 0,
-        "mem_limit": stats["mem_limit"] if ok else 0,
         "started_at": stats.get("started_at") if ok else None,
         "port": (row.get("variables") or {}).get("port"),
     }
@@ -93,26 +91,10 @@ async def home(
         for row, stats in zip(servers, stats_results, strict=True)
     ]
 
-    mem_limit = sum(r["mem_limit"] for r in rows)
-    summary = {
-        "total": len(rows),
-        "running": sum(
-            1
-            for stats in stats_results
-            if isinstance(stats, dict) and stats.get("status") == "ok"
-        ),
-        "memory": (
-            f"{resources.format_bytes(sum(r['mem_used'] for r in rows))}"
-            f" / {resources.format_bytes(mem_limit)}"
-            if mem_limit
-            else None
-        ),
-    }
-
     return templates.TemplateResponse(
         request=request,
         name="_fleet.html" if request.url.path == "/fleet/status" else "home.html",
-        context={"servers": rows, "summary": summary, "observed_at": datetime.now(UTC).isoformat()},
+        context={"servers": rows, "observed_at": datetime.now(UTC).isoformat()},
     )
 
 

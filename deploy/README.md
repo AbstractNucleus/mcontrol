@@ -1,134 +1,65 @@
-# deploy/
+# Deployment
 
-What bserver needs to run mcontrol. `compose.yml` here gets copied to
-`/home/abstract/deploy/mcontrol/` and lives next to a `.env`.
+The hosted app pulls `ghcr.io/abstractnucleus/mcontrol` using `deploy/compose.yml`. The repo-root `docker-compose.yml` builds from source for local development. Both use the Compose project name `mcontrol`; keep their ports and mounts consistent.
 
-The server holds no source and no build cache — it pulls the image that
-`.github/workflows/publish-image.yml` publishes to `ghcr.io`.
+The configured host is `bserver`, with Compose files in `/home/abstract/deploy/mcontrol`. The existing address is https://mcontrol.noelkleen.com. Moving to `dash.noelkleen.com` is a separate deployment change.
 
-## One-time setup
+## Host configuration
 
-The order matters. A package's visibility cannot be set before the package
-exists, and the package does not exist until the workflow has run once.
+Copy `deploy/compose.yml` to the deployment directory and preserve the host's existing `.env`. A new host needs these values:
 
-**1. Push to `main`.** `publish-image.yml` runs and creates
-`ghcr.io/abstractnucleus/mcontrol`.
+| Key | Purpose |
+| --- | --- |
+| `TAG` | Published `sha-<short commit>` tag; `latest` is also available |
+| `SUPABASE_URL` | Supabase endpoint |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-side Supabase credential |
+| `SERVER_BASE_PATH` | Minecraft server directory; `/home/abstract/servers/minecraft` on bserver |
+| `HOST_BIND_IP` | Interface used by the reverse proxy; `100.124.22.82` on bserver |
 
-**2. Wait for the run to go green.** `gh run watch`
+`SERVER_BASE_PATH` must be the same absolute path inside and outside the container. Discovery scans its immediate subdirectories. Do not point it at a parent containing unrelated applications.
 
-**3. Check the package is publicly pullable.** bserver holds no registry
-credentials, so it can only pull anonymously. On the first publish this came
-out public on its own — but check rather than assume, because a private
-package is the one failure that stops the pilot dead:
+The app mounts that directory and `/var/run/docker.sock` read-write. It listens on container port 8000 and host port 8003. Terminate TLS and enforce access control at the upstream reverse proxy. The Supabase schema is maintained outside this repository.
 
-```
-TOK=$(curl -s "https://ghcr.io/token?scope=repository:abstractnucleus/mcontrol:pull&service=ghcr.io" \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
-curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOK" \
-  -H "Accept: application/vnd.oci.image.index.v1+json" \
-  https://ghcr.io/v2/abstractnucleus/mcontrol/manifests/latest
-```
+## Publish and update
 
-The `Accept` header is not optional. buildx publishes an OCI image index, and
-without a header advertising that type the registry answers `404` for a tag
-that is live and public — a false negative that sends you to the settings
-page for no reason.
+1. Run the checks in [CONTRIBUTING.md](../CONTRIBUTING.md), including browser checks for UI changes.
+2. Push the reviewed commit to `main`. `.github/workflows/publish-image.yml` tests and publishes the Linux amd64 image. Record the exact `sha-<short commit>` tag from its run summary.
+3. Confirm the host can pull the image. The current setup uses a public GHCR package and no registry credentials on bserver.
+4. Record the running image revision and current `TAG` before updating:
 
-`200` means bserver can pull. If you ever see `403`, the package is private:
+   ```sh
+   cd /home/abstract/deploy/mcontrol
+   docker compose images
+   docker inspect mcontrol-app-1 --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
+   ```
 
-<https://github.com/users/AbstractNucleus/packages/container/mcontrol/settings>
-→ Danger Zone → Change visibility → Public.
+5. Set `TAG` in the host's `.env` to the selected published tag, then run:
 
-Prefer that over `docker login ghcr.io` on bserver. The repo is already
-public so a private image hides nothing, while a PAT would sit in plaintext
-at `/home/abstract/.docker/config.json` on a host that today stores no
-credentials and has no credential helper. There is no `gh api` shortcut
-unless you first run `gh auth refresh -s write:packages`.
+   ```sh
+   docker compose pull
+   docker compose up -d --wait
+   docker compose ps
+   ```
 
-**4. Stage the deploy directory (new hosts only).** The current host is
-already configured. Preserve its existing `.env`. When migrating another
-host, copy its configured `.env` from its actual deployment location.
+6. Verify `/healthz`, the image revision, and the app in the browser. For mcontrol, check fleet status, a running and stopped server, console connections, file viewing, roster, and Settings. Use fixtures for test writes rather than live servers.
 
-```
-ssh bserver
-mkdir -p /home/abstract/deploy/mcontrol
-# Copy the configured .env from the actual previous deployment location.
-echo 'TAG=latest' >> /home/abstract/deploy/mcontrol/.env
-```
-
-Then copy `compose.yml` from this directory to
-`/home/abstract/deploy/mcontrol/compose.yml`.
-
-**5. Cut over.** Only now:
-
-```
-cd /home/abstract/deploy/mcontrol
-docker compose pull
-docker compose up -d --wait
-```
-
-`--wait` blocks until the healthcheck passes, so a broken image fails at your
-prompt instead of crash-looping quietly behind nginx.
-
-## The .env
-
-Reference only — step 4 copies the real one. Do not hand-write these.
-
-| Key | Notes |
-|---|---|
-| `TAG` | `latest`, or `sha-<short commit>` to pin a build |
-| `SUPABASE_URL` | shared supabase-server |
-| `SUPABASE_SERVICE_ROLE_KEY` | server-side only |
-| `SERVER_BASE_PATH` | **`/home/abstract/servers/minecraft`** on bserver |
-| `HOST_BIND_IP` | `100.124.22.82`, the tailscale IP nginx reaches |
-
-`SERVER_BASE_PATH` is the dangerous one. It is both sides of the bind mount
-*and* the directory `discovery.py` walks to register servers. Set it one level
-too high and mcontrol writes junk rows into the production Supabase table,
-stops refreshing state on the real servers, and scaffolds new ones into the
-wrong directory — all without erroring.
-
-## Deploy
-
-```
-cd /home/abstract/deploy/mcontrol
-docker compose pull
-docker compose up -d --wait
-```
+`/healthz` checks Supabase, Docker, and the server-directory mount. A degraded subsystem returns 503. `--wait` reports a failed health check instead of silently leaving an unhealthy deployment.
 
 ## Rollback
 
-Every build is tagged `sha-<short commit>`. Set `TAG` in the server's `.env`
-to an earlier one and run the same two commands. No rebuild, no checkout.
+Restore the previous published SHA tag in the host's `.env`, then repeat `docker compose pull` and `docker compose up -d --wait`. Verify health and revision again. No source checkout or build on the host is needed.
 
-To find the tag, read the workflow run — the summary prints every tag it
-pushed:
+Find published tags in the workflow summary:
 
-```
+```sh
 gh run list --workflow publish-image.yml
 gh run view <run-id>
 ```
 
-`docker image ls` on bserver is not a reliable source: only tags that have
-actually been pulled to that host appear, which on day one is just `latest`.
+Local `docker image ls` only shows images already pulled to that host.
 
-## Host location verified September 7, 2026
+## First publish
 
-The live compose directory is `/home/abstract/deploy/mcontrol` on bserver.
-The old `/home/abstract/repos/mcontrol` checkout is absent. Older `/deploy`
-skill host notes still refer to it; use this image workflow for releases.
-The existing Tailnet-facing URL is https://mcontrol.noelkleen.com.
+The GHCR package exists only after the workflow has published once. Check anonymous pulling from a machine without registry credentials. If the package is private, its visibility is managed in [GitHub package settings](https://github.com/users/AbstractNucleus/packages/container/mcontrol/settings).
 
-For the workspace redesign, use [UI_REDESIGN_RELEASE.md](UI_REDESIGN_RELEASE.md)
-for verification and rollback preparation.
-
-## Keeping this file in step
-
-`compose.yml` here and `docker-compose.yml` at the repo root describe the same
-service two ways — one pulls, one builds. Change a port or add a service in
-one and you must mirror it in the other. They are in the same repo so the diff
-shows up in the same review.
-
-Both files set `name: mcontrol`. The image `CMD` is
-`/app/.venv/bin/uvicorn` (the venv from `uv sync`); it does not run
-`uv run` at container start.
+The container starts `/app/.venv/bin/uvicorn` directly. It does not install dependencies at startup.

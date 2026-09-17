@@ -1,9 +1,9 @@
 // Shared focus-trap + lifecycle for overlay modal dialogs (issue #110).
 //
-// Every overlay modal (player-remove, trash-empty, trash-delete) is server-
-// rendered into a slot (#player-modal, #trash-modal) by htmx, then removed
+// Every overlay modal (player-remove, server-delete) is server-
+// rendered into a slot (#player-modal, #server-modal) by htmx, then removed
 // by either a Cancel button, an Escape press, or a swap that replaces the
-// slot. The three modals already carry role="dialog" + aria-modal +
+// slot. The modals already carry role="dialog" + aria-modal +
 // aria-labelledby; this module wires the behavioural half:
 //
 //   - move focus into the modal on open (first focusable, or the title
@@ -11,7 +11,7 @@
 //   - cycle Tab/Shift+Tab within the modal's focusables (focus trap)
 //   - close on Escape
 //   - return focus to the element that opened the modal. falling back to
-//     document.body if that element is gone (e.g. swapped-out trash row)
+//     document.body if that element is gone (e.g. removed server)
 //
 // Modal roots opt in by carrying [data-modal-root]. Cancel buttons opt in
 // by carrying [data-modal-close]; htmx forms that close the modal by
@@ -144,7 +144,7 @@
   document.body.addEventListener("htmx:beforeRequest", (evt) => {
     const target = evt.detail && evt.detail.target;
     if (!target || !target.id) return;
-    if (target.id !== "player-modal" && target.id !== "trash-modal" && target.id !== "server-modal") return;
+    if (target.id !== "player-modal" && target.id !== "server-modal") return;
     let elt = evt.detail.elt || document.activeElement;
     // When opened from a <details> menu we close on activation, restore
     // focus to the always-visible summary, not the about-to-be-hidden item.
@@ -161,7 +161,7 @@
   document.body.addEventListener("htmx:afterSwap", (evt) => {
     const target = evt.detail && evt.detail.target;
     if (!target || !target.id) return;
-    if (target.id !== "player-modal" && target.id !== "trash-modal" && target.id !== "server-modal") return;
+    if (target.id !== "player-modal" && target.id !== "server-modal") return;
     const root = target.querySelector(":scope > [data-modal-root]");
     if (root) {
       initModal(root);

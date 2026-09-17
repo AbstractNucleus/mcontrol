@@ -326,8 +326,8 @@ async def test_post_flash_appears_on_home_after_redirect(
 
     home = await app_client.get("/", headers={"Accept": "text/html"})
     assert home.status_code == 200
-    assert "Deleted newshire (moved to Trash)." in home.text
+    assert "Deleted newshire (files preserved on disk)." in home.text
     assert "flash-msg--ok" in home.text
 
     again = await app_client.get("/", headers={"Accept": "text/html"})
-    assert "Deleted newshire (moved to Trash)." not in again.text
+    assert "Deleted newshire (files preserved on disk)." not in again.text

@@ -2,8 +2,6 @@
 
     uv run uvicorn dev_mock:app --reload --port 8000
 
-or start the ``mcontrol-mock`` config from .claude/launch.json.
-
 This installs an in-memory DB store and a FakeDocker onto the real infra
 modules, seeds a small fleet (both in the DB and on disk under
 SERVER_BASE_PATH), then builds the app via the unmodified ``create_app``.

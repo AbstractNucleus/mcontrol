@@ -1,4 +1,4 @@
-/* mcontrol: component CSS. All colour, type, spacing, and motion values
+/* Dash shell CSS. All colour, type, spacing, and motion values
    come from tokens.css. Claude-flavoured theme, semantic-token-only consumption.
    ========================================================================= */
 
@@ -163,6 +163,48 @@
   scrollbar-width: thin;
 }
 
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-2) var(--space-4);
+  color: var(--fg-primary);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.sidebar__brand:hover {
+  color: var(--fg-primary);
+}
+
+.sidebar__brand-mark {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--brand-fg);
+  background: var(--brand-bg);
+}
+
+.sidebar__brand-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: var(--lh-snug);
+}
+
+.sidebar__brand-copy strong {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.sidebar__brand-copy span {
+  color: var(--fg-muted);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
 .sidebar__nav-link {
   display: flex;
   align-items: center;
@@ -207,99 +249,20 @@
   text-overflow: ellipsis;
 }
 
-.sidebar__nav-count {
-  flex: none;
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  color: var(--fg-muted);
-}
-
 [data-sidebar="collapsed"] .sidebar__nav-link {
   justify-content: center;
   padding: 7px;
 }
 
 [data-sidebar="collapsed"] .sidebar__nav-label,
-[data-sidebar="collapsed"] .sidebar__nav-count,
-[data-sidebar="collapsed"] .sidebar__servers,
-[data-sidebar="collapsed"] .sidebar__empty,
-[data-sidebar="collapsed"] .sidebar__nav-link .topnav__badge {
+[data-sidebar="collapsed"] .sidebar__brand-copy {
   display: none;
 }
 
-/* Server quick-list, nested under the Servers nav item. The left rail +
-   indent read the rows as children of Servers, so there is one "Servers"
-   group rather than a nav link plus a separate duplicate section. Caps its
-   own height and scrolls internally so Players/Trash stay in view. */
-.sidebar__servers {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  max-height: 42vh;
-  overflow-y: auto;
-  /* Hide scrollbar chrome unless the list overflows. */
-  scrollbar-width: thin;
-}
-
-.sidebar__server {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 9px var(--space-3);
-  border-radius: var(--radius-sm);
-  color: var(--fg-secondary);
-  font-family: var(--font-sans);
-  font-size: var(--fs-sm);
-  text-decoration: none;
-  transition: color var(--motion-fast) var(--ease),
-              background var(--motion-fast) var(--ease);
-}
-
-.sidebar__server:hover {
-  color: var(--fg-primary);
-  background: var(--bg-sunken);
-}
-
-.sidebar__server[aria-current="page"] {
-  color: var(--fg-primary);
-  background: var(--bg-surface);
-}
-
-.sidebar__server-dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: var(--radius-full);
-  background: var(--fg-muted);
-}
-
-/* State-coloured dots: mirror the state-pill colour mapping but as a
-   plain swatch so the row stays a single line of mono. */
-.sidebar__server-dot--running    { background: var(--success-fg); }
-.sidebar__server-dot--exited,
-.sidebar__server-dot--dead       { background: var(--danger-fg); }
-.sidebar__server-dot--restarting,
-.sidebar__server-dot--starting,
-.sidebar__server-dot--pending,
-.sidebar__server-dot--removing   { background: var(--warning-fg); }
-.sidebar__server-dot--paused     { background: var(--info-fg); }
-.sidebar__server-dot--missing    { background: var(--fg-muted); }
-
-.sidebar__server-name {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sidebar__empty {
-  margin: 2px 0 var(--space-3);
-  padding: 2px var(--space-3) 2px calc(var(--space-6) + var(--space-1));
+[data-sidebar="collapsed"] .sidebar__brand {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 /* Pushes the footer to the bottom now that the server list no longer
@@ -410,6 +373,76 @@
   gap: var(--space-8);
 }
 
+.mobile-header {
+  display: none;
+}
+
+.page-symbol {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  color: var(--fg-secondary);
+}
+
+.page-symbol--large {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-lg);
+}
+
+.page-symbol--danger {
+  background: var(--danger-bg);
+  border-color: transparent;
+  color: var(--danger-fg);
+}
+
+.error-page {
+  display: grid;
+  gap: var(--space-4);
+  align-content: center;
+  justify-items: center;
+  min-height: 65dvh;
+  padding: var(--space-12) var(--space-5);
+  text-align: center;
+}
+
+.error-page__code {
+  margin: var(--space-4) 0 0;
+  color: var(--fg-primary);
+  font-size: clamp(60px, 8vw, 96px);
+  font-weight: 600;
+  letter-spacing: -0.06em;
+  line-height: 1;
+}
+
+.error-page__title {
+  margin: 0;
+  color: var(--fg-primary);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+}
+
+.error-page__body {
+  max-width: 44ch;
+  margin: 0 auto;
+  color: var(--fg-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.65;
+}
+
+.error-page__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
 /* Cross-document view transitions: content cross-fades on navigation while
    the rail holds still. Progressive enhancement — unsupported browsers get
    plain navigation. Scoped inside the motion media query because the global
@@ -452,9 +485,7 @@
     --sidebar-width: var(--sidebar-width-collapsed);
   }
   :root:not([data-sidebar="expanded"]) .sidebar__nav-label,
-  :root:not([data-sidebar="expanded"]) .sidebar__nav-count,
-  :root:not([data-sidebar="expanded"]) .sidebar__servers,
-  :root:not([data-sidebar="expanded"]) .sidebar__empty {
+  :root:not([data-sidebar="expanded"]) .sidebar__brand-copy {
     display: none;
   }
   :root:not([data-sidebar="expanded"]) .sidebar__nav-link {
@@ -521,39 +552,12 @@
 }
 
 
-/* ---- Sidebar count badge (kept from the retired topnav so the Trash
-   tombstone-count chip in _sidebar.html keeps the same look + tests) -- */
-.topnav__badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  margin-left: 4px;
-  border-radius: var(--radius-full);
-  background: var(--accent-soft);
-  color: var(--accent-on-soft);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-
-
 /* Workspace navigation and page hierarchy. */
 .ui-icon { display: inline-block; flex: none; vertical-align: middle; }
 .page-heading { display: flex; justify-content: space-between; align-items: center; gap: var(--space-5); flex-wrap: wrap; margin-bottom: var(--space-8); }
 .page-description { color: var(--fg-muted); font-size: var(--fs-sm); line-height: 1.65; margin: var(--space-2) 0 0; max-width: 65ch; }
 .sidebar__caption { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-weight: 500; color: var(--fg-muted); margin: 0; padding: 0 var(--space-3) var(--space-2); }
-.sidebar__caption--servers { margin-top: var(--space-6); }
-.sidebar__caption a { width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--radius-xs); color: var(--fg-muted); }
-.sidebar__caption a:hover { background: var(--bg-surface); color: var(--fg-primary); }
 .sidebar__nav-link > .ui-icon { color: var(--fg-muted); }
-.sidebar__nav-count { min-width: 21px; text-align: center; background: var(--bg-sunken); border-radius: var(--radius-xs); }
-.sidebar__server-dot--exited, .sidebar__server-dot--created { background: var(--fg-muted); }
 .sidebar__footer { border: 0; padding: 0 var(--space-1); }
 .sidebar__collapse { width: 32px; height: 32px; }
 [data-sidebar="collapsed"] .sidebar__caption { display: none; }
@@ -561,6 +565,62 @@
   :root:not([data-sidebar="expanded"]) .sidebar__caption { display: none; }
 }
 @media (max-width: 767px) {
+  .mobile-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    height: 60px;
+    padding: var(--space-2) var(--space-4);
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--bg-page);
+    font-weight: 600;
+  }
+  .app-shell { display: block; }
+  .page-main,
+  [data-sidebar] .page-main {
+    width: 100%;
+    margin-left: 0;
+    padding: var(--space-4);
+  }
+  .sidebar,
+  [data-sidebar] .sidebar { display: none; }
+  :root[data-mobile-nav="true"] .sidebar {
+    position: fixed;
+    top: 60px;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    display: flex;
+    width: min(300px, 85vw);
+    height: calc(100dvh - 60px);
+    padding: var(--space-4);
+    background: var(--bg-surface);
+  }
+  :root[data-mobile-nav="true"] .sidebar__nav-label,
+  :root[data-mobile-nav="true"] .sidebar__brand-copy,
+  :root[data-mobile-nav="true"] .sidebar__caption,
+  :root[data-mobile-nav="true"] .sidebar__hint { display: block; }
+  :root[data-mobile-nav="true"] .sidebar__footer {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+  :root[data-mobile-nav="true"] .sidebar__caption { display: flex; }
+  :root[data-mobile-nav="true"] .sidebar__nav-link {
+    justify-content: flex-start;
+    gap: var(--space-3);
+  }
+  .sidebar__collapse,
+  .sidebar__resize-handle { display: none; }
+  .nav-backdrop {
+    position: fixed;
+    inset: 60px 0 0;
+    z-index: 45;
+    border: 0;
+    background: var(--overlay-scrim-strong);
+  }
   .page-heading { margin-bottom: var(--space-6); }
   :root[data-mobile-nav="true"] .sidebar__caption { display: flex; }
 }

@@ -65,13 +65,13 @@ def make_fake_docker() -> MagicMock:
 
 @pytest.fixture
 def fake_docker_factory(monkeypatch):
-    """Patch ``mcontrol.main.aiodocker.Docker`` so lifespan startup uses
+    """Patch the mcontrol dashboard's Docker factory so lifespan startup uses
     a fake. The same fake instance is returned to the test so it can
     attach more specific behaviour."""
-    from mcontrol import main as main_mod
+    from mcontrol import mcontrol_dashboard
 
     fake = make_fake_docker()
-    monkeypatch.setattr(main_mod.aiodocker, "Docker", lambda *_a, **_kw: fake)
+    monkeypatch.setattr(mcontrol_dashboard.aiodocker, "Docker", lambda *_a, **_kw: fake)
     return fake
 
 

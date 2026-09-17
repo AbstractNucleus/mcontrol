@@ -142,9 +142,69 @@
     }
   }
 
+  function initMobileDrawer() {
+    var menu = document.querySelector("[data-mobile-menu]");
+    var sidebar = document.querySelector("#primary-sidebar");
+    var backdrop = document.querySelector("[data-close-nav]");
+    var main = document.querySelector("#main");
+    if (!menu || !sidebar || !backdrop || !main) return;
+
+    function setOpen(open) {
+      document.documentElement.dataset.mobileNav = String(open);
+      backdrop.hidden = !open;
+      menu.setAttribute("aria-expanded", String(open));
+      main.inert = open;
+      if (open) {
+        var firstLink = sidebar.querySelector("a");
+        if (firstLink) firstLink.focus();
+      } else {
+        menu.focus();
+      }
+    }
+
+    menu.addEventListener("click", function () {
+      setOpen(menu.getAttribute("aria-expanded") !== "true");
+    });
+    backdrop.addEventListener("click", function () { setOpen(false); });
+    document.addEventListener("keydown", function (event) {
+      if (document.documentElement.dataset.mobileNav !== "true") return;
+      if (event.key === "Escape") {
+        setOpen(false);
+        event.preventDefault();
+      }
+      if (event.key === "Tab") {
+        var items = [menu].concat(Array.from(
+          sidebar.querySelectorAll("a, button, input")
+        ).filter(function (element) {
+          return !element.disabled && element.getClientRects().length;
+        }));
+        var first = items[0];
+        var last = items[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        }
+        if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    });
+    var media = window.matchMedia("(min-width: 768px)");
+    var closeAtDesktop = function (event) {
+      if (event.matches && document.documentElement.dataset.mobileNav === "true") {
+        setOpen(false);
+      }
+    };
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", closeAtDesktop);
+    }
+  }
+
   function init() {
     initResize();
     initCollapse();
+    initMobileDrawer();
   }
 
   if (document.readyState === "loading") {
