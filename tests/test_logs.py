@@ -156,3 +156,28 @@ async def test_logs_endpoint_uses_container_name_override(client, fake_get_serve
             pass
 
     assert seen == ["atm10-prod"]
+
+
+async def test_multiline_docker_frame_preserves_rows_and_indentation(
+    client, fake_get_server, fake_logs
+):
+    fake_get_server["atm10"] = {"name": "atm10", "container_name": None, "dir": "/srv/atm10"}
+    fake_logs.append(
+        "[INFO] <Notch> hello\r\n[WARN] slow tick\n"
+        "\tat example.Server.tick(Server.java:42)\n\n[ERROR] failed\r\n"
+    )
+    text = await _stream_text(client, "/servers/atm10/logs")
+    events = text.split("\n\n")
+    expected = [
+        ('log-line', '[INFO] &lt;Notch&gt; hello'),
+        ('log-line log-line--warn', '[WARN] slow tick'),
+        ('log-line', '\tat example.Server.tick(Server.java:42)'),
+        ('log-line', ''),
+        ('log-line log-line--error', '[ERROR] failed'),
+    ]
+    for index, (css, line) in enumerate(expected, 1):
+        assert events[index - 1] == (
+            f'id: {index}\ndata: <span class="{css}">{line}</span>\ndata: '
+        )
+    assert events[5].startswith('id: 6\ndata: ')
+    assert 'log stream ended' in events[5]

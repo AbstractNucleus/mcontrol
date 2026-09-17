@@ -7,33 +7,35 @@
         hx-post="/servers/{{ server.name }}/variables"
         hx-target="#variables"
         hx-swap="outerHTML">
-    <label>
-      <span class="t-eyebrow">Memory budget (GB)</span>
-      <input type="number"
+    <div class="settings-field">
+      <label for="runtime-memory_budget_gb">Memory budget (GB)</label>
+      <input id="runtime-memory_budget_gb" type="number"
              name="memory_budget_gb"
              min="{{ memory_min_gb }}"
              value="{{ vars.memory_budget_gb if vars.memory_budget_gb is not none else '' }}"
              autofocus
              required>
-      <small class="t-muted">Jar startup reserves 2 GB outside the Java heap.</small>
-      {% if errors.memory_budget_gb %}<small class="variables-form__error">{{ errors.memory_budget_gb }}</small>{% endif %}
-    </label>
 
-    <label>
-      <span class="t-eyebrow">Port</span>
-      <input type="number"
+      {% if errors.memory_budget_gb %}<small class="variables-form__error">{{ errors.memory_budget_gb }}</small>{% endif %}
+
+      <details class="settings-help"><summary>Help</summary><small class="t-muted">Jar startup reserves 2 GB outside the Java heap.</small></details>
+    </div>
+
+    <div class="settings-field">
+      <label for="runtime-port">Port</label>
+      <input id="runtime-port" type="number"
              name="port"
              min="1024"
              max="65535"
              value="{{ vars.port if vars.port is not none else '' }}"
              required>
       {% if errors.port %}<small class="variables-form__error">{{ errors.port }}</small>{% endif %}
-    </label>
+    </div>
 
-    <label>
-      <span class="t-eyebrow">Server jar filename</span>
+    <div class="settings-field">
+      <label for="runtime-server_jar">Server jar filename</label>
       {% set selected_jar = vars.server_jar or '' %}
-      <select name="server_jar">
+      <select id="runtime-server_jar" name="server_jar">
         {% if selected_jar and selected_jar not in jar_options %}
           <option value="{{ selected_jar }}" selected>{{ selected_jar }} (current)</option>
         {% elif not selected_jar %}
@@ -45,40 +47,48 @@
       </select>
       {% if not jar_options %}<small class="t-muted">Add a .jar file to this server's <code>server/</code> subfolder, then reopen this form.</small>{% endif %}
       {% if errors.server_jar %}<small class="variables-form__error">{{ errors.server_jar }}</small>{% endif %}
-      <small class="t-muted">Required unless using a custom start script.</small>
-    </label>
 
-    <label>
-      <span class="t-eyebrow">Custom start script (optional)</span>
-      <input type="text"
+
+      <details class="settings-help"><summary>Help</summary><small class="t-muted">Required unless using a custom start script.</small></details>
+    </div>
+
+    <div class="settings-field">
+      <label for="runtime-custom_start_script">Custom start script (optional)</label>
+      <input id="runtime-custom_start_script" type="text"
              name="custom_start_script"
              value="{{ vars.custom_start_script or '' }}"
              placeholder="run.sh"
              autocomplete="off"
              {% if errors.custom_start_script %}aria-invalid="true"{% endif %}>
-      <small class="t-muted">Relative Linux .sh path inside <code>server/</code>. Replaces jar startup and controls Java heap and JVM args; set them below the memory budget. Leave blank to use the jar. Windows .bat scripts are not supported; start_server.sh is managed by mcontrol.</small>
-      {% if errors.custom_start_script %}<small class="variables-form__error">{{ errors.custom_start_script }}</small>{% endif %}
-    </label>
 
-    <label>
-      <span class="t-eyebrow">Java version</span>
-      <select name="java_version" required>
+      {% if errors.custom_start_script %}<small class="variables-form__error">{{ errors.custom_start_script }}</small>{% endif %}
+
+      <details class="settings-help"><summary>Help</summary><small class="t-muted">Relative Linux .sh path inside <code>server/</code>. Replaces jar startup and controls Java heap and JVM args; set them below the memory budget. Leave blank to use the jar. Windows .bat scripts are not supported; start_server.sh is managed by mcontrol.</small></details>
+    </div>
+
+    <div class="settings-field">
+      <label for="runtime-java_version">Java version</label>
+      <select id="runtime-java_version" name="java_version" required>
         {% for v in java_versions %}
           <option value="{{ v }}"{% if (vars.java_version or default_java_version) == v %} selected{% endif %}>{{ v }}</option>
         {% endfor %}
       </select>
-      <small class="t-muted">Minecraft 1.20.5–1.21.x need Java 21; 26.x needs Java 25; ≤1.20.4 works with 17</small>
-      {% if errors.java_version %}<small class="variables-form__error">{{ errors.java_version }}</small>{% endif %}
-    </label>
 
-    <label>
-      <span class="t-eyebrow">JVM extra args (optional)</span>
-      <input type="text"
+      {% if errors.java_version %}<small class="variables-form__error">{{ errors.java_version }}</small>{% endif %}
+
+      <details class="settings-help"><summary>Help</summary><small class="t-muted">Minecraft 1.20.5–1.21.x need Java 21; 26.x needs Java 25; ≤1.20.4 works with 17</small></details>
+    </div>
+
+    <div class="settings-field">
+      <label for="runtime-jvm_extra_args">JVM extra args (optional)</label>
+      <input id="runtime-jvm_extra_args" type="text"
              name="jvm_extra_args"
              value="{{ vars.jvm_extra_args or '' }}"
              autocomplete="off">
-      <small class="t-muted">Used for jar startup. With a custom script, configure JVM args in the pack's files.</small>
-    </label>
+
+
+      <details class="settings-help"><summary>Help</summary><small class="t-muted">Used for jar startup. With a custom script, configure JVM args in the pack's files.</small></details>
+    </div>
 
     <div class="variables-form__actions">
       <button type="submit" class="btn btn--primary">Save</button>

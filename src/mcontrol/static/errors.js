@@ -38,7 +38,9 @@
     }
     const notice = document.createElement("div"); notice.className = "request-notice"; notice.setAttribute("role", "status");
     const text = document.createElement("span");
-    const label = d.elt?.dataset.asyncLabel;
+    const label = d.elt?.dataset.asyncLabel
+      || target.closest('.panel')?.querySelector('.panel__title')?.textContent
+      || ({'server-resources': 'Server status', 'server-disk': 'Disk usage', 'fleet': 'Servers', 'online-chip': 'Players'})[target.id];
     text.textContent = (label ? label + ": " : "") + message;
     notice.append(text);
     if (verb === "get") {
@@ -56,9 +58,13 @@
       const status = document.querySelector("[data-membership-status]");
       if (status) status.textContent = "Change failed. Previous access kept.";
     }
-    // Notices sit outside swap targets, preserving the last successful content.
-    const anchor = target.closest(".panel") || target;
-    anchor.insertAdjacentElement("afterend", notice);
+    const dismiss = document.createElement("button");
+    dismiss.className = "flash-msg__dismiss"; dismiss.type = "button";
+    dismiss.setAttribute("aria-label", "Dismiss notification"); dismiss.textContent = "\u00d7";
+    dismiss.addEventListener("click", () => { notice.remove(); notices.delete(keyOf(target)); });
+    notice.append(dismiss);
+    // Keep persistent failures and Retry outside the workspace grid and swap targets.
+    document.getElementById("flash-stack").append(notice);
     notices.set(keyOf(target), notice);
   }
   document.addEventListener("htmx:configRequest", evt => {

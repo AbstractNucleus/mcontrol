@@ -3,7 +3,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-5);
-  padding-bottom: var(--space-5);
+  padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -23,6 +23,7 @@
   color: var(--accent-text);
   background: var(--accent-soft);
   border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-inset);
 }
 
 .mcontrol-nav__copy {
@@ -51,8 +52,9 @@
   gap: var(--space-1);
   padding: var(--space-1);
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  background: var(--bg-control);
+  box-shadow: var(--shadow-inset);
 }
 
 .mcontrol-nav__links a {
@@ -75,7 +77,7 @@
 
 .mcontrol-nav__links a[aria-current="page"] {
   color: var(--fg-primary);
-  background: var(--bg-sunken);
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-sm);
 }
 
@@ -86,9 +88,9 @@
 .mcontrol-nav__count {
   min-width: 20px;
   padding: 0 var(--space-1);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   color: var(--fg-muted);
-  background: var(--bg-page);
+  background: var(--bg-control);
   font-size: var(--fs-xs);
   text-align: center;
 }

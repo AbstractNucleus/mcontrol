@@ -7,6 +7,7 @@ mtime-checked atomic edit (when offline).
 
   GET  /servers/{name}/players                          → render card
   POST /servers/{name}/players                          → add from roster (whitelist-only)
+  POST /servers/{name}/players/{uuid}/remove            → remove from this server
   POST /servers/{name}/players/{uuid}/whitelist         → toggle whitelist
   POST /servers/{name}/players/{uuid}/op                → toggle op
 
@@ -170,6 +171,109 @@ async def add_from_roster(
         enabled=True,
     )
     return await _card(request, server, flash=flash)
+
+
+@router.post(
+    "/servers/{name}/players/{uuid}/remove", response_class=HTMLResponse
+)
+async def remove_from_server(
+    request: Request,
+    server: dict = Depends(get_server_or_404),
+    docker: aiodocker.Docker = Depends(get_docker),
+    uuid: str = Depends(validate_uuid),
+) -> HTMLResponse:
+    """Remove this player's op and whitelist memberships from one server.
+
+    The global roster is intentionally untouched.  When both memberships
+    exist, deop runs first and a failure stops the sequence so the route
+    never reports a successful removal while one of its operations failed.
+    """
+    player_name = await membership_service.resolve_player_name(server, uuid)
+    if player_name is None:
+        raise HTTPException(
+            status_code=404, detail="Could not resolve a name for that UUID."
+        )
+
+    members, malformed = membership_service.per_server_members_view(
+        Path(server["dir"])
+    )
+    if malformed:
+        files = ", ".join(f"{kind}.json" for kind in malformed)
+        return await _card(
+            request,
+            server,
+            flash=_error(
+                f"Could not remove {player_name}: {files} failed to parse."
+            ),
+        )
+
+    member = next((item for item in members if item["uuid"] == uuid), None)
+    if member is None:
+        return await _card(
+            request,
+            server,
+            flash=_error(f"{player_name} is no longer on this server."),
+        )
+
+    successful_kinds: list[str] = []
+    responses: list[str] = []
+    for kind, present in (
+        ("op", member["in_op"]),
+        ("whitelist", member["in_whitelist"]),
+    ):
+        if not present:
+            continue
+        try:
+            flash = await _flip_with_stale_guard(
+                docker,
+                server,
+                kind=kind,
+                uuid=uuid,
+                name=player_name,
+                enabled=False,
+            )
+        except HTTPException as exc:
+            if not successful_kinds:
+                raise
+            return await _card(
+                request,
+                server,
+                flash=_error(
+                    "Operator access was removed, but whitelist removal "
+                    f"failed: {exc.detail}"
+                ),
+            )
+        except membership.MalformedFileError as exc:
+            prefix = (
+                "Operator access was removed, but " if successful_kinds else ""
+            )
+            return await _card(
+                request,
+                server,
+                flash=_error(f"{prefix}{kind}.json failed to parse: {exc}"),
+            )
+        if flash["kind"] == "error":
+            if successful_kinds:
+                flash = _error(
+                    "Operator access was removed, but whitelist removal "
+                    f"failed: {flash['message']}"
+                )
+            return await _card(request, server, flash=flash)
+        successful_kinds.append(kind)
+        responses.append(flash["message"])
+
+    return await _card(
+        request,
+        server,
+        flash={
+            "kind": "ok",
+            "message": (
+                " ".join(responses)
+                if lifecycle_state.is_running(server)
+                else f"Removed {player_name} from {server['name']}."
+            ),
+        },
+    )
 
 
 @router.post(

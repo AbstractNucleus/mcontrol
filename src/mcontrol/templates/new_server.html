@@ -3,6 +3,16 @@
 
 {% block title %}New server | mcontrol{% endblock %}
 
+{% block dashboard_styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/app.creation.css?v={{ version }}">
+{% endblock %}
+
+{% block head_scripts %}
+  {{ super() }}
+  <script src="/static/creation-preview.js?v={{ version }}" defer></script>
+{% endblock %}
+
 {% block main %}
 <section class="new-server">
   <header class="page-heading">
@@ -12,12 +22,18 @@
     <a class="btn btn--ghost" href="/">{{ icon('arrow-left') }} Back to servers</a>
   </header>
 
+  <div class="new-server__layout">
   <form class="new-server__form" method="post" action="/servers/new">
     <fieldset>
       <legend>{{ icon('server', size=18) }} Basics</legend>
       <div class="new-server__fields">
-        <label class="new-server__wide" for="new-server-name">
-          <span>Name</span>
+        <div class="new-server__field new-server__field--wide">
+          <div class="new-server__field-heading">
+            <label for="new-server-name">Name</label>
+            <button type="button" class="new-server__help-button"
+                    popovertarget="new-server-name-hint"
+                    aria-label="Help for server name">?</button>
+          </div>
           <input id="new-server-name" type="text"
                  name="name"
                  value="{{ form.name or '' }}"
@@ -26,99 +42,144 @@
                  aria-describedby="new-server-name-hint{% if errors.name %} new-server-name-error{% endif %}"
                  {% if errors.name %}aria-invalid="true"{% endif %}
                  required>
-          <small class="new-server__hint" id="new-server-name-hint">3-32 chars; lowercase letters, digits, hyphens; must start with a letter.</small>
+          <div class="new-server__help" id="new-server-name-hint"
+               popover="auto" role="tooltip">3-32 chars; lowercase letters, digits, hyphens; must start with a letter.</div>
           {% if errors.name %}<small class="new-server__error" id="new-server-name-error">{{ errors.name }}</small>{% endif %}
-        </label>
+        </div>
 
-        <label for="new-server-memory">
-          <span>Memory budget (GB)</span>
+        <div class="new-server__field">
+          <div class="new-server__field-heading">
+            <label for="new-server-memory">Memory budget (GB)</label>
+            <button type="button" class="new-server__help-button"
+                    popovertarget="new-server-memory-hint"
+                    aria-label="Help for memory budget">?</button>
+          </div>
           <input id="new-server-memory" type="number"
                  name="memory_budget_gb"
                  min="{{ memory_min_gb }}"
                  value="{{ form.memory_budget_gb or '' }}"
+                 aria-describedby="new-server-memory-hint{% if errors.memory_budget_gb %} new-server-memory-error{% endif %}"
                  {% if errors.memory_budget_gb %}aria-invalid="true"{% endif %}
                  required>
-          <small class="new-server__hint">Jar startup reserves 2 GB outside the Java heap.</small>
-          {% if errors.memory_budget_gb %}<small class="new-server__error">{{ errors.memory_budget_gb }}</small>{% endif %}
-        </label>
+          <div class="new-server__help" id="new-server-memory-hint"
+               popover="auto" role="tooltip">Jar startup reserves 2 GB outside the Java heap.</div>
+          {% if errors.memory_budget_gb %}<small class="new-server__error" id="new-server-memory-error">{{ errors.memory_budget_gb }}</small>{% endif %}
+        </div>
 
-        <label for="new-server-port">
-          <span>Port</span>
+        <div class="new-server__field">
+          <div class="new-server__field-heading">
+            <label for="new-server-port">Port</label>
+            <button type="button" class="new-server__help-button"
+                    popovertarget="new-server-port-hint"
+                    aria-label="Help for port">?</button>
+          </div>
           <input id="new-server-port" type="number"
                  name="port"
                  min="1024"
                  max="65535"
                  value="{{ form.port or '' }}"
+                 aria-describedby="new-server-port-hint{% if errors.port %} new-server-port-error{% endif %}"
                  {% if errors.port %}aria-invalid="true"{% endif %}
                  required>
-          <small class="new-server__hint">Host TCP port: 1024-65535.</small>
-          {% if errors.port %}<small class="new-server__error">{{ errors.port }}</small>{% endif %}
-        </label>
+          <div class="new-server__help" id="new-server-port-hint"
+               popover="auto" role="tooltip">Host TCP port: 1024-65535.</div>
+          {% if errors.port %}<small class="new-server__error" id="new-server-port-error">{{ errors.port }}</small>{% endif %}
+        </div>
       </div>
     </fieldset>
 
     <fieldset>
       <legend>{{ icon('settings', size=18) }} Runtime</legend>
       <div class="new-server__fields">
-        <label class="new-server__wide" for="new-server-jar">
-          <span>Server jar filename</span>
+        <div class="new-server__field">
+          <div class="new-server__field-heading">
+            <label for="new-server-jar">Server jar filename</label>
+            <button type="button" class="new-server__help-button"
+                    popovertarget="new-server-jar-hint"
+                    aria-label="Help for server jar filename">?</button>
+          </div>
           <input id="new-server-jar" type="text"
                  name="server_jar"
                  value="{{ form.server_jar or '' }}"
                  placeholder="paper-1.21.4.jar"
                  autocomplete="off"
+                 aria-describedby="new-server-jar-hint{% if errors.server_jar %} new-server-jar-error{% endif %}"
                  {% if errors.server_jar %}aria-invalid="true"{% endif %}>
-          <small class="new-server__hint">Required unless using a custom start script. Upload this file to server/ after creation.</small>
-          {% if errors.server_jar %}<small class="new-server__error">{{ errors.server_jar }}</small>{% endif %}
-        </label>
+          <div class="new-server__help" id="new-server-jar-hint"
+               popover="auto" role="tooltip">Required unless using a custom start script. Upload this file to server/ after creation.</div>
+          {% if errors.server_jar %}<small class="new-server__error" id="new-server-jar-error">{{ errors.server_jar }}</small>{% endif %}
+        </div>
 
-        <label class="new-server__wide" for="new-server-script">
-          <span>Custom start script (optional)</span>
+        <div class="new-server__field">
+          <div class="new-server__field-heading">
+            <label for="new-server-script">Custom start script (optional)</label>
+            <button type="button" class="new-server__help-button"
+                    popovertarget="new-server-script-hint"
+                    aria-label="Help for custom start script">?</button>
+          </div>
           <input id="new-server-script" type="text"
                  name="custom_start_script"
                  value="{{ form.custom_start_script or '' }}"
                  placeholder="run.sh"
                  autocomplete="off"
+                 aria-describedby="new-server-script-hint{% if errors.custom_start_script %} new-server-script-error{% endif %}"
                  {% if errors.custom_start_script %}aria-invalid="true"{% endif %}>
-          <small class="new-server__hint">For downloaded modpacks: upload the pack's server files to server/ after creation. Use a relative Linux .sh path, such as run.sh. This replaces jar startup; the script controls Java heap and JVM args. Set them below the container's memory budget. Windows .bat scripts are not supported. Keep the pack's script named differently from start_server.sh, which mcontrol manages.</small>
-          {% if errors.custom_start_script %}<small class="new-server__error">{{ errors.custom_start_script }}</small>{% endif %}
-        </label>
+          <div class="new-server__help" id="new-server-script-hint"
+               popover="auto" role="tooltip">For downloaded modpacks: upload the pack's server files to server/ after creation. Use a relative Linux .sh path, such as run.sh. This replaces jar startup; the script controls Java heap and JVM args. Set them below the container's memory budget. Windows .bat scripts are not supported. Keep the pack's script named differently from start_server.sh, which mcontrol manages.</div>
+          {% if errors.custom_start_script %}<small class="new-server__error" id="new-server-script-error">{{ errors.custom_start_script }}</small>{% endif %}
+        </div>
 
-        <label for="new-server-java">
-          <span>Java version</span>
-          <select id="new-server-java" name="java_version" required>
+        <div class="new-server__field">
+          <div class="new-server__field-heading">
+            <label for="new-server-java">Java version</label>
+            <button type="button" class="new-server__help-button"
+                    popovertarget="new-server-java-hint"
+                    aria-label="Help for Java version">?</button>
+          </div>
+          <select id="new-server-java" name="java_version"
+                  aria-describedby="new-server-java-hint{% if errors.java_version %} new-server-java-error{% endif %}"
+                  {% if errors.java_version %}aria-invalid="true"{% endif %}
+                  required>
             {% for v in java_versions %}
               <option value="{{ v }}"{% if (form.java_version or default_java_version) == v %} selected{% endif %}>{{ v }}</option>
             {% endfor %}
           </select>
-          <small class="new-server__hint">Minecraft 1.20.5–1.21.x need Java 21; 26.x needs Java 25; ≤1.20.4 works with 17</small>
-          {% if errors.java_version %}<small class="new-server__error">{{ errors.java_version }}</small>{% endif %}
-        </label>
+          <div class="new-server__help" id="new-server-java-hint"
+               popover="auto" role="tooltip">Minecraft 1.20.5–1.21.x need Java 21; 26.x needs Java 25; ≤1.20.4 works with 17.</div>
+          {% if errors.java_version %}<small class="new-server__error" id="new-server-java-error">{{ errors.java_version }}</small>{% endif %}
+        </div>
 
-        <label for="new-server-loader">
-          <span>Loader</span>
-          <select id="new-server-loader" name="loader" required>
+        <div class="new-server__field">
+          <div class="new-server__field-heading">
+            <label for="new-server-loader">Loader</label>
+          </div>
+          <select id="new-server-loader" name="loader"
+                  {% if errors.loader %}aria-describedby="new-server-loader-error" aria-invalid="true"{% endif %}
+                  required>
             {% for opt in loaders %}
               <option value="{{ opt }}"{% if (form.loader or 'vanilla') == opt %} selected{% endif %}>{{ opt }}</option>
             {% endfor %}
           </select>
-          {% if errors.loader %}<small class="new-server__error">{{ errors.loader }}</small>{% endif %}
-        </label>
+          {% if errors.loader %}<small class="new-server__error" id="new-server-loader-error">{{ errors.loader }}</small>{% endif %}
+        </div>
       </div>
     </fieldset>
 
     <details class="advanced-form"{% if errors.jvm_extra_args %} open{% endif %}>
       <summary>Advanced</summary>
-      <label for="new-server-jvm">
-        <span>JVM extra args (optional)</span>
+      <div class="new-server__field">
+        <div class="new-server__field-heading">
+          <label for="new-server-jvm">JVM extra args (optional)</label>
+        </div>
         <input id="new-server-jvm" type="text"
                name="jvm_extra_args"
                value="{{ form.jvm_extra_args or '' }}"
                placeholder="-XX:+UseG1GC ..."
                autocomplete="off"
+               {% if errors.jvm_extra_args %}aria-describedby="new-server-jvm-error"{% endif %}
                {% if errors.jvm_extra_args %}aria-invalid="true"{% endif %}>
-        {% if errors.jvm_extra_args %}<small class="new-server__error">{{ errors.jvm_extra_args }}</small>{% endif %}
-      </label>
+        {% if errors.jvm_extra_args %}<small class="new-server__error" id="new-server-jvm-error">{{ errors.jvm_extra_args }}</small>{% endif %}
+      </div>
     </details>
 
     <div class="new-server__finish">
@@ -136,5 +197,20 @@
       </div>
     </div>
   </form>
+  <aside class="setup-preview" aria-labelledby="setup-preview-title">
+    <header class="setup-preview__header">
+      <h2 id="setup-preview-title">Setup preview</h2>
+      <select class="setup-preview__picker" aria-label="Preview file" data-preview-files disabled></select>
+      <button type="button" class="setup-preview__help-button" popovertarget="setup-preview-help" aria-label="About setup preview">&#9432;</button>
+    </header>
+    <div id="setup-preview-help" class="setup-preview__help" popover="auto">
+      This read-only preview updates as you type. Empty fields use example values.
+      RCON credentials are generated when the server is created.
+    </div>
+    <p class="setup-preview__status" role="status" data-preview-status>Loading preview...</p>
+    <pre class="setup-preview__code" tabindex="0" aria-label="File contents"><code data-preview-code></code></pre>
+    <p class="setup-preview__note" data-preview-upload></p>
+  </aside>
+  </div>
 </section>
 {% endblock %}

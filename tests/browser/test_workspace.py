@@ -191,6 +191,11 @@ async def test_failed_load_retry_and_stale_resource_recovery(page, mock_url):
     await page.route("**/files/tree?path=", fail)
     await page.goto(mock_url + "/servers/atm10")
     await expect(page.locator(".request-notice")).to_contain_text("HTTP 502")
+    await expect(page.locator("#flash-stack .request-notice")).to_have_count(1)
+    await expect(page.locator(".dashboard > .request-notice")).to_have_count(0)
+    await page.locator("#flash-stack").screenshot(
+        path=str(ROOT / ".localdev" / "ui-review" / "request-notice.png")
+    )
     await page.unroute("**/files/tree?path=", fail)
     await page.locator(".request-notice").get_by_role("button", name="Retry").click()
     await expect(page.locator("#file-tree")).to_contain_text("docker-compose.yml")
@@ -246,8 +251,24 @@ async def test_console_connection_and_rejected_command(page, mock_url):
     await page.get_by_role("button", name="Send", exact=True).click()
     await expect(page.locator("[data-command-error]")).to_contain_text("Test connection lost")
     await expect(page.get_by_role("textbox", name="RCON command")).to_have_value("list")
-    await page.get_by_role("combobox", name="Log severity").select_option("WARN")
+    await expect(page.get_by_role("combobox", name="Log severity")).to_have_count(0)
+    await expect(page.get_by_role("checkbox", name="Wrap", exact=True)).to_have_count(0)
+    await expect(page.get_by_role("checkbox", name="Pause follow")).to_have_count(0)
+    search = page.get_by_role("searchbox", name="Search console")
+    toggle = page.get_by_role("button", name="Search console", exact=True)
+    await expect(search).to_be_hidden()
+    await toggle.click()
+    await expect(search).to_be_focused()
+    await expect(toggle).to_have_attribute("aria-expanded", "true")
+    await search.fill("Can't keep up")
     await expect(page.locator("#console-output > span:visible")).to_contain_text(["Can't keep up"])
+    await search.press("Escape")
+    await expect(search).to_be_hidden()
+    await expect(toggle).to_be_focused()
+    await expect(toggle).to_have_attribute("aria-expanded", "false")
+    await expect(page.locator("#console-output > span:visible")).to_contain_text(
+        ["Starting minecraft"]
+    )
 
 
 async def test_newer_typing_stays_dirty_after_save(page, mock_url):
@@ -286,26 +307,29 @@ async def test_newer_typing_stays_dirty_after_save(page, mock_url):
 
 async def test_access_failure_rolls_back_and_retry_applies(page, mock_url):
     await page.goto(mock_url + "/servers/cobblemon")
-    checkbox = page.get_by_role("checkbox", name="Allow Notch to join", exact=True)
-    await expect(checkbox).to_be_visible()
-    before = await checkbox.is_checked()
+    row = page.locator('[data-member-name="Notch"]')
+    remove = row.get_by_role("button", name="Remove Notch from server", exact=True)
+    await expect(row.get_by_role("checkbox", name="Operator Notch")).to_be_checked()
+    await row.hover()
     release = asyncio.Event()
 
     async def fail(route):
         await release.wait()
         await route.fulfill(status=502, body="Fixture failure")
 
-    await page.route("**/players/*/whitelist", fail)
-    await checkbox.click()
+    await page.route("**/players/*/remove", fail)
+    await remove.click()
     await expect(page.locator("[data-membership-status]")).to_have_text("Updating server access…")
-    await expect(checkbox).to_be_disabled()
+    await expect(remove).to_be_disabled()
     release.set()
     await expect(page.locator("[data-membership-status]")).to_contain_text("Change failed")
-    assert await checkbox.is_checked() == before
-    await page.unroute("**/players/*/whitelist", fail)
-    await checkbox.click()
+    await expect(row).to_be_visible()
+    await expect(row.get_by_role("checkbox", name="Operator Notch")).to_be_checked()
+    await page.unroute("**/players/*/remove", fail)
+    await remove.click()
     await expect(page.locator("[data-membership-status]")).to_contain_text("Access saved on disk")
-    assert await checkbox.is_checked() != before
+    await expect(row).to_have_count(0)
+
 
 
 async def test_visible_refresh_does_not_overlap_and_hidden_streams_pause(page, mock_url):
@@ -334,6 +358,7 @@ async def test_visible_refresh_does_not_overlap_and_hidden_streams_pause(page, m
         "window.fixtureHidden = true; document.dispatchEvent(new Event('visibilitychange'))"
     )
     await expect(page.locator("[data-log-status]")).to_have_text("Logs paused")
+    await expect(page.locator("[data-log-status]")).to_be_visible()
     await expect(page.get_by_role("button", name="Send", exact=True)).to_be_disabled()
     count = len(requests)
     await page.wait_for_timeout(5500)
@@ -343,6 +368,9 @@ async def test_visible_refresh_does_not_overlap_and_hidden_streams_pause(page, m
     )
     await expect(page.get_by_role("button", name="Send", exact=True)).to_be_enabled()
     await expect(page.locator("[data-log-status]")).to_have_text("Logs live")
+    await expect(page.locator("[data-log-status]")).to_be_hidden()
+    await expect(page.locator("[data-stream-status]")).to_be_hidden()
+    await expect(page.locator(".console-pane__head")).to_be_hidden()
     assert len(requests) > count
 
 
@@ -432,6 +460,7 @@ async def test_workspace_telemetry_and_settings_alignment(page, mock_url, width)
         assert max(geometry["tops"]) - min(geometry["tops"]) <= 1, geometry
         assert max(geometry["bottoms"]) - min(geometry["bottoms"]) <= 1, geometry
         assert abs(geometry["widths"][1] - geometry["widths"][3]) <= 1, geometry
+        assert max(geometry["bottoms"]) - min(geometry["tops"]) <= 64, geometry
     await page.get_by_label("More actions", exact=True).click()
     await page.get_by_role("button", name="Customize layout").click()
     await expect(page.get_by_role("button", name="Save layout", exact=True)).to_be_visible()
@@ -484,7 +513,11 @@ async def test_panel_customization_stays_inside_titlebar(page, mock_url, width):
     normal_heights = await headers.evaluate_all(
         "els => els.map(el => el.getBoundingClientRect().height)"
     )
-    assert all(height == (52 if width < 768 else 48) for height in normal_heights)
+    assert all(
+        height == (52 if width < 768 else 44)
+        for height in (normal_heights[0], normal_heights[2])
+    )
+    assert normal_heights[1] <= 100
     await page.get_by_label("More actions", exact=True).click()
     await page.get_by_role("button", name="Customize layout").click()
     geometry = await headers.evaluate_all("""headers => headers.map(header => {
@@ -659,3 +692,75 @@ async def test_native_panel_drag_targets_settle_and_cancel(page, mock_url, width
         await page.screenshot(path=str(screenshots / "panel-drag-expanded-settled.png"))
         await page.get_by_role("button", name="Cancel", exact=True).click()
         await expect(panels.first).to_have_attribute("data-pane", "console")
+
+
+@pytest.mark.parametrize("width", [390, 1440])
+async def test_multiline_logs_render_as_separate_rows(page, mock_url, width, monkeypatch):
+    from mcontrol.infra import docker_client
+    from mcontrol.routes.logs import _sse
+
+    long_line = "[INFO] " + "long-mod-name " * 100
+    lines = [
+        "[INFO] <player> hello", "[WARN] slow tick",
+        "\tat example.Server.tick(Server.java:42)", "", long_line,
+    ]
+
+    async def frames(*args, **kwargs):
+        yield "\r\n".join(lines) + "\r\n"
+
+    monkeypatch.setattr(docker_client, "logs_stream", frames)
+    payload = b"".join([event async for event in _sse(None, "atm10", skip_tail=False)])
+    await page.route("**/servers/atm10/logs*", lambda route: route.fulfill(
+        status=200, content_type="text/event-stream", body=payload
+    ))
+    await page.set_viewport_size({"width": width, "height": 1000})
+    await page.goto(mock_url + "/servers/atm10")
+    rows = page.locator("#console-output > .log-line")
+    await expect(rows).to_have_count(6)
+    assert (await rows.all_text_contents())[:5] == lines
+    geometry = await rows.evaluate_all("""els => els.map(el => {
+        const r = el.getBoundingClientRect();
+        return {top: r.top, bottom: r.bottom, height: r.height};
+    })""")
+    assert all(row["height"] > 0 for row in geometry)
+    assert all(b["top"] >= a["bottom"] - 1 for a, b in zip(geometry, geometry[1:], strict=False))
+    assert abs(geometry[0]["height"] - geometry[4]["height"]) <= 1
+    assert await page.locator("#console-output").evaluate(
+        "el => el.scrollWidth > el.clientWidth"
+    )
+    assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    await page.get_by_role("button", name="Search console", exact=True).click()
+    await page.get_by_role("searchbox", name="Search console").fill("slow tick")
+    await expect(page.locator("#console-output > span:visible")).to_have_count(1)
+    await expect(page.locator("#console-output > span:visible")).to_have_text("[WARN] slow tick")
+
+
+@pytest.mark.parametrize("width", [390, 1440])
+async def test_player_list_and_header_status(page, mock_url, width):
+    await page.set_viewport_size({"width": width, "height": 1000})
+    await page.goto(mock_url + "/servers/atm10")
+    await expect(page.locator('.panel__bar #online-chip')).to_contain_text(
+        "Online count unavailable"
+    )
+    await expect(page.locator('[data-members-search]')).to_have_count(0)
+    row = page.locator('[data-member-name="Dinnerbone"]')
+    remove = row.get_by_role("button", name="Remove Dinnerbone from server")
+    await expect(row.get_by_role("checkbox", name="Operator Dinnerbone")).to_be_visible()
+    if width > 767:
+        await expect(remove).to_have_css("opacity", "0")
+        await row.hover()
+        await expect(remove).to_have_css("opacity", "1")
+        await page.mouse.move(0, 0)
+        await remove.focus()
+    await expect(remove).to_have_css("opacity", "1")
+    header = page.locator('.panel[data-pane="players"] .panel__bar')
+    assert await header.evaluate("""el => {
+        const bar = el.getBoundingClientRect();
+        const chip = el.querySelector('#online-chip').getBoundingClientRect();
+        return bar.height <= 100 && chip.left >= bar.left
+            && chip.right <= bar.right && chip.bottom <= bar.bottom;
+    }""")
+    assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    await page.locator('.panel[data-pane="players"]').screenshot(
+        path=str(ROOT / '.localdev' / 'ui-review' / f'player-list-{width}.png')
+    )

@@ -6,9 +6,9 @@
   gap: var(--space-2);
   padding: 10px 16px;
   min-height: 40px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-soft);
-  background: var(--bg-surface);
+  background: var(--bg-elevated);
   color: var(--fg-primary);
   font-family: var(--font-sans);
   font-size: var(--fs-sm);
@@ -146,9 +146,10 @@ select {
   font-family: inherit;
   font-size: var(--fs-sm);
   color: var(--fg-primary);
-  background: var(--bg-surface);
+  background: var(--bg-control);
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-inset);
   transition: border-color var(--motion-fast) var(--ease);
 }
 
@@ -189,6 +190,10 @@ select {
   background-size: 5px 5px;
   background-repeat: no-repeat;
   padding-right: 32px;
+}
+
+input[type="search"] {
+  border-radius: var(--radius-sm);
 }
 
 label {

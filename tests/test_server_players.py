@@ -96,12 +96,13 @@ async def test_get_combines_whitelist_and_ops_into_one_row_per_uuid(
     notch_idx = body.index("Notch", herobrine_idx)
     herobrine_row = body[herobrine_idx:notch_idx]
     notch_row = body[notch_idx:]
-    # Notch has both checkboxes ticked; Herobrine has only whitelist.
-    # The form-end tags will appear after Notch's row too, so count the
-    # `checked` keywords that appear before the next add-form section.
+    # The whitelist membership is represented by row presence and its remove
+    # action. Only the operator membership remains a checkbox.
     notch_row = notch_row.split('class="players-card__add"')[0]
-    assert herobrine_row.count("checked") == 1
-    assert notch_row.count("checked") == 2
+    assert herobrine_row.count("checked") == 0
+    assert notch_row.count("checked") == 1
+    assert f'/players/{_HEROBRINE_UUID}/remove' in herobrine_row
+    assert f'/players/{_NOTCH_UUID}/remove' in notch_row
     assert "hx-disinherit" in body
     assert "mc:state-changed from:body" in body
 
@@ -129,18 +130,6 @@ async def test_get_renders_roster_picker(client, fake_db, tmp_path):
     body = response.text
     assert f'value="{_NOTCH_UUID}">Notch' in body
     assert f'value="{_HEROBRINE_UUID}">Herobrine' in body
-
-
-async def test_get_shows_rcon_indicator_when_running_else_offline(
-    client, fake_db, tmp_path
-):
-    fake_db["servers"]["atm10"] = _server_row(tmp_path, state="running")
-    body = (await client.get("/servers/atm10/players")).text
-    assert "Checking online players…" in body
-
-    fake_db["servers"]["atm10"] = _server_row(tmp_path, state="exited")
-    body = (await client.get("/servers/atm10/players")).text
-    assert "Saved on disk · applies at next start" in body
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +228,193 @@ async def test_add_from_roster_running_surfaces_rcon_unavailable_as_error_flash(
     # Error flashes carry role="alert" so screen readers announce them
     # assertively; the polite #flash-stack live region wouldn't.
     assert 'role="alert"' in response.text
+
+
+# ---------------------------------------------------------------------------
+# POST /servers/{name}/players/{uuid}/remove
+# ---------------------------------------------------------------------------
+
+
+async def test_remove_from_server_offline_clears_memberships_but_keeps_roster(
+    client, fake_db, tmp_path
+):
+    server = _server_row(tmp_path, state="exited")
+    fake_db["servers"]["atm10"] = server
+    player = {"uuid": _NOTCH_UUID, "name": "Notch"}
+    fake_db["players"] = [player]
+    server_dir = Path(server["dir"])
+    membership.add_whitelist_entry(server_dir, uuid=_NOTCH_UUID, name="Notch")
+    membership.add_op_entry(server_dir, uuid=_NOTCH_UUID, name="Notch")
+
+    response = await client.post(
+        f"/servers/atm10/players/{_NOTCH_UUID}/remove"
+    )
+
+    assert response.status_code == 200
+    assert membership.read_whitelist(server_dir)[0] == []
+    assert membership.read_ops(server_dir)[0] == []
+    assert fake_db["players"] == [player]
+    assert "Removed Notch from atm10" in response.text
+
+
+async def test_remove_from_server_running_deops_then_removes_whitelist(
+    client, fake_db, tmp_path, monkeypatch
+):
+    server = _server_row(tmp_path, state="running")
+    fake_db["servers"]["atm10"] = server
+    fake_db["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    server_dir = Path(server["dir"])
+    membership.add_whitelist_entry(server_dir, uuid=_NOTCH_UUID, name="Notch")
+    membership.add_op_entry(server_dir, uuid=_NOTCH_UUID, name="Notch")
+    commands: list[str] = []
+
+    async def fake_run(_docker, _server, command):
+        commands.append(command)
+        return {
+            "deop Notch": "Made Notch no longer a server operator",
+            "whitelist remove Notch": "Removed Notch from the whitelist",
+        }[command]
+
+    monkeypatch.setattr(server_rcon, "run_command", fake_run)
+
+    response = await client.post(
+        f"/servers/atm10/players/{_NOTCH_UUID}/remove"
+    )
+
+    assert response.status_code == 200
+    assert commands == ["deop Notch", "whitelist remove Notch"]
+    assert "Made Notch no longer a server operator" in response.text
+    assert "Removed Notch from the whitelist" in response.text
+
+
+async def test_remove_from_server_running_skips_deop_when_player_is_not_op(
+    client, fake_db, tmp_path, monkeypatch
+):
+    server = _server_row(tmp_path, state="running")
+    fake_db["servers"]["atm10"] = server
+    fake_db["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    membership.add_whitelist_entry(
+        Path(server["dir"]), uuid=_NOTCH_UUID, name="Notch"
+    )
+    commands: list[str] = []
+
+    async def fake_run(_docker, _server, command):
+        commands.append(command)
+        return "ok"
+
+    monkeypatch.setattr(server_rcon, "run_command", fake_run)
+
+    response = await client.post(
+        f"/servers/atm10/players/{_NOTCH_UUID}/remove"
+    )
+
+    assert response.status_code == 200
+    assert commands == ["whitelist remove Notch"]
+
+
+async def test_remove_from_server_stops_after_rcon_error_without_false_success(
+    client, fake_db, tmp_path, monkeypatch
+):
+    server = _server_row(tmp_path, state="running")
+    fake_db["servers"]["atm10"] = server
+    fake_db["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    server_dir = Path(server["dir"])
+    membership.add_whitelist_entry(server_dir, uuid=_NOTCH_UUID, name="Notch")
+    membership.add_op_entry(server_dir, uuid=_NOTCH_UUID, name="Notch")
+    commands: list[str] = []
+
+    async def fake_run(_docker, _server, command):
+        commands.append(command)
+        raise server_rcon.RconUnavailable("RCON command timed out.")
+
+    monkeypatch.setattr(server_rcon, "run_command", fake_run)
+
+    response = await client.post(
+        f"/servers/atm10/players/{_NOTCH_UUID}/remove"
+    )
+
+    assert response.status_code == 200
+    assert commands == ["deop Notch"]
+    assert "RCON command timed out" in response.text
+    assert "flash-msg--error" in response.text
+    assert "Removed Notch from atm10" not in response.text
+
+
+async def test_remove_from_server_reports_partial_change_when_whitelist_fails(
+    client, fake_db, tmp_path, monkeypatch
+):
+    server = _server_row(tmp_path, state="running")
+    fake_db["servers"]["atm10"] = server
+    fake_db["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    server_dir = Path(server["dir"])
+    membership.add_whitelist_entry(server_dir, uuid=_NOTCH_UUID, name="Notch")
+    membership.add_op_entry(server_dir, uuid=_NOTCH_UUID, name="Notch")
+    commands: list[str] = []
+
+    async def fake_run(_docker, _server, command):
+        commands.append(command)
+        if command == "deop Notch":
+            return "Made Notch no longer a server operator"
+        raise server_rcon.RconUnavailable("RCON command timed out.")
+
+    monkeypatch.setattr(server_rcon, "run_command", fake_run)
+
+    response = await client.post(
+        f"/servers/atm10/players/{_NOTCH_UUID}/remove"
+    )
+
+    assert response.status_code == 200
+    assert commands == ["deop Notch", "whitelist remove Notch"]
+    assert "Operator access was removed, but whitelist removal failed" in response.text
+    assert "RCON command timed out" in response.text
+    assert "flash-msg--error" in response.text
+
+
+async def test_remove_from_server_reports_partial_change_on_second_file_stale(
+    client, fake_db, tmp_path, monkeypatch
+):
+    server = _server_row(tmp_path, state="exited")
+    fake_db["servers"]["atm10"] = server
+    fake_db["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    server_dir = Path(server["dir"])
+    membership.add_whitelist_entry(server_dir, uuid=_NOTCH_UUID, name="Notch")
+    membership.add_op_entry(server_dir, uuid=_NOTCH_UUID, name="Notch")
+
+    def stale_whitelist(*args, **kwargs):
+        raise membership.StaleWriteError("stale")
+
+    monkeypatch.setattr(membership, "remove_whitelist_entry", stale_whitelist)
+
+    response = await client.post(
+        f"/servers/atm10/players/{_NOTCH_UUID}/remove"
+    )
+
+    assert response.status_code == 200
+    assert membership.read_ops(server_dir)[0] == []
+    assert membership.read_whitelist(server_dir)[0][0]["uuid"] == _NOTCH_UUID
+    assert "Operator access was removed, but whitelist removal failed" in response.text
+    assert "changed on disk between read and write" in response.text
+    assert "flash-msg--error" in response.text
+
+
+async def test_remove_from_server_refuses_malformed_membership_without_partial_write(
+    client, fake_db, tmp_path
+):
+    server = _server_row(tmp_path, state="exited")
+    fake_db["servers"]["atm10"] = server
+    fake_db["players"] = [{"uuid": _NOTCH_UUID, "name": "Notch"}]
+    server_dir = Path(server["dir"])
+    membership.add_op_entry(server_dir, uuid=_NOTCH_UUID, name="Notch")
+    membership.whitelist_path(server_dir).write_text("{not json")
+
+    response = await client.post(
+        f"/servers/atm10/players/{_NOTCH_UUID}/remove"
+    )
+
+    assert response.status_code == 200
+    assert "whitelist.json failed to parse" in response.text
+    assert "flash-msg--error" in response.text
+    assert membership.read_ops(server_dir)[0][0]["uuid"] == _NOTCH_UUID
 
 
 # ---------------------------------------------------------------------------
@@ -441,7 +617,7 @@ async def test_online_chip_renders_count_and_names(
     assert response.status_code == 200
     assert "2/20 online" in body
     assert 'title="Steve, Alex"' in body
-    assert 'hx-trigger="every 60s, mc:refresh"' in body
+    assert 'hx-trigger="every 60s, mc:refresh, mc:state-changed from:body"' in body
 
 
 async def test_online_chip_degrades_to_live_pill_when_rcon_down(
@@ -481,4 +657,5 @@ async def test_online_chip_offline_server_shows_offline_pill(
     response = await client.get("/servers/atm10/players/online")
 
     assert response.status_code == 200
-    assert "Saved on disk · applies at next start" in response.text
+    assert ">Saved on disk</span>" in response.text
+    assert 'title="Saved on disk; applies at next start"' in response.text

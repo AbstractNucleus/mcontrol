@@ -2,19 +2,7 @@
          hx-get="/servers/{{ server.name }}/players"
          hx-trigger="mc:state-changed from:body"
          hx-swap="outerHTML">
-  <header class="players-card__head">
-    {% if running %}
-      {# Lazy chip: fills with the RCON `list` head-count on load, then
-         self-polls. Falls back to the plain live pill if RCON is down. #}
-      <span id="online-chip"
-            class="state-pill state-pill--running"
-            hx-get="/servers/{{ server.name }}/players/online"
-            hx-trigger="load, every 60s, mc:refresh" data-poll
-            hx-swap="outerHTML">Checking online players…</span>
-    {% else %}
-      <span id="online-chip" class="state-pill state-pill--exited">Saved on disk · applies at next start</span>
-    {% endif %}
-  </header>
+
 
   {% if flash %}
   <div hx-swap-oob="beforeend:#flash-stack">
@@ -35,57 +23,32 @@
     </p>
   {% endif %}
 
-<label class="player-search">Find a player<input type="search" data-members-search placeholder="Search server players"></label>
-  <p data-members-empty hidden>No players match.</p>
   {% if members %}
-    <table class="players-card__table">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Allowed to join</th>
-          <th>Operator</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for m in members %}
-          <tr data-member-name="{{ m.name }}">
-            <td>{{ m.name }}</td>
-            <td>
-              <form hx-post="/servers/{{ server.name }}/players/{{ m.uuid }}/whitelist"
-                    hx-target="#server-players"
-                    hx-swap="outerHTML"
-                    hx-disabled-elt="find input[type=checkbox]"
-                    data-membership-change
-                    class="players-card__toggle">
-                <input type="hidden" name="enabled" value="{{ '0' if m.in_whitelist else '1' }}">
-                <label class="access-toggle"><input type="checkbox"
-                       id="wl-{{ m.uuid }}"
-                       hx-disinherit="*"
-                       {% if m.in_whitelist %}checked{% endif %}
-                       onchange="this.form.requestSubmit()"
-                       aria-label="Allow {{ m.name }} to join"></label>
-              </form>
-            </td>
-            <td>
-              <form hx-post="/servers/{{ server.name }}/players/{{ m.uuid }}/op"
-                    hx-target="#server-players"
-                    hx-swap="outerHTML"
-                    hx-disabled-elt="find input[type=checkbox]"
-                    data-membership-change
-                    class="players-card__toggle">
-                <input type="hidden" name="enabled" value="{{ '0' if m.in_op else '1' }}">
-                <label class="access-toggle"><input type="checkbox"
-                       id="op-{{ m.uuid }}"
-                       hx-disinherit="*"
-                       {% if m.in_op %}checked{% endif %}
-                       onchange="this.form.requestSubmit()"
-                       aria-label="Operator {{ m.name }}"></label>
-              </form>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <ul class="players-card__list" aria-label="Server players">
+      {% for m in members %}
+      <li class="players-card__item" data-member-name="{{ m.name }}">
+        <span class="players-card__name">{{ m.name }}</span>
+        <form hx-post="/servers/{{ server.name }}/players/{{ m.uuid }}/op"
+              hx-target="#server-players" hx-swap="outerHTML"
+              hx-disabled-elt="find input[type=checkbox]"
+              data-membership-change class="players-card__toggle">
+          <input type="hidden" name="enabled" value="{{ '0' if m.in_op else '1' }}">
+          <label class="access-toggle"><span>OP</span><input type="checkbox"
+                 id="op-{{ m.uuid }}" hx-disinherit="*"
+                 {% if m.in_op %}checked{% endif %}
+                 onchange="this.form.requestSubmit()"
+                 aria-label="Operator {{ m.name }}"></label>
+        </form>
+        <form hx-post="/servers/{{ server.name }}/players/{{ m.uuid }}/remove"
+              hx-target="#server-players" hx-swap="outerHTML"
+              hx-disabled-elt="find button" data-membership-change class="players-card__remove-form">
+          <button type="submit" class="players-card__remove"
+                  aria-label="Remove {{ m.name }} from server"
+                  title="Remove {{ m.name }} from server">&#215;</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
   {% else %}
     <p class="t-muted">No players on this server yet.</p>
   {% endif %}

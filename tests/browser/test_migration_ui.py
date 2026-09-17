@@ -6,6 +6,7 @@ import pytest
 from playwright.async_api import expect
 
 from mcontrol.templates import templates
+from tests.browser.test_workspace import ROOT
 from tests.browser.test_workspace import mock_url as mock_url
 from tests.browser.test_workspace import page as page
 
@@ -14,13 +15,26 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-async def test_migration_empty_picker_explains_where_to_add_jar(page, mock_url):
+@pytest.mark.parametrize("width", [390, 1440])
+async def test_migration_empty_picker_explains_where_to_add_jar(page, mock_url, width):
+    await page.set_viewport_size({"width": width, "height": 1000})
     await page.goto(mock_url + "/servers/atm10")
     await page.get_by_role("button", name="Settings", exact=True).click()
     picker = page.locator('#migrate-card select[name="server_jar"]')
     await expect(picker).to_be_visible()
     await expect(picker).to_contain_text("No .jar files found")
     await expect(page.locator("#migrate-card")).to_contain_text("server/")
+    await expect(page.locator('.settings-help--migration')).not_to_have_attribute('open', '')
+    await expect(page.locator('#migrate-card input[name="jvm_extra_args"]')).to_be_hidden()
+    assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    screenshots = ROOT / ".localdev" / "ui-review"
+    screenshots.mkdir(parents=True, exist_ok=True)
+    await page.screenshot(path=str(screenshots / f"settings-compact-{width}.png"), full_page=True)
+    await page.get_by_text("Migration details & recovery", exact=True).click()
+    await expect(page.locator('.settings-help--migration')).to_contain_text("recovery instructions")
+    await page.locator('.settings-advanced > summary').click()
+    await expect(page.locator('#migrate-card input[name="jvm_extra_args"]')).to_be_visible()
+
 
 
 async def test_migration_picker_and_conflict_keep_actionable_error_visible(page, mock_url):

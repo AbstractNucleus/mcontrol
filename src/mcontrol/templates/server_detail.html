@@ -59,6 +59,12 @@
     <button type="button" class="panel__grip layout-only" aria-label="Move {{ title }}" title="Drag {{ title }} to rearrange">{{ icon('grip', 16) }}</button>
     <span class="panel__icon" aria-hidden="true">{{ icon('terminal' if pane_id == 'console' else ('folder' if pane_id == 'files' else 'users')) }}</span>
     <h2 class="panel__title">{{ title }}</h2>
+    {% if pane_id == 'players' %}
+    <span id="online-chip" class="state-pill state-pill--unknown"
+          hx-get="/servers/{{ server.name }}/players/online"
+          hx-trigger="load, every 60s, mc:refresh, mc:state-changed from:body" data-poll
+          hx-swap="outerHTML">Checking online players&#8230;</span>
+    {% endif %}
     <div class="panel__layout layout-only">
       <div class="panel__move-controls">
         <button class="panel__btn" type="button" data-move="-1" aria-label="Move {{ title }} up" title="Move {{ title }} up">{{ icon('arrow-up', 14) }}</button>
@@ -68,6 +74,13 @@
       <label class="panel__height-control">Height<input type="range" min="280" max="900" step="20" data-panel-height aria-label="{{ title }} height" title="Adjust {{ title }} height"></label>
       <button class="panel__btn" type="button" data-panel-hide aria-label="Hide {{ title }}" title="Hide {{ title }}">{{ icon('eye-off', 15) }}</button>
     </div>
+    {% if pane_id == 'console' %}
+    <button type="button" class="panel__btn" data-console-search-toggle aria-label="Search console" title="Search console" aria-expanded="false" aria-controls="console-search-tools">{{ icon('search', 16) }}</button>
+    {% endif %}
+    {% if pane_id == 'files' %}
+    <button type="button" class="btn btn--sm panel__file-action" data-upload-trigger data-upload-path="" aria-label="Upload" title="Upload">{{ icon('arrow-up') }}<span>Upload</span></button>
+    <button type="button" class="btn btn--sm panel__file-action" data-action-mkdir data-action-path="" aria-label="New folder" title="New folder">{{ icon('plus') }}<span>New folder</span></button>
+    {% endif %}
     <button type="button" class="btn btn--sm btn--ghost" data-panel-focus aria-label="Focus {{ title }}">Focus</button>
     <button type="button" class="panel__btn panel__collapse" aria-expanded="true" aria-label="Collapse {{ title }}">−</button>
   </header>
@@ -91,9 +104,15 @@
         </svg>
         All servers
       </a>
+
+    </div>
+    <div class="detail-header__row">
+      <div class="detail-identity">
+        <span class="detail-identity__icon" aria-hidden="true">{{ icon('server', size=24) }}</span>
+        <div class="detail-identity__text">
       {% set _server_rows = dashboard_context(request).get('servers', []) if request is defined else [] %}
       <details class="server-switcher">
-        <summary>Switch server <strong>{{ server.name }}</strong></summary>
+        <summary title="Switch server" aria-label="Switch server: {{ server.name }}"><h1 class="detail-title"><span class="detail-title__name">{{ server.name }}</span></h1></summary>
         <nav class="server-switcher__panel" aria-label="Switch server">
           {% for row in _server_rows %}
             <a href="/servers/{{ row.name }}" {% if row.name == server.name %}aria-current="page"{% endif %}>
@@ -107,15 +126,7 @@
           <a class="server-switcher__new" href="/servers/new">{{ icon('plus', 14) }} New server</a>
         </nav>
       </details>
-    </div>
-    <div class="detail-header__row">
-      <div class="detail-identity">
-        <span class="detail-identity__icon" aria-hidden="true">{{ icon('server', size=24) }}</span>
-        <div class="detail-identity__text">
-          <h1 class="detail-title">
-            <span class="detail-title__name">{{ server.name }}</span>
-            {% include "_state_pill.html" %}
-          </h1>
+          {% include "_state_pill.html" %}
           <span id="resources-freshness" class="freshness">Checking resources…</span>
         </div>
       </div>
@@ -215,9 +226,6 @@
         <section class="files-pane" data-server-name="{{ server.name }}">
           <header class="files-pane__head">
             <button type="button" class="btn btn--sm" data-files-back hidden>← Back to files</button>
-            <label class="file-nav-size">Navigation<select data-file-nav-size aria-label="File navigation width"><option value="160">Compact</option><option value="240" selected>Standard</option><option value="360">Wide</option></select></label>
-            <button type="button" class="btn btn--sm" data-upload-trigger data-upload-path="">{{ icon('arrow-up') }} Upload</button>
-            <button type="button" class="btn btn--sm" data-action-mkdir data-action-path="">{{ icon('plus') }} New folder</button>
           </header>
           <div class="file-search">
       <span class="file-search__icon" aria-hidden="true">{{ icon('search') }}</span>

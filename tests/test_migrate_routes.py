@@ -145,7 +145,8 @@ async def test_get_returns_form_prefilled_from_legacy_files(
     assert 'name="java_version"' in body
     assert 'value="17" selected' in body
     assert "container must be recreated" in body
-    assert 'hx-post="/servers/atm10/lifecycle/recreate"' in body
+    # Recreate remains in Container settings, not duplicated inside migration.
+    assert 'hx-post="/servers/atm10/lifecycle/recreate"' not in body
     # Card explains what gets clobbered.
     assert "Dockerfile" in body
     assert "entrypoint.sh" in body

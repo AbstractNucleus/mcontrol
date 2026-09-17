@@ -5,8 +5,8 @@
   const form = document.querySelector("[data-console-form]"), input = form.querySelector('[name="command"]');
   const send = form.querySelector('[type="submit"]'), error = document.querySelector("[data-command-error]");
   const rconStatus = document.querySelector("[data-stream-status-label]"), logStatus = document.querySelector("[data-log-status]");
-  const jump = document.querySelector("[data-stream-jump]"), pause = document.querySelector("[data-console-pause]");
-  const search = document.querySelector("[data-console-search]"), severity = document.querySelector("[data-console-level]");
+  const jump = document.querySelector("[data-stream-jump]");
+  const search = document.querySelector("[data-console-search]");
   const reconnectButton = document.querySelector("[data-stream-retry]");
   let logTimer, logFailed = false;
   let pinned = true, pending = 0, rcon = null, logs = null, ready = false, logEnded = false;
@@ -16,15 +16,16 @@
   function running() { return ["running", "starting", "restarting"].includes(state); }
   function setReady(value, label) {
     ready = value; send.disabled = !value; rconStatus.textContent = label;
-    rconStatus.closest("[data-stream-status]").dataset.state = value ? "live" : "closed";
+    const status = rconStatus.closest("[data-stream-status]");
+    status.dataset.state = value ? "live" : "closed";
+    status.hidden = value;
     reconnectButton.hidden = !logFailed && (value || !running());
   }
   function matches(line) {
-    const text = line.textContent.toLowerCase(), level = severity.value;
-    return text.includes(search.value.toLowerCase()) && (!level || line.classList.contains("log-line--error") || line.classList.contains("console-line--error") || (level === "WARN" && line.classList.contains("log-line--warn")));
+    return line.textContent.toLowerCase().includes(search.value.toLowerCase());
   }
   function filter() { Array.from(output.children).forEach(line => { line.hidden = !matches(line); }); }
-  function bottom() { pinned = true; pause.checked = false; output.scrollTop = output.scrollHeight; pending = 0; jump.hidden = true; }
+  function bottom() { pinned = true; output.scrollTop = output.scrollHeight; pending = 0; jump.hidden = true; }
   function append(html) {
     const template = document.createElement("template"); template.innerHTML = html;
     // Endpoints escape log text and return classified spans. Keep only those
@@ -34,7 +35,7 @@
       line.hidden = !matches(line); output.append(line);
       if (!line.hidden) pending += 1;
     });
-    if (pinned && !pause.checked) {
+    if (pinned) {
       while (output.children.length > 4000) output.firstElementChild.remove();
       bottom();
     } else {
@@ -42,11 +43,31 @@
       jump.hidden = pending === 0;
     }
   }
-  output.addEventListener("scroll", () => { pinned = output.scrollHeight - output.scrollTop - output.clientHeight < 40; if (pinned && !pause.checked) { pending = 0; jump.hidden = true; } });
+  output.addEventListener("scroll", () => { pinned = output.scrollHeight - output.scrollTop - output.clientHeight < 40; if (pinned) { pending = 0; jump.hidden = true; } });
   jump.addEventListener("click", bottom);
-  search.addEventListener("input", filter); severity.addEventListener("change", filter);
-  document.querySelector("[data-console-wrap]").addEventListener("change", e => { output.dataset.wrap = String(e.target.checked); });
-  pause.addEventListener("change", () => { if (!pause.checked) bottom(); });
+  search.addEventListener("input", filter);
+  const searchToggle = document.querySelector("[data-console-search-toggle]");
+  const searchTools = document.querySelector("#console-search-tools");
+  function toggleSearch(open) {
+    if (open) {
+      const panel = output.closest(".panel");
+      if (panel.dataset.collapsed === "true") panel.querySelector(".panel__collapse").click();
+    } else {
+      search.value = "";
+      filter();
+    }
+    searchTools.hidden = !open;
+    searchToggle.setAttribute("aria-expanded", String(open));
+    (open ? search : searchToggle).focus();
+  }
+  searchToggle.addEventListener("click", () => toggleSearch(searchTools.hidden));
+  search.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleSearch(false);
+    }
+  });
   function closeRcon() {
     clearTimeout(readyTimer); clearTimeout(retryTimer); rcon?.close(); rcon = null;
     setReady(false, running() ? "Commands paused" : "Commands offline");
@@ -74,23 +95,27 @@
     });
     source.onerror = reconnect;
   }
+  function setLogStatus(label, healthy = false) {
+    logStatus.textContent = label;
+    logStatus.hidden = healthy;
+  }
   function connectLogs() {
     if (document.hidden || logs || logEnded) return;
     const url = new URL(output.dataset.logSrc, location.href);
     if (logCursor) url.searchParams.set("resume", "1");
     logs = new EventSource(url);
-    logTimer = setTimeout(() => { logFailed = true; logStatus.textContent = "Logs unavailable after 12 seconds"; reconnectButton.hidden = false; }, 12000);
-    logs.onopen = () => { clearTimeout(logTimer); logFailed = false; reconnectButton.hidden = ready || !running(); logStatus.textContent = running() ? "Logs live" : "Saved logs"; };
+    logTimer = setTimeout(() => { logFailed = true; setLogStatus("Logs unavailable after 12 seconds"); reconnectButton.hidden = false; }, 12000);
+    logs.onopen = () => { clearTimeout(logTimer); logFailed = false; reconnectButton.hidden = ready || !running(); setLogStatus(running() ? "Logs live" : "Saved logs", true); };
     logs.onmessage = event => { logCursor = event.lastEventId || logCursor; append(event.data); };
-    logs.onerror = () => { logFailed = true; reconnectButton.hidden = false; logStatus.textContent = "Logs reconnecting…"; };
-    logs.addEventListener("closed", () => { clearTimeout(logTimer); logs?.close(); logs = null; logEnded = true; logFailed = true; reconnectButton.hidden = false; logStatus.textContent = "Log stream ended"; });
+    logs.onerror = () => { logFailed = true; reconnectButton.hidden = false; setLogStatus("Logs reconnecting…"); };
+    logs.addEventListener("closed", () => { clearTimeout(logTimer); logs?.close(); logs = null; logEnded = true; logFailed = true; reconnectButton.hidden = false; setLogStatus("Log stream ended"); });
   }
   reconnectButton.addEventListener("click", () => {
     clearTimeout(logTimer); closeRcon(); logs?.close(); logs = null; logEnded = false; retry = 0;
     connectLogs(); connectRcon();
   });
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) { clearTimeout(logTimer); closeRcon(); logs?.close(); logs = null; logStatus.textContent = logEnded ? "Log stream ended" : "Logs paused"; }
+    if (document.hidden) { clearTimeout(logTimer); closeRcon(); logs?.close(); logs = null; setLogStatus(logEnded ? "Log stream ended" : "Logs paused"); }
     else { connectLogs(); connectRcon(); }
   });
   document.body.addEventListener("mc:state-changed", event => {

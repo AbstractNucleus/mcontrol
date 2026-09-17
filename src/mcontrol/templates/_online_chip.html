@@ -1,14 +1,10 @@
-{#
-  Who's-online chip for the players-card header. Poll-refreshed via its
-  own hx-trigger (60s — each RCON one-shot does a network attach/detach,
-  so the cadence stays honest about cost). Context: `server`, `running`,
-  and on RCON success `ok`/`online`/`max_players`/`names`.
-#}
+{# Player count in the panel header. Polls the existing console connection;
+   refreshes on lifecycle changes. Context: server, running, ok and counts. #}
 {% if ok %}
 <span id="online-chip"
       class="online-chip"
       hx-get="/servers/{{ server.name }}/players/online"
-      hx-trigger="every 60s, mc:refresh" data-poll
+      hx-trigger="every 60s, mc:refresh, mc:state-changed from:body" data-poll
       hx-swap="outerHTML"
       {% if names %}title="{{ names | join(', ') }}"{% endif %}>
   <span class="online-chip__dot" aria-hidden="true"></span>
@@ -18,8 +14,11 @@
 <span id="online-chip"
       class="state-pill state-pill--unknown"
       hx-get="/servers/{{ server.name }}/players/online"
-      hx-trigger="every 60s, mc:refresh" data-poll
+      hx-trigger="every 60s, mc:refresh, mc:state-changed from:body" data-poll
       hx-swap="outerHTML">Online count unavailable</span>
 {% else %}
-<span id="online-chip" class="state-pill state-pill--exited">Saved on disk · applies at next start</span>
+<span id="online-chip" class="state-pill state-pill--exited"
+      hx-get="/servers/{{ server.name }}/players/online"
+      hx-trigger="every 60s, mc:refresh, mc:state-changed from:body" data-poll
+      hx-swap="outerHTML" title="Saved on disk; applies at next start">Saved on disk</span>
 {% endif %}

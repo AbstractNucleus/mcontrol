@@ -82,7 +82,7 @@ async def test_get_form_renders_editable_inputs(client, fake_db, tmp_path):
     body = response.text
     assert 'name="memory_budget_gb"' in body
     assert 'name="port"' in body
-    assert '<select name="server_jar">' in body
+    assert '<select id="runtime-server_jar" name="server_jar">' in body
     assert 'name="jvm_extra_args"' in body
     assert 'name="java_version"' in body
     from mcontrol.domain.scaffolding import MEMORY_MIN_GB

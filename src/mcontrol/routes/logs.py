@@ -41,10 +41,8 @@ def render_line(text: str, *, base: str = "log-line") -> str:
 
 
 def _message(text: str, event_id: int) -> bytes:
-    # Two "data:" lines per SSE event. the EventSource parser joins
-    # them with \n, so the swap payload ends with a newline and each
-    # log line lands on its own row in the <pre>. Single-data-line
-    # payloads concatenate end-to-end under hx-swap="beforeend".
+    # Retain the trailing newline in the SSE payload. The current client
+    # renders each classified span as a separate row.
     return f"id: {event_id}\ndata: {render_line(text)}\ndata: \n\n".encode()
 
 
@@ -59,11 +57,14 @@ async def _sse(
         async for line in docker_client.logs_stream(
             docker, container_name, tail=0 if skip_tail else 200
         ):
-            # Strip Docker's trailing newline (and any \r), defensively flatten
-            # any *internal* newlines so they don't fracture the SSE event.
-            text = line.rstrip("\r\n").replace("\r", "").replace("\n", " ")
-            event_id += 1
-            yield _message(text, event_id)
+            # Docker can deliver several log lines in one frame. Emit each
+            # separately so SSE framing and per-line severity stay intact.
+            lines = line.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+            if lines[-1] == "":
+                lines.pop()  # A trailing terminator does not add an extra row.
+            for text in lines:
+                event_id += 1
+                yield _message(text, event_id)
     except aiodocker.DockerError:
         yield _message("[info] container not found", event_id + 1)
         yield _CLOSED

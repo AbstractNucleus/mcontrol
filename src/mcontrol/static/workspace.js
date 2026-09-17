@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  let rosterQ = "", rosterServer = "", memberQ = "";
+  let rosterQ = "", rosterServer = "";
   function rosterFilter() {
     const select = document.querySelector("[data-roster-server]"), rows = Array.from(document.querySelectorAll("[data-roster-name]"));
     if (select) {
@@ -16,15 +16,11 @@
       if (!row.hidden) count++;
     });
     const empty = document.querySelector("[data-roster-empty]"); if (empty) empty.hidden = count > 0 || (!rosterQ && !rosterServer);
-    const input = document.querySelector("[data-members-search]"); if (input) input.value = memberQ;
-    let members = 0;
-    document.querySelectorAll("[data-member-name]").forEach(row => { row.hidden = !row.dataset.memberName.toLowerCase().includes(memberQ.toLowerCase()); if (!row.hidden) members++; });
-    const noMembers = document.querySelector("[data-members-empty]"); if (noMembers) noMembers.hidden = members > 0 || !memberQ;
+
   }
   document.addEventListener("input", e => {
     if (e.target.matches("[data-roster-search]")) { rosterQ = e.target.value; rosterFilter(); }
     if (e.target.matches("[data-roster-server]")) { rosterServer = e.target.value; rosterFilter(); }
-    if (e.target.matches("[data-members-search]")) { memberQ = e.target.value; rosterFilter(); }
   });
   const files = document.querySelector(".files-pane");
   function openFile() {
@@ -37,7 +33,6 @@
   });
   const divider = files?.querySelector(".file-divider");
   function size(width) { width = Math.max(160, Math.min(360, width)); files.style.setProperty("--file-nav-width", width + "px"); divider.setAttribute("aria-valuenow", String(width)); }
-  files?.querySelector("[data-file-nav-size]").addEventListener("change", e => size(Number(e.target.value)));
   divider?.addEventListener("pointerdown", e => {
     divider.setPointerCapture(e.pointerId); const start = e.clientX, width = Number(divider.getAttribute("aria-valuenow"));
     const move = ev => size(width + ev.clientX - start);

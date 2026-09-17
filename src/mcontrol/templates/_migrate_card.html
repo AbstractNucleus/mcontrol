@@ -2,16 +2,9 @@
          hx-get="/servers/{{ server.name }}/migrate"
          hx-trigger="mc:state-changed from:body"
          hx-swap="outerHTML">
-  <header class="migrate-card__head">
-    <span class="state-pill state-pill--unknown">unmigrated</span>
-  </header>
-
-  <p class="migrate-card__intro">
-    This server still uses the legacy Dockerfile + entrypoint shape.
-    Migrate to the scaffolded shape so its docker-compose and start script are
-    generated from managed variables.
-  </p>
-
+  <p class="migrate-card__intro">Convert this legacy setup to managed server settings. Original setup files are backed up first.</p>
+  <details class="settings-help settings-help--migration">
+    <summary>Migration details &amp; recovery</summary>
   {% if legacy_filenames %}
     <p class="migrate-card__legacy">
       Backed up before conversion: {% for f in legacy_filenames %}<code>{{ f }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
@@ -34,11 +27,7 @@
   <p class="migrate-card__hint">
     After migrating, the container must be recreated so Docker picks up the new compose file.
   </p>
-  <button type="button"
-          class="btn btn--sm"
-          hx-post="/servers/{{ server.name }}/lifecycle/recreate"
-          hx-target="#state-pill"
-          hx-swap="outerHTML">Recreate container</button>
+  </details>
 
   {% if error_banner %}
     <p class="migrate-card__error">{{ error_banner }}</p>
@@ -49,32 +38,34 @@
         hx-target="#migrate-card"
         hx-swap="outerHTML"
         hx-disabled-elt="find button[type='submit']">
-    <label>
-      <span class="t-eyebrow">Memory budget (GB)</span>
-      <input type="number"
+    <div class="settings-field">
+      <label for="migrate-memory_budget_gb">Memory budget (GB)</label>
+      <input id="migrate-memory_budget_gb" type="number"
              name="memory_budget_gb"
              min="{{ memory_min_gb }}"
              value="{{ form.memory_budget_gb }}"
              required>
-      <small class="migrate-card__hint">Drives <code>mem_limit</code> and <code>-Xmx</code> (= budget − 2 GB).</small>
-      {% if errors.memory_budget_gb %}<small class="migrate-card__error">{{ errors.memory_budget_gb }}</small>{% endif %}
-    </label>
 
-    <label>
-      <span class="t-eyebrow">Port</span>
-      <input type="number"
+      {% if errors.memory_budget_gb %}<small class="migrate-card__error">{{ errors.memory_budget_gb }}</small>{% endif %}
+
+      <details class="settings-help"><summary>Help</summary><small class="migrate-card__hint">Drives <code>mem_limit</code> and <code>-Xmx</code> (= budget − 2 GB).</small></details>
+    </div>
+
+    <div class="settings-field">
+      <label for="migrate-port">Port</label>
+      <input id="migrate-port" type="number"
              name="port"
              min="1024"
              max="65535"
              value="{{ form.port }}"
              required>
       {% if errors.port %}<small class="migrate-card__error">{{ errors.port }}</small>{% endif %}
-    </label>
+    </div>
 
-    <label>
-      <span class="t-eyebrow">Server jar filename</span>
+    <div class="settings-field">
+      <label for="migrate-server_jar">Server jar filename</label>
       {% set selected_jar = form.server_jar or '' %}
-      <select name="server_jar" required>
+      <select id="migrate-server_jar" name="server_jar" required>
         {% if selected_jar and selected_jar not in jar_options %}
           <option value="{{ selected_jar }}" selected>{{ selected_jar }} (current)</option>
         {% elif not selected_jar %}
@@ -86,27 +77,29 @@
       </select>
       {% if not jar_options %}<small class="migrate-card__hint">Add a .jar file to this server's <code>server/</code> subfolder, then reload this card.</small>{% endif %}
       {% if errors.server_jar %}<small class="migrate-card__error">{{ errors.server_jar }}</small>{% endif %}
-    </label>
+    </div>
 
-    <label>
-      <span class="t-eyebrow">Java version</span>
-      <select name="java_version" required>
+    <div class="settings-field">
+      <label for="migrate-java_version">Java version</label>
+      <select id="migrate-java_version" name="java_version" required>
         {% for v in java_versions %}
           <option value="{{ v }}"{% if (form.java_version or default_java_version) == v %} selected{% endif %}>{{ v }}</option>
         {% endfor %}
       </select>
-      <small class="migrate-card__hint">Minecraft 1.20.5–1.21.x need Java 21; 26.x needs Java 25; ≤1.20.4 works with 17</small>
-      {% if errors.java_version %}<small class="migrate-card__error">{{ errors.java_version }}</small>{% endif %}
-    </label>
 
-    <label>
-      <span class="t-eyebrow">JVM extra args (optional)</span>
-      <input type="text"
+      {% if errors.java_version %}<small class="migrate-card__error">{{ errors.java_version }}</small>{% endif %}
+
+      <details class="settings-help"><summary>Help</summary><small class="migrate-card__hint">Minecraft 1.20.5–1.21.x need Java 21; 26.x needs Java 25; ≤1.20.4 works with 17</small></details>
+    </div>
+
+    <details class="settings-advanced"{% if errors.jvm_extra_args %} open{% endif %}><summary>Advanced</summary><div class="settings-field">
+      <label for="migrate-jvm_extra_args">JVM extra args (optional)</label>
+      <input id="migrate-jvm_extra_args" type="text"
              name="jvm_extra_args"
              value="{{ form.jvm_extra_args }}"
              autocomplete="off">
       {% if errors.jvm_extra_args %}<small class="migrate-card__error">{{ errors.jvm_extra_args }}</small>{% endif %}
-    </label>
+    </div></details>
 
     <div class="migrate-card__actions">
       {% if running %}

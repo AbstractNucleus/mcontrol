@@ -41,6 +41,13 @@ async def test_explorer_nested_selection_and_context_menu(page, mock_url, width)
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     await page.goto(mock_url + "/servers/atm10")
+    header = page.locator('[data-pane="files"] > .panel__bar')
+    await header.get_by_role("button", name="Collapse files", exact=True).click()
+    await header.get_by_role("button", name="New folder", exact=True).click()
+    await expect(page.get_by_role("textbox", name="Folder name", exact=True)).to_be_visible()
+    await page.get_by_role("textbox", name="Folder name", exact=True).press("Escape")
+    async with page.expect_file_chooser():
+        await header.get_by_role("button", name="Upload", exact=True).click()
     await page.get_by_role("button", name="Focus Files", exact=True).click()
     root_row = page.locator(f'[data-tree-path="{folder}"]')
     await root_row.focus()
@@ -67,7 +74,10 @@ async def test_explorer_nested_selection_and_context_menu(page, mock_url, width)
         await expect(page.locator("#file-tree")).to_be_hidden()
         await page.get_by_role("button", name="Back to files", exact=False).click()
     else:
-        await page.locator("[data-file-nav-size]").select_option("160")
+        divider = page.get_by_role("separator", name="Resize file navigation")
+        for _ in range(4):
+            await divider.press("ArrowLeft")
+        await expect(divider).to_have_attribute("aria-valuenow", "160")
     await expect(link).to_have_attribute("aria-current", "true")
     await row.focus()
     await page.keyboard.press("Shift+F10")
@@ -96,7 +106,9 @@ async def test_explorer_nested_selection_and_context_menu(page, mock_url, width)
     await page.keyboard.press("Escape")
     await expect(search).to_have_value("")
     if width != 390:
-        await page.locator("[data-file-nav-size]").select_option("240")
+        for _ in range(4):
+            await divider.press("ArrowRight")
+        await expect(divider).to_have_attribute("aria-valuenow", "240")
     await row.focus()
     await page.screenshot(
         path=str(ROOT / ".localdev" / "ui-review" / f"explorer-{width}.png"),

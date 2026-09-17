@@ -84,8 +84,6 @@
 .players-card__add label { grid-column: 1 / -1; font-size: var(--fs-xs); color: var(--fg-muted); font-weight: 500; }
 .players-card__table { border: 1px solid var(--border-soft); border-radius: var(--radius-md); overflow: hidden; }
 .players-card__table th, .players-card__table td { padding: var(--space-2); font-size: var(--fs-sm); }
-.player-search { display: grid; gap: var(--space-2); font-size: var(--fs-sm); margin-bottom: var(--space-3); }
-.player-search input { min-height: 36px; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-medium); background: var(--bg-surface); border-radius: var(--radius-md); }
 [data-membership-status]:empty { display: none; }
 .online-chip { display: inline-flex; align-items: center; gap: var(--space-2); padding: 4px 10px; border-radius: var(--radius-full); font-size: var(--fs-xs); font-weight: 500; background: var(--success-bg); color: var(--success-fg); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .online-chip__dot { flex: none; width: 6px; height: 6px; border-radius: var(--radius-full); background: currentColor; }
@@ -126,11 +124,24 @@
   .players-page__table td:nth-child(3)::before { content: "Operator on: "; color: var(--fg-muted); }
   .players-page__remove, .players-card__toggle, .access-toggle { min-height: 44px; }
   .access-toggle { min-width: 44px; }
-  .player-search input, .roster-card__filters input { min-height: 44px; }
+  .roster-card__filters input { min-height: 44px; }
   .new-server__form fieldset { padding: var(--space-4); }
   .new-server__fields { grid-template-columns: minmax(0, 1fr); }
   .advanced-form { padding: var(--space-3) var(--space-4); }
   .advanced-form summary { min-height: 44px; align-content: center; }
   .player-remove-modal, .confirm-modal { padding: var(--space-4); }
   .player-remove-modal__panel, .confirm-modal__panel { padding: var(--space-5); }
+}
+
+.players-card__list { list-style: none; margin: 0; padding: 0; }
+.players-card__item { display: flex; align-items: center; gap: var(--space-2); min-height: 40px; border-bottom: 1px solid var(--border-soft); }
+.players-card__item:hover { background: var(--bg-sunken); }
+.players-card__name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--fs-sm); }
+.players-card__item .access-toggle { gap: var(--space-2); color: var(--fg-muted); font-size: var(--fs-xs); }
+.players-card__remove-form { display: flex; align-self: stretch; flex: none; width: 48px; }
+.players-card__remove { display: grid; place-items: center; flex: 1; min-height: 40px; padding: 0 0 0 var(--space-2); border: 0; border-radius: 0; background: linear-gradient(to right, transparent, var(--bg-control)); color: var(--fg-muted); font-size: var(--fs-lg); cursor: pointer; opacity: 0; transition: opacity var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease); }
+.players-card__item:hover .players-card__remove, .players-card__item:focus-within .players-card__remove { opacity: 1; }
+.players-card__remove:hover { color: var(--danger-fg); background: linear-gradient(to right, transparent, var(--danger-bg)); }
+@media (hover: none), (max-width: 767px) {
+  .players-card__remove { opacity: 1; min-height: 44px; }
 }

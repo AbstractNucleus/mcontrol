@@ -140,6 +140,9 @@
   }
   board.addEventListener("click", e => {
     const panel = e.target.closest("[data-pane]"); if (!panel) return;
+    if (e.target.closest(".panel__file-action") && panel.dataset.collapsed === "true") {
+      panel.querySelector(".panel__collapse").click();
+    }
     if (e.target.closest("[data-panel-focus]")) focusPanel(panel, e.target.closest("button"));
     if (e.target.closest(".panel__collapse")) {
       const state = read(), id = panel.dataset.pane;

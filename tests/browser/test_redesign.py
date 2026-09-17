@@ -98,7 +98,9 @@ async def test_sidebar_footer_stays_in_short_viewport(page, mock_url):
     await _screenshot(page, "sidebar-1280x720-dark", full_page=False)
 
 
-async def test_server_switcher_tracks_lifecycle_changes(page, mock_url):
+@pytest.mark.parametrize("width", [320, 1440])
+async def test_server_switcher_tracks_lifecycle_changes(page, mock_url, width):
+    await page.set_viewport_size({"width": width, "height": 1000})
     await page.goto(mock_url + "/servers/cobblemon")
     current = page.locator('.server-switcher__panel a[aria-current="page"]')
     await expect(current.locator("small")).to_have_text("Stopped")
@@ -108,7 +110,12 @@ async def test_server_switcher_tracks_lifecycle_changes(page, mock_url):
     await page.get_by_role("button", name="Stop cobblemon", exact=True).click()
     await expect(page.locator("#state-pill")).to_have_text("Stopped")
     await expect(current.locator("small")).to_have_text("Stopped")
+    await expect(page.locator(".server-switcher summary h1")).to_have_text("cobblemon")
     await page.locator(".server-switcher summary").press("Enter")
+    assert await page.locator(".server-switcher__panel").evaluate(
+        "el => { const r = el.getBoundingClientRect(); "
+        "return r.left >= 0 && r.right <= innerWidth; }"
+    )
     await page.get_by_role("navigation", name="Switch server", exact=True).get_by_role(
         "link", name="atm10 Running", exact=True
     ).click()

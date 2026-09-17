@@ -579,8 +579,9 @@
   width: 100%;
   padding-right: 2rem;
   padding-left: 2.25rem;
-  background: var(--bg-sunken);
+  background: var(--bg-control);
   border-color: var(--border-soft);
+  box-shadow: var(--shadow-inset);
 }
 
 .file-search__icon { position: absolute; display: flex; align-items: center; inset: 0 auto 0 var(--space-3); color: var(--fg-muted); pointer-events: none; }
