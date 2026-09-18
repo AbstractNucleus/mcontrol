@@ -13,7 +13,10 @@ import os
 import re
 import secrets
 import shlex
+import stat
+import tempfile
 from contextlib import suppress
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -45,6 +48,87 @@ _env = Environment(
     undefined=StrictUndefined,
     keep_trailing_newline=True,
 )
+
+
+class ScaffoldWriteError(RuntimeError):
+    """The generated pair could not be written consistently."""
+
+
+@dataclass(frozen=True)
+class _FileSnapshot:
+    path: Path
+    kind: str
+    content: bytes | None = None
+    link_target: str | None = None
+    mode: int | None = None
+    uid: int | None = None
+    gid: int | None = None
+
+
+def _snapshot_file(path: Path) -> _FileSnapshot:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return _FileSnapshot(path=path, kind="absent")
+    if stat.S_ISLNK(metadata.st_mode):
+        return _FileSnapshot(
+            path=path,
+            kind="symlink",
+            link_target=os.readlink(path),
+            uid=metadata.st_uid,
+            gid=metadata.st_gid,
+        )
+    if not stat.S_ISREG(metadata.st_mode):
+        raise OSError(f"cannot replace non-file scaffold target: {path}")
+    return _FileSnapshot(
+        path=path,
+        kind="file",
+        content=path.read_bytes(),
+        mode=stat.S_IMODE(metadata.st_mode),
+        uid=metadata.st_uid,
+        gid=metadata.st_gid,
+    )
+
+
+def _restore_owner(path: Path, snapshot: _FileSnapshot, *, symlink: bool) -> None:
+    if snapshot.uid is None or snapshot.gid is None:
+        return
+    if symlink:
+        chown = getattr(os, "lchown", None)
+        if chown is not None:
+            chown(path, snapshot.uid, snapshot.gid)
+        return
+    chown = getattr(os, "chown", None)
+    if chown is not None:
+        chown(path, snapshot.uid, snapshot.gid)
+
+
+def _restore_snapshot(snapshot: _FileSnapshot) -> None:
+    """Atomically restore one pre-write state during exception recovery."""
+    path = snapshot.path
+    if snapshot.kind == "absent":
+        path.unlink(missing_ok=True)
+        return
+
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.restore.", dir=path.parent)
+    tmp = Path(tmp_name)
+    try:
+        if snapshot.kind == "symlink":
+            os.close(fd)
+            tmp.unlink()
+            assert snapshot.link_target is not None
+            os.symlink(snapshot.link_target, tmp)
+            _restore_owner(tmp, snapshot, symlink=True)
+        else:
+            assert snapshot.content is not None and snapshot.mode is not None
+            with os.fdopen(fd, "wb") as output:
+                output.write(snapshot.content)
+            tmp.chmod(snapshot.mode)
+            _restore_owner(tmp, snapshot, symlink=False)
+        os.replace(tmp, path)
+    finally:
+        with suppress(OSError):
+            tmp.unlink()
 
 
 def _managed_runtime(variables: dict[str, Any]) -> dict[str, Any] | None:
@@ -180,25 +264,68 @@ def custom_start_script_error(value: str) -> str | None:
 def write_scaffold_files(
     server_dir: Path, name: str, variables: dict[str, Any]
 ) -> None:
-    """Render and atomically write the two generated files under
+    """Render and write the two generated files under
     ``<server_dir>/``: ``docker-compose.yml`` and
     ``server/start_server.sh`` (chmod 0o755).
 
     Both templates render *before* any write, so a StrictUndefined hole
     raises before touching disk. Shared by the new-server scaffold, the
     legacy migration, and the regenerate confirm so all three stay
-    byte-identical and inherit the atomic-write contract.
+    byte-identical. Each replacement is atomic. If a later replacement or
+    chmod fails, exception recovery restores both previous file states. A
+    process crash between replacements can still leave the pair inconsistent.
     """
     rendered_compose = render_compose(name, variables)
     rendered_start = render_start_script(variables)
 
     inner = server_dir / "server"
     inner.mkdir(parents=True, exist_ok=True)
-
-    atomic_write_text(server_dir / "docker-compose.yml", rendered_compose)
+    compose_path = server_dir / "docker-compose.yml"
     start_path = inner / "start_server.sh"
-    atomic_write_text(start_path, rendered_start)
-    start_path.chmod(0o755)
+    try:
+        snapshots = (
+            _snapshot_file(compose_path),
+            _snapshot_file(start_path),
+        )
+    except Exception as exc:
+        raise ScaffoldWriteError(
+            "Could not prepare the generated files for update. No generated "
+            f"files were changed. Cause: {type(exc).__name__}: {exc}"
+        ) from exc
+
+    try:
+        written_snapshots: list[_FileSnapshot] = []
+        atomic_write_text(compose_path, rendered_compose)
+        written_snapshots.append(snapshots[0])
+        atomic_write_text(start_path, rendered_start)
+        written_snapshots.append(snapshots[1])
+        start_path.chmod(0o755)
+    except Exception as exc:
+        recovery_errors: list[tuple[Path, Exception]] = []
+        for snapshot in reversed(written_snapshots):
+            try:
+                _restore_snapshot(snapshot)
+            except Exception as recovery_exc:
+                recovery_errors.append((snapshot.path, recovery_exc))
+
+        cause = f"{type(exc).__name__}: {exc}"
+        if recovery_errors:
+            failed = "; ".join(
+                f"{path}: {type(error).__name__}: {error}"
+                for path, error in recovery_errors
+            )
+            raise ScaffoldWriteError(
+                "Could not update the generated files, and automatic recovery "
+                "could not finish. Keep the server stopped and restore "
+                "docker-compose.yml and server/start_server.sh from a known "
+                f"backup before retrying. Write failure: {cause}. "
+                f"Recovery failure: {failed}"
+            ) from exc
+        raise ScaffoldWriteError(
+            "Could not update the generated files. The original files were "
+            f"restored. Fix directory access or free disk space, then retry. "
+            f"Write failure: {cause}"
+        ) from exc
 
 
 def scaffold(name: str, variables: dict[str, Any], base: Path) -> None:

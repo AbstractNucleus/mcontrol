@@ -5,7 +5,8 @@
 
   {% if drifted %}
     <p class="variables-card__error">
-      Files changed since diff was shown. Review the new diff before confirming.
+      Files or settings changed since this diff was shown. Review the new diff
+      before confirming.
     </p>
   {% endif %}
 
@@ -39,6 +40,7 @@
         hx-disabled-elt="find button[type='submit']">
     <input type="hidden" name="compose_mtime_ns" value="{{ compose_mtime_ns }}">
     <input type="hidden" name="start_mtime_ns" value="{{ start_mtime_ns }}">
+    <input type="hidden" name="proposal_fingerprint" value="{{ proposal_fingerprint }}">
     <button type="submit" class="btn btn--primary">Confirm{% include "_spinner.html" %}</button>
     <a class="btn btn--ghost"
        hx-get="/servers/{{ server.name }}/variables"

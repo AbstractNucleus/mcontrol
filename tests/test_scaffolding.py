@@ -1,5 +1,6 @@
 import os
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 
@@ -235,6 +236,136 @@ def test_write_scaffold_files_does_not_touch_server_properties(tmp_path):
     scaffolding.write_scaffold_files(server_dir, "atm10", _VARS)
 
     assert props.read_text(encoding="utf-8") == "enable-rcon=false\n"
+
+
+def _file_state(path: Path) -> tuple[bytes, int, int, int]:
+    metadata = path.stat()
+    return (
+        path.read_bytes(),
+        stat.S_IMODE(metadata.st_mode),
+        metadata.st_uid,
+        metadata.st_gid,
+    )
+
+
+def test_write_scaffold_files_restores_compose_after_second_write_failure(
+    monkeypatch, tmp_path
+):
+    server_dir = tmp_path / "atm10"
+    inner = server_dir / "server"
+    inner.mkdir(parents=True)
+    compose = server_dir / "docker-compose.yml"
+    start = inner / "start_server.sh"
+    compose.write_bytes(b"old compose\r\n")
+    start.write_bytes(b"old start\r\n")
+    compose.chmod(0o640)
+    start.chmod(0o700)
+    originals = (_file_state(compose), _file_state(start))
+    real_write = scaffolding.atomic_write_text
+    failure = PermissionError("start destination stays read-only")
+
+    def fail_start(path, content):
+        if Path(path) == start:
+            raise failure
+        real_write(path, content)
+
+    monkeypatch.setattr(scaffolding, "atomic_write_text", fail_start)
+
+    with pytest.raises(
+        scaffolding.ScaffoldWriteError, match="original files were restored"
+    ) as caught:
+        scaffolding.write_scaffold_files(server_dir, "atm10", _VARS)
+
+    assert caught.value.__cause__ is failure
+    assert (_file_state(compose), _file_state(start)) == originals
+
+
+def test_write_scaffold_files_restores_both_files_after_chmod_failure(
+    monkeypatch, tmp_path
+):
+    server_dir = tmp_path / "atm10"
+    inner = server_dir / "server"
+    inner.mkdir(parents=True)
+    compose = server_dir / "docker-compose.yml"
+    start = inner / "start_server.sh"
+    compose.write_bytes(b"old compose\n")
+    start.write_bytes(b"old start\n")
+    compose.chmod(0o640)
+    start.chmod(0o700)
+    originals = (_file_state(compose), _file_state(start))
+    real_chmod = Path.chmod
+    failure = PermissionError("chmod denied")
+
+    def fail_final_chmod(path, mode):
+        if path == start and mode == 0o755:
+            raise failure
+        return real_chmod(path, mode)
+
+    monkeypatch.setattr(Path, "chmod", fail_final_chmod)
+
+    with pytest.raises(
+        scaffolding.ScaffoldWriteError, match="original files were restored"
+    ) as caught:
+        scaffolding.write_scaffold_files(server_dir, "atm10", _VARS)
+
+    assert caught.value.__cause__ is failure
+    assert (_file_state(compose), _file_state(start)) == originals
+
+
+def test_write_scaffold_files_removes_new_compose_after_second_write_failure(
+    monkeypatch, tmp_path
+):
+    server_dir = tmp_path / "atm10"
+    inner = server_dir / "server"
+    inner.mkdir(parents=True)
+    compose = server_dir / "docker-compose.yml"
+    start = inner / "start_server.sh"
+    start.write_text("old start\n", encoding="utf-8")
+    original_start = _file_state(start)
+    real_write = scaffolding.atomic_write_text
+
+    def fail_start(path, content):
+        if Path(path) == start:
+            raise PermissionError("start destination stays read-only")
+        real_write(path, content)
+
+    monkeypatch.setattr(scaffolding, "atomic_write_text", fail_start)
+
+    with pytest.raises(scaffolding.ScaffoldWriteError):
+        scaffolding.write_scaffold_files(server_dir, "atm10", _VARS)
+
+    assert not compose.exists()
+    assert _file_state(start) == original_start
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink creation needs extra privileges")
+def test_write_scaffold_files_restores_original_symlink_after_failure(
+    monkeypatch, tmp_path
+):
+    server_dir = tmp_path / "atm10"
+    inner = server_dir / "server"
+    inner.mkdir(parents=True)
+    target = server_dir / "operator-compose.yml"
+    target.write_text("operator compose\n", encoding="utf-8")
+    compose = server_dir / "docker-compose.yml"
+    compose.symlink_to(target.name)
+    start = inner / "start_server.sh"
+    start.write_text("old start\n", encoding="utf-8")
+    real_write = scaffolding.atomic_write_text
+
+    def fail_start(path, content):
+        if Path(path) == start:
+            raise PermissionError("start destination stays read-only")
+        real_write(path, content)
+
+    monkeypatch.setattr(scaffolding, "atomic_write_text", fail_start)
+
+    with pytest.raises(scaffolding.ScaffoldWriteError):
+        scaffolding.write_scaffold_files(server_dir, "atm10", _VARS)
+
+    assert compose.is_symlink()
+    assert os.readlink(compose) == target.name
+    assert target.read_text(encoding="utf-8") == "operator compose\n"
 
 
 def test_scaffold_inherits_base_owner(monkeypatch, tmp_path):

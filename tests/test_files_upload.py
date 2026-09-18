@@ -58,6 +58,45 @@ async def test_upload_writes_into_subdirectory(
     assert (server_dir / "mods" / "foo.jar").read_bytes() == b"PK\x03\x04fake-jar"
 
 
+@pytest.mark.parametrize("force", ["false", "true"])
+@pytest.mark.parametrize("existing", [False, True])
+async def test_upload_rejects_duplicate_names_before_any_writes(
+    client, fake_server, server_dir: Path, force, existing
+) -> None:
+    target = server_dir / "same.txt"
+    if existing:
+        target.write_bytes(b"original")
+
+    response = await client.post(
+        "/servers/atm10/files/upload",
+        data={"path": "", "force": force},
+        files=[
+            ("files", ("other.txt", b"must not be written")),
+            ("files", ("same.txt", b"first")),
+            ("files", ("same.txt", b"second")),
+        ],
+    )
+
+    assert response.status_code == 400
+    assert "duplicate filename" in response.text
+    assert not (server_dir / "other.txt").exists()
+    if existing:
+        assert target.read_bytes() == b"original"
+    else:
+        assert not target.exists()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows paths ignore filename case")
+async def test_upload_rejects_case_aliases_on_windows(client, fake_server, server_dir):
+    response = await client.post(
+        "/servers/atm10/files/upload",
+        data={"path": ""},
+        files=[("files", ("same.txt", b"first")), ("files", ("SAME.txt", b"second"))],
+    )
+    assert response.status_code == 400
+    assert not list(server_dir.iterdir())
+
+
 async def test_upload_conflict_returns_409_and_writes_nothing(
     client, fake_server, server_dir: Path
 ) -> None:

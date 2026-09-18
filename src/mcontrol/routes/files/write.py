@@ -155,8 +155,16 @@ async def upload(
             raise HTTPException(status_code=400, detail="files must be file parts")
 
         # Filename validation first. never let an invalid name reach disk.
+        destinations: set[Path] = set()
         for f in files:
             file_safety.validate_upload_filename(f.filename or "")
+            target = target_dir / f.filename
+            if target in destinations:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"duplicate filename in upload: {f.filename}",
+                )
+            destinations.add(target)
 
         # Conflict scan: classify every existing target before any writes.
         # Hard refusals (dir, special) abort with 400 even when force=true -
